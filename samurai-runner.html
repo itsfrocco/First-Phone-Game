@@ -101,7 +101,7 @@ const LEVEL_SPECS = [
   { name: 'Takemikazuchi', demons: true, storm: true, rows: 8, seg: 370, pack: [5, 2.4, 0.30], crowd: 0.15, hp: 8, pace: 1.2, charms: [[4], 11, 0],
     bosses: [{ type: 'thunder', after: 'end', hp: 2600 }] },
 ];
-// Armor and weapons, chosen on a level's start screen. `boss: true` items are won by beating the saga boss.
+// Equipment, chosen on a level's start screen: one weapon, one armor, one necklace. `boss: true` items are won by beating the saga boss.
 const GEAR = {
   armor: [
     { id: '', name: 'Clan Armor', effect: 'Standard issue.' },
@@ -110,10 +110,14 @@ const GEAR = {
   ],
   weapon: [
     { id: '', name: 'Clan Katana', effect: 'A trusty blade.' },
-    { id: 'thunder', name: 'Futsu-no-mitama', boss: true, effect: '+15% damage to flying, armoured and water foes. 15% less to earth, fire and thunder foes.',
+    { id: 'thunder', name: 'Futsu-no-mitama', boss: true, effect: '+15% damage to flying, armoured and water foes.',
       lore: "A sword once carried by Takemikazuchi. In the old stories, when the first emperor's forces were stalled, Takemikazuchi did not descend himself. Instead he sent this blade down from the heavens so the campaign could continue. It is said the sword carries a fragment of his thunder, striking with the same force he used when he crushed those who opposed the heavenly order. Those who wield it now do so with his reluctant respect, not his blessing." },
   ],
+  necklace: [
+    { id: '', name: 'No Necklace', effect: 'None found yet.' },
+  ],
 };
+const GEAR_SLOTS = [['weapon', 'WEAPON'], ['armor', 'ARMOR'], ['necklace', 'NECKLACE']];
 // What each kind of enemy is made of, for weapons that favour or struggle against certain foes.
 // Kinds not listed are neutral. Future enemies (water, metal, earth, fire...) get their entry here.
 const ELEMENT = { tenguBoss: 'flying', thunder: 'metal' };      // 'metal' means armoured
@@ -152,7 +156,7 @@ const Save = {
   souls: 0, fire: 1, damage: 1, revenue: 1,
   level: 1,                      // highest level unlocked (4 = saga 1 cleared)
   music: true, sfx: true, shake: true,
-  armor: '', weapon: '',         // equipped gear ids
+  armor: '', weapon: '', necklace: '',   // equipped gear ids
   load() {
     const num = (k, def) => {
       try { const v = parseInt(localStorage.getItem(k), 10); return Number.isFinite(v) ? v : def; }
@@ -166,7 +170,7 @@ const Save = {
     this.music = num('samurai_music', 1) === 1;
     this.sfx = num('samurai_sfx', 1) === 1;
     this.shake = num('samurai_shake', 1) === 1;
-    try { this.armor = localStorage.getItem('samurai_armor') || ''; this.weapon = localStorage.getItem('samurai_weapon') || ''; } catch (e) {}
+    try { this.armor = localStorage.getItem('samurai_armor') || ''; this.weapon = localStorage.getItem('samurai_weapon') || ''; this.necklace = localStorage.getItem('samurai_necklace') || ''; } catch (e) {}
   },
   save() {
     try {
@@ -180,9 +184,10 @@ const Save = {
       localStorage.setItem('samurai_shake', this.shake ? 1 : 0);
       localStorage.setItem('samurai_armor', this.armor);
       localStorage.setItem('samurai_weapon', this.weapon);
+      localStorage.setItem('samurai_necklace', this.necklace);
     } catch (e) {}
   },
-  resetProgress() { this.souls = 0; this.fire = this.damage = this.revenue = this.level = 1; this.armor = this.weapon = ''; this.save(); },
+  resetProgress() { this.souls = 0; this.fire = this.damage = this.revenue = this.level = 1; this.armor = this.weapon = this.necklace = ''; this.save(); },
 };
 Save.load();
 window.addEventListener('pagehide', () => Save.save());
@@ -892,7 +897,7 @@ class GameScene extends BaseScene {
     this.earned = 0;
     this.wound = 0;                // enemy strikes add up here; each full point costs one samurai
     this.over = false;
-    this.gearOpen = null;          // 'armor' or 'weapon' while that menu is showing
+    this.gearOpen = null;          // the slot being viewed while the equipment menu is open
     this.bolts = [];               // lightning streaks being drawn
     this.hazards = [];             // lightning left on the ground
     this.started = false;          // false while the level waits on its start screen
@@ -919,7 +924,7 @@ class GameScene extends BaseScene {
     this.banner(this.stageName, this.L.name);
     this.showStartUi();
     this.input.on('pointerdown', p => {
-      if (this.started || this.gearOpen || p.worldY < 120 || p.worldY > 505 || (p.worldX < 104 && p.worldY < 200)) return;
+      if (this.started || this.gearOpen || p.worldY < 120 || p.worldY > 505 || (p.worldX < 124 && p.worldY < 160)) return;
       this.beginRun();
     });
 
@@ -981,38 +986,54 @@ class GameScene extends BaseScene {
     this.tweens.add({ targets: hint, alpha: 0.35, duration: 600, yoyo: true, repeat: -1 });
     this.button(54, 96, 84, 34, 0x3a3050, '‹ SAGAS', 13, () => this.scene.start('Sagas'));
     const reopen = kind => this.time.delayedCall(0, () => { if (!this.started) { this.gearOpen = kind; this.showStartUi(); } });
-    this.button(54, 138, 84, 32, 0x4a3f63, 'ARMOR', 12, () => reopen('armor'));
-    this.button(54, 178, 84, 32, 0x4a3f63, 'WEAPON', 12, () => reopen('weapon'));
-    if (this.gearOpen) {                                     // the armor or weapon menu
-      const kind = this.gearOpen, won = Save.level > SAGA_LEVELS + 1;
-      this.add.rectangle(W / 2, H / 2, W, H, 0x05020c, 0.6);
-      const g = this.add.graphics();
-      g.fillStyle(0x1c1220, 0.97).fillRoundedRect(24, 104, 352, 408, 14);
-      g.lineStyle(2, 0xffffff, 0.25).strokeRoundedRect(24, 104, 352, 408, 14);
-      this.txt(W / 2, 130, kind === 'armor' ? 'ARMOR' : 'WEAPON', 20, '#ffd54f');
-      let y = 172;
-      GEAR[kind].forEach(item => {
-        const have = !item.boss || won, on = Save[kind] === item.id;
-        this.txt(40, y, item.name, 16, have ? '#fff' : '#8a8094').setOrigin(0, 0.5);
-        const b = this.button(312, y + 6, 100, 38, on ? 0x2e7d32 : have ? 0x1565c0 : 0x3a3444, on ? 'EQUIPPED' : have ? 'EQUIP' : 'LOCKED', 13, () => {
+    this.button(64, 138, 104, 32, 0x4a3f63, 'EQUIPMENT', 12, () => reopen('weapon'));
+    if (this.gearOpen) this.showEquipment(reopen);
+    this.startUi = this.children.list.filter(o => !before.has(o));
+    this.startUi.forEach((o, i) => o.setDepth(5400 + i));
+  }
+
+  // The equipment menu: three slots across the top, and the items for the chosen slot below.
+  showEquipment(reopen) {
+    const kind = this.gearOpen, won = Save.level > SAGA_LEVELS + 1;
+    const equipped = k => GEAR[k].find(it => it.id === Save[k]) || GEAR[k][0];
+    this.add.rectangle(W / 2, H / 2, W, H, 0x05020c, 0.6);
+    const g = this.add.graphics();
+    g.fillStyle(0x1c1220, 0.97).fillRoundedRect(20, 92, 360, 436, 14);
+    g.lineStyle(2, 0xffffff, 0.25).strokeRoundedRect(20, 92, 360, 436, 14);
+    this.txt(W / 2, 114, 'EQUIPMENT', 19, '#ffd54f');
+    GEAR_SLOTS.forEach(([k, label], i) => {                  // the three slots
+      const x = 86 + i * 114, y = 172, on = k === kind, it = equipped(k);
+      g.fillStyle(on ? 0x3a2a55 : 0x120b18, 1).fillRoundedRect(x - 52, y - 38, 104, 76, 10);
+      g.lineStyle(2, on ? 0xffd54f : 0xffffff, on ? 1 : 0.2).strokeRoundedRect(x - 52, y - 38, 104, 76, 10);
+      this.txt(x, y - 27, label, 10, on ? '#ffd54f' : '#b0a6ba');
+      if (k === 'weapon') this.img(x, y + 2, 'katana').setScale(S * 1.05).setRotation(0.9).setTint(it.id ? 0xd9a8ff : 0xffffff);
+      else if (k === 'armor') this.img(x, y - 1, 'samurai').setScale(S * 0.82).setTint(it.id ? 0xc9bcff : 0xffffff);
+      else this.add.graphics().lineStyle(2.5, it.id ? 0xffd54f : 0x5a5064, 1).strokeCircle(x, y - 2, 11).fillStyle(it.id ? 0xffd54f : 0x5a5064, 1).fillCircle(x, y + 10, 3.5);
+      this.txt(x, y + 27, it.name, 9.5, '#fff', { fontStyle: 'normal' });
+      this.add.zone(x, y, 104, 76).setInteractive({ useHandCursor: true }).on('pointerup', () => { if (k !== kind) { Sound.play('click'); reopen(k); } });
+    });
+    let y = 240;
+    GEAR[kind].forEach(item => {                             // items for the chosen slot
+      const have = !item.boss || won, on = Save[kind] === item.id;
+      this.txt(36, y, item.name, 15, have ? '#fff' : '#8a8094').setOrigin(0, 0.5);
+      if (GEAR[kind].length > 1) {
+        const b = this.button(318, y + 4, 96, 34, on ? 0x2e7d32 : have ? 0x1565c0 : 0x3a3444, on ? 'EQUIPPED' : have ? 'EQUIP' : 'LOCKED', 12, () => {
           if (!have) { Sound.play('deny'); return; }
           Save[kind] = item.id; Save.save(); Sound.play('buy');
           this.applyGear();
           reopen(kind);
         });
         if (!have) b.t.setColor('#8a8094');
-        const effect = this.txt(40, y + 14, have ? item.effect : 'Defeat the saga boss to unlock.', 11, '#ffe082', { fontStyle: 'normal', wordWrap: { width: 212 } }).setOrigin(0, 0);
-        y += 22 + effect.height;
-        if (have && item.lore) {
-          const lore = this.txt(40, y, item.lore, 10.5, '#cfc3d6', { fontStyle: 'italic', wordWrap: { width: 320 }, lineSpacing: 2 }).setOrigin(0, 0);
-          y += lore.height + 6;
-        }
-        y += 22;
-      });
-      this.button(W / 2, 482, 140, 38, 0x4a3f63, 'CLOSE', 14, () => reopen(null));
-    }
-    this.startUi = this.children.list.filter(o => !before.has(o));
-    this.startUi.forEach((o, i) => o.setDepth(5400 + i));
+      }
+      const effect = this.txt(36, y + 12, have ? item.effect : 'Defeat the saga boss to unlock.', 11, '#ffe082', { fontStyle: 'normal', wordWrap: { width: 222 } }).setOrigin(0, 0);
+      y += 18 + effect.height;
+      if (have && item.lore) {
+        const lore = this.txt(36, y, item.lore, 10, '#cfc3d6', { fontStyle: 'italic', wordWrap: { width: 328 }, lineSpacing: 1.5 }).setOrigin(0, 0);
+        y += lore.height + 4;
+      }
+      y += 20;
+    });
+    this.button(W / 2, 502, 130, 34, 0x4a3f63, 'CLOSE', 13, () => reopen(null));
   }
 
   beginRun() {
