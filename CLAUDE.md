@@ -3,7 +3,18 @@
 The game is a single file, `samurai-runner.html`, served by GitHub Pages from `main` at
 https://itsfrocco.github.io/First-Phone-Game/samurai-runner.html
 
-## After the owner merges a pull request
+## Shipping a change
+
+The owner does not want to open or merge pull requests themselves. When a change is finished,
+tested and pushed to the working branch:
+
+1. Summarise what changed and ask: "Ready for me to put this live?"
+2. Only after they say yes, open the pull request and merge it yourself.
+3. Then follow the steps below.
+
+Never merge without that yes, even if they approved an earlier change.
+
+## After a pull request is merged
 
 Always resend the game link with a fresh cache-busting number on the end, one higher than
 the last one used, so their phone downloads the new copy:
