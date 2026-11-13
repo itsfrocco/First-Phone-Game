@@ -70,7 +70,7 @@ const CFG = {
     thunder: { key: 'thunder', name: 'TAKEMIKAZUCHI', slain: 'THE THUNDER GOD FALLS', r: 48, souls: 150, speed: 68, chaseMs: 1070, windMs: 690, recoverMs: 470,
       reach: 85, cleave: 3, cleaveShare: 0.06, combo: 2, phase2Combo: 3, comboWindMs: 510, comboStep: 45,
       powerChance: 0.25, powers: [['bolt'], ['bolt', 'dash']], powerWind: { bolt: 1200, dash: 640 }, powerReach: 85, boltHalf: 48, powerMult: 2,
-      phase2: 0.5, phase2Haste: 1.33, phase2Name: 'THE STORM AWAKENS', powerUpMs: 2400, powerUpHeal: 0.2, linger: 2000, lingerTick: 500, lingerShare: 0.03 },
+      phase2: 0.5, phase2Haste: 1.33, phase2Name: 'THE STORM AWAKENS', powerUpMs: 2400, powerUpHeal: 0.2, linger: 1000, lingerTick: 500, lingerShare: 0.03 },
     tengu: { key: 'tenguBoss', name: 'TENGU', slain: 'TENGU SLAIN', r: 46, souls: 35, speed: 40, chaseMs: 1400, windMs: 900, recoverMs: 500,
       reach: 85, cleave: 3, cleaveShare: 0.08, powerChance: 0.45, powerWindMs: 1600, powerReach: 100, powerMult: 2, powerStyle: 'fly' },
   },
@@ -99,6 +99,17 @@ const LEVEL_SPECS = [
   { name: 'Takemikazuchi', demons: true, storm: true, rows: 8, seg: 370, pack: [5, 2.4, 0.30], crowd: 0.15, hp: 8, pace: 1.2, charms: [[4], 11, 0],
     bosses: [{ type: 'thunder', after: 'end', hp: 2600 }] },
 ];
+// Armor and weapons, chosen on a level's start screen. `boss: true` items are won by beating the saga boss.
+const GEAR = {
+  armor: [
+    { id: '', name: 'Clan Armor', desc: 'Standard issue.' },
+    { id: 'thunder', name: 'Thunder Armor', desc: 'Halves lightning damage.', boss: true },
+  ],
+  weapon: [
+    { id: '', name: 'Clan Katana', desc: 'A trusty blade.' },
+    { id: 'thunder', name: 'Futsu-no-mitama', desc: 'Leaves a trail of lightning on every swing.', boss: true },
+  ],
+};
 const SAGA_LEVELS = 3;                                        // ordinary levels per saga; the stage after them is the saga boss
 const GOOD_GATES = ['+3', '+3', 'x2', '+4', '+5', '+6', 'x2', '+8', '+10', '+12', '+14', '+16', '+18', '+20', '+22', '+25', '+28', '+30'];
 // Turns a spec into positions measured in distance along the path (px).
@@ -134,6 +145,7 @@ const Save = {
   souls: 0, fire: 1, damage: 1, revenue: 1,
   level: 1,                      // highest level unlocked (4 = saga 1 cleared)
   music: true, sfx: true, shake: true,
+  armor: '', weapon: '',         // equipped gear ids
   load() {
     const num = (k, def) => {
       try { const v = parseInt(localStorage.getItem(k), 10); return Number.isFinite(v) ? v : def; }
@@ -147,6 +159,7 @@ const Save = {
     this.music = num('samurai_music', 1) === 1;
     this.sfx = num('samurai_sfx', 1) === 1;
     this.shake = num('samurai_shake', 1) === 1;
+    try { this.armor = localStorage.getItem('samurai_armor') || ''; this.weapon = localStorage.getItem('samurai_weapon') || ''; } catch (e) {}
   },
   save() {
     try {
@@ -158,9 +171,11 @@ const Save = {
       localStorage.setItem('samurai_music', this.music ? 1 : 0);
       localStorage.setItem('samurai_sfx', this.sfx ? 1 : 0);
       localStorage.setItem('samurai_shake', this.shake ? 1 : 0);
+      localStorage.setItem('samurai_armor', this.armor);
+      localStorage.setItem('samurai_weapon', this.weapon);
     } catch (e) {}
   },
-  resetProgress() { this.souls = 0; this.fire = this.damage = this.revenue = this.level = 1; this.save(); },
+  resetProgress() { this.souls = 0; this.fire = this.damage = this.revenue = this.level = 1; this.armor = this.weapon = ''; this.save(); },
 };
 Save.load();
 window.addEventListener('pagehide', () => Save.save());
@@ -280,7 +295,24 @@ const Music = {
   tuneB: [3,-1,4,-1, 5,-1,-1,-1, 7,-1,6,5, 4,-1,-1,-1,  3,-1,2,-1, 0,-1,2,-1, 3,-1,4,3, 2,-1,-1,-1],
   bass: { 0: 73.42, 6: 73.42, 8: 110, 12: 87.31 },
   drums: { run: { kick: [0, 4, 10, 12], rim: [6, 14] }, boss: { kick: [0, 2, 4, 8, 10, 12], rim: [6, 14, 15] } },
-  bpm: { menu: 66, run: 112, boss: 134 },
+  bpm: { menu: 66, run: 112, boss: 134, storm: 92, stormBoss: 118 },
+  // The storm stage: low, sparse and heavy. A drone, a slow melody an octave down, and war drums.
+  stormScale: [146.83, 164.81, 174.61, 220, 233.08, 293.66, 329.63, 349.23],
+  stormA: [0,-1,-1,-1, -1,-1,2,-1, 1,-1,-1,-1, 0,-1,-1,-1,  4,-1,-1,3, -1,-1,2,-1, 1,-1,0,-1, -1,-1,-1,-1],
+  stormB: [5,-1,-1,-1, 4,-1,-1,-1, 3,-1,2,-1, 1,-1,-1,-1,  2,-1,-1,-1, 1,-1,-1,0, -1,-1,-1,-1, 0,-1,-1,-1],
+  stormNote(i, t) {
+    const s = i % 32, q = s % 16, out = Sound.mus, boss = this.mode === 'stormBoss';
+    const m = (Math.floor(i / 32) % 4 === 3 ? this.stormB : this.stormA)[s];
+    if (m >= 0) {
+      const f = this.stormScale[m];
+      Sound.tone({ type: 'triangle', f, dur: 0.9, vol: 0.34, attack: 0.02, at: t, out });
+      Sound.tone({ type: 'square', f: f / 2, dur: 0.6, vol: 0.07, at: t, out });
+    }
+    if (q === 0) [73.42, 110].forEach(f => Sound.tone({ f, dur: 2.6, vol: 0.2, attack: 0.3, at: t, out }));         // drone
+    if (q % 4 === 0 || (boss && q % 2 === 0)) Sound.tone({ type: 'triangle', f: 73.42, dur: 0.22, vol: 0.3, at: t, out });   // pulse
+    if ((boss ? [0, 3, 6, 8, 11, 14] : [0, 6, 8, 14]).includes(q)) Sound.tone({ f: 90, to: 34, dur: 0.34, vol: 0.9, at: t, out });   // war drum
+    if (boss && (q === 4 || q === 12)) Sound.noise({ type: 'highpass', f: 2200, dur: 0.05, vol: 0.2, at: t, out });
+  },
   // The menu has its own calm theme: a slow flute-like line over a soft drone, in a brighter scale.
   menuScale: [293.66, 329.63, 392, 440, 493.88, 587.33, 659.25, 783.99, 880],
   menuA: [0,-1,-1,-1, 3,-1,-1,-1, 5,-1,-1,4, 3,-1,-1,-1,  2,-1,-1,-1, 3,-1,4,-1, 2,-1,-1,-1, -1,-1,-1,-1],
@@ -300,6 +332,7 @@ const Music = {
   },
   note(i, t) {
     if (this.mode === 'menu') return this.menuNote(i, t);
+    if (this.mode === 'storm' || this.mode === 'stormBoss') return this.stormNote(i, t);
     const s = i % 32, bar = Math.floor(i / 32) % 4, out = Sound.mus;
     const m = (bar === 2 ? this.tuneB : this.tuneA)[s];
     if (m >= 0) {
@@ -852,6 +885,7 @@ class GameScene extends BaseScene {
     this.earned = 0;
     this.wound = 0;                // enemy strikes add up here; each full point costs one samurai
     this.over = false;
+    this.gearOpen = null;          // 'armor' or 'weapon' while that menu is showing
     this.bolts = [];               // lightning streaks being drawn
     this.hazards = [];             // lightning left on the ground
     this.started = false;          // false while the level waits on its start screen
@@ -867,7 +901,8 @@ class GameScene extends BaseScene {
     this.spikes = [];
     this.decor = [];
 
-    Music.set('run');
+    Music.set(this.L.storm ? 'storm' : 'run');
+    this.applyGear();
     this.buildGround();
     this.buildLevel();
     this.buildFx();
@@ -876,7 +911,10 @@ class GameScene extends BaseScene {
     this.stageName = this.levelNo > SAGA_LEVELS ? 'SAGA BOSS' : 'LEVEL ' + this.levelNo;
     this.banner(this.stageName, this.L.name);
     this.showStartUi();
-    this.input.on('pointerdown', p => { if (!this.started && p.worldY > 120 && p.worldY < 505) this.beginRun(); });
+    this.input.on('pointerdown', p => {
+      if (this.started || this.gearOpen || p.worldY < 120 || p.worldY > 505 || (p.worldX < 104 && p.worldY < 200)) return;
+      this.beginRun();
+    });
 
     const steer = p => {
       if (!this.started) return;
@@ -886,6 +924,16 @@ class GameScene extends BaseScene {
     };
     this.input.on('pointerdown', steer);
     this.input.on('pointermove', steer);
+  }
+
+  /* ---------- gear ---------- */
+  // Reads the equipped armor and weapon and restyles any samurai already on the field.
+  applyGear() {
+    this.thunderArmor = Save.armor === 'thunder';
+    this.thunderBlade = Save.weapon === 'thunder';
+    this.armorTint = this.thunderArmor ? 0xc9bcff : 0xffffff;
+    this.bladeTint = this.thunderBlade ? 0xd9a8ff : 0xffffff;
+    (this.soldiers || []).forEach(s => { s.img.setTint(this.armorTint); s.blade.setTint(this.bladeTint); });
   }
 
   /* ---------- start screen ---------- */
@@ -918,12 +966,37 @@ class GameScene extends BaseScene {
     const hint = this.txt(W / 2, 372, 'touch the path to start', 15, '#fff', { stroke: '#000', strokeThickness: 4 });
     this.tweens.add({ targets: hint, alpha: 0.35, duration: 600, yoyo: true, repeat: -1 });
     this.button(54, 96, 84, 34, 0x3a3050, '‹ SAGAS', 13, () => this.scene.start('Sagas'));
+    const reopen = kind => this.time.delayedCall(0, () => { if (!this.started) { this.gearOpen = kind; this.showStartUi(); } });
+    this.button(54, 138, 84, 32, 0x4a3f63, 'ARMOR', 12, () => reopen('armor'));
+    this.button(54, 178, 84, 32, 0x4a3f63, 'WEAPON', 12, () => reopen('weapon'));
+    if (this.gearOpen) {                                     // the armor or weapon menu
+      const kind = this.gearOpen, won = Save.level > SAGA_LEVELS + 1;
+      this.add.rectangle(W / 2, H / 2, W, H, 0x05020c, 0.6);
+      const g = this.add.graphics();
+      g.fillStyle(0x1c1220, 0.97).fillRoundedRect(30, 150, 340, 300, 14);
+      g.lineStyle(2, 0xffffff, 0.25).strokeRoundedRect(30, 150, 340, 300, 14);
+      this.txt(W / 2, 178, kind === 'armor' ? 'ARMOR' : 'WEAPON', 20, '#ffd54f');
+      GEAR[kind].forEach((item, i) => {
+        const y = 240 + i * 84, have = !item.boss || won, on = Save[kind] === item.id;
+        this.txt(48, y - 12, item.name, 16, have ? '#fff' : '#8a8094').setOrigin(0, 0.5);
+        this.txt(48, y + 10, have ? item.desc : 'Defeat the saga boss to unlock.', 11, '#cfc3d6', { fontStyle: 'normal', wordWrap: { width: 190 } }).setOrigin(0, 0.5);
+        const b = this.button(304, y, 104, 40, on ? 0x2e7d32 : have ? 0x1565c0 : 0x3a3444, on ? 'EQUIPPED' : have ? 'EQUIP' : 'LOCKED', 13, () => {
+          if (!have) { Sound.play('deny'); return; }
+          Save[kind] = item.id; Save.save(); Sound.play('buy');
+          this.applyGear();
+          reopen(kind);
+        });
+        if (!have) b.t.setColor('#8a8094');
+      });
+      this.button(W / 2, 412, 140, 40, 0x4a3f63, 'CLOSE', 14, () => reopen(null));
+    }
     this.startUi = this.children.list.filter(o => !before.has(o));
     this.startUi.forEach((o, i) => o.setDepth(5400 + i));
   }
 
   beginRun() {
     if (this.started) return;
+    this.gearOpen = null;
     this.started = true;
     this.startUi.forEach(o => o.destroy());
     this.startUi = null;
@@ -944,12 +1017,12 @@ class GameScene extends BaseScene {
     }
     if (!this.L.storm) return;
     // The storm stage: scorched colours, cracked ground, a dark sky that flickers.
-    this.grass.setTint(0x4b5560); this.path.setTint(0x7d7388);
-    fog.fillGradientStyle(0x05020c, 0x05020c, 0x05020c, 0x05020c, 0.85, 0.85, 0, 0).fillRect(0, 0, W, 300);
+    this.grass.setTint(0x7c8792); this.path.setTint(0xa9a0b3);
+    fog.fillGradientStyle(0x05020c, 0x05020c, 0x05020c, 0x05020c, 0.5, 0.5, 0, 0).fillRect(0, 0, W, 300);
     for (let d = 160; d < this.L.length + 500; d += 110 + Math.random() * 120) {
       this.decor.push({ d, x: 90 + Math.random() * 220, obj: this.img(0, -200, 'crack').setRotation(Math.random() * 3), flat: true });
     }
-    this.add.rectangle(W / 2, H / 2, W, H, 0x05020c, 0.3).setDepth(-7);
+    this.stormDark = this.add.rectangle(W / 2, H / 2, W, H, 0x05020c, 0.15).setDepth(-7);   // deepens when the boss awakens
     this.skyFlash = this.add.rectangle(W / 2, H / 2, W, H, 0xc9b8ff, 1).setAlpha(0).setDepth(-6);
     this.skyT = 1500;
     this.stormT = CFG.storm.everyMs[0];
@@ -1169,6 +1242,7 @@ class GameScene extends BaseScene {
       s.cd = cd * (0.9 + Math.random() * 0.2);
       s.lunge = 7; s.swing = 1;
       this.strike(best, dmg, s);
+      if (this.thunderBlade && Math.random() < 0.6) this.zap(s.x + 9, s.y - 12, best.x, best.y, 90);   // Futsu-no-mitama's trail
     });
   }
 
@@ -1250,7 +1324,7 @@ class GameScene extends BaseScene {
       Sound.play('claw');
       this.enemySlash(near.x, near.y, 0.55, e.kind === 'demon' ? 0xea80fc : 0xc5e1a5);
       near.img.setTint(0xff8a80);
-      this.time.delayedCall(90, () => { if (near.img.active) near.img.clearTint(); });
+      this.time.delayedCall(90, () => { if (near.img.active) near.img.setTint(this.armorTint); });
       this.wound += k.hit;
       if (this.wound >= 1) { this.wound -= 1; this.lose(1, near); }
     });
@@ -1351,7 +1425,7 @@ class GameScene extends BaseScene {
       this.shake(style ? 320 : 200, style ? 0.03 : 0.012);
       if (style && style !== 'bolt') { this.burst.setParticleTint(B.linger ? 0xb388ff : 0xffab91); this.burst.explode(36, b.x, b.y + 95); }
       if (Math.abs(this.armyX - b.aimX) < reach) {
-        this.lose(Math.max(B.cleave, Math.ceil(this.count * B.cleaveShare)) * (style ? B.powerMult : 1));
+        this.lose(Math.max(B.cleave, Math.ceil(this.count * B.cleaveShare)) * (style ? B.powerMult : 1), null, !!B.linger && (!!style || b.phase2));
       } else { Sound.play('dodge'); this.float(this.armyX, this.formY - 46, 'DODGED', '#80d8ff', 18); }
       if (b.phase2 && B.linger && style !== 'bolt') this.hazards.push({ x: b.aimX, y: b.y + 118, rx: reach, ry: 62, t: B.linger, tick: B.lingerTick });
       b.swings++;
@@ -1383,6 +1457,7 @@ class GameScene extends BaseScene {
     Object.assign(b, { powering: false, phase2: true, state: 'chase', t: B.chaseMs });
     b.obj.clearTint();
     this.tweens.add({ targets: this.shade, alpha: 0, duration: 500 });
+    if (this.stormDark) this.tweens.add({ targets: this.stormDark, alpha: 0.5, duration: 500 });      // the storm closes in for phase 2
     for (let i = 0; i < 8; i++) this.zap(b.x, b.y, b.x + Math.cos(i * 0.785) * 190, b.y + Math.sin(i * 0.785) * 190, 320);
     this.burst.setParticleTint(0xb388ff); this.burst.explode(50, b.x, b.y);
     this.banner(B.phase2Name, '');
@@ -1450,7 +1525,7 @@ class GameScene extends BaseScene {
     if (!w.done && w.y >= this.formY) {
       w.done = true;
       this.shake(220, 0.016);
-      if (Math.abs(this.armyX - w.x) < C.half + 14) this.lose(Math.max(C.cleave, Math.ceil(this.count * C.cleaveShare)));
+      if (Math.abs(this.armyX - w.x) < C.half + 14) this.lose(Math.max(C.cleave, Math.ceil(this.count * C.cleaveShare)), null, true);
       else { Sound.play('dodge'); this.float(this.armyX, this.formY - 46, 'DODGED', '#80d8ff', 18); }
     }
     if (w.t <= 0) { this.wave = null; this.waveImg.setVisible(false); }
@@ -1482,7 +1557,7 @@ class GameScene extends BaseScene {
       h.tick -= ms;
       if (h.tick <= 0 && Math.abs(this.armyX - h.x) < h.rx) {
         h.tick = b.prof.lingerTick;
-        this.lose(Math.max(1, Math.ceil(this.count * b.prof.lingerShare)));
+        this.lose(Math.max(1, Math.ceil(this.count * b.prof.lingerShare)), null, true);
       }
     });
   }
@@ -1506,7 +1581,7 @@ class GameScene extends BaseScene {
     while (this.soldiers.length < want) {
       this.soldiers.push({ x: this.armyX + (Math.random() - 0.5) * 30, y: this.formY + 20 + Math.random() * 30,
         cd: Math.random() * 200, lunge: 0, swing: 0, pop: instant ? 1 : 0,
-        img: this.img(0, -200, 'samurai'), blade: this.sword(0, -200) });
+        img: this.img(0, -200, 'samurai').setTint(this.armorTint), blade: this.sword(0, -200).setTint(this.bladeTint) });
     }
     while (this.soldiers.length > want) this.dropSoldier(this.soldiers[this.soldiers.length - 1]);
   }
@@ -1520,7 +1595,9 @@ class GameScene extends BaseScene {
     s.img.destroy(); s.blade.destroy();
   }
 
-  lose(n, victim) {
+  // `lightning` losses are halved by the Thunder Armor.
+  lose(n, victim, lightning) {
+    if (lightning && this.thunderArmor) n = Math.ceil(n / 2);
     if (this.count <= 0) return;
     this.count = Math.max(0, this.count - n);
     Sound.play('lose');
@@ -1544,7 +1621,7 @@ class GameScene extends BaseScene {
   startFight() {
     const P = this.boss.prof;
     this.fight = true;
-    Music.set('boss'); Sound.play('gong');
+    Music.set(this.L.storm ? 'stormBoss' : 'boss'); Sound.play('gong');
     if (!P.trickle) {                                        // final bosses fight alone
       const keep = this.bosses.filter(b => !b.gone);
       [...this.spikes, ...this.enemies.filter(e => !keep.includes(e))].forEach(o => { o.obj.destroy(); o.gone = true; });
@@ -1567,7 +1644,7 @@ class GameScene extends BaseScene {
     this.bolts = []; this.hazards = []; this.shade.setAlpha(0);
     this.boss = this.bosses.find(b => !b.gone) || null;
     this.finaleDone = !this.boss;
-    Music.set('run'); Sound.play('gong');
+    Music.set(this.L.storm ? 'storm' : 'run'); Sound.play('gong');
     if (this.finaleDone) {                                   // nothing is left to fight on the way to the finish
       this.speedMod *= CFG.bossSlow;
       [...this.enemies, ...this.spikes].forEach(o => { if (!o.gone) { o.obj.destroy(); o.gone = true; } });
@@ -1643,6 +1720,8 @@ class GameScene extends BaseScene {
     this.over = true;
     const unlocked = win && this.levelNo === Save.level;
     if (unlocked) Save.level++;
+    const gearWon = unlocked && this.levelNo > SAGA_LEVELS;   // first win over the saga boss: his armor and sword, equipped
+    if (gearWon) Save.armor = Save.weapon = 'thunder';
     Save.save();
     Music.set('off'); Sound.play(win ? 'win' : 'defeat');
     this.countText.setVisible(false);
@@ -1654,7 +1733,8 @@ class GameScene extends BaseScene {
     this.img(W / 2 - 62, 346, 'soul').setScale(S * 1.6).setDepth(D + 1);
     this.txt(W / 2 + 6, 346, '+' + this.earned + ' souls', 24, '#e1bee7').setDepth(D + 1);
     if (unlocked) this.txt(W / 2, 390, this.levelNo < SAGA_LEVELS ? 'LEVEL ' + (this.levelNo + 1) + ' UNLOCKED' : this.levelNo === SAGA_LEVELS ? 'SAGA BOSS UNLOCKED' : 'SAGA CLEARED', 16, '#fff59d').setDepth(D + 1);
-    const tap = this.txt(W / 2, 430, 'tap to continue', 16, '#bbb', { fontStyle: 'normal' }).setDepth(D + 1).setAlpha(0);
+    if (gearWon) this.txt(W / 2, 418, 'WON: THUNDER ARMOR  ·  FUTSU-NO-MITAMA', 13, '#d1c4e9').setDepth(D + 1);
+    const tap = this.txt(W / 2, 452, 'tap to continue', 16, '#bbb', { fontStyle: 'normal' }).setDepth(D + 1).setAlpha(0);
     this.time.delayedCall(700, () => {
       this.tweens.add({ targets: tap, alpha: 1, duration: 500, yoyo: true, repeat: -1 });
       this.input.once('pointerdown', () => {
