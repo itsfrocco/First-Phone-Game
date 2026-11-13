@@ -37,8 +37,8 @@ const CFG = {
   attackRange: 38,
   slowScale: 0.30,         // world speed while the special is active
   slowMs: 4000,
-  specialMax: 12,          // fewest kills that fill the special bar
-  specialsPerLevel: 8,     // the bar is sized so a level's regular enemies fill it about this many times
+  specialMax: 36,          // fewest kills that fill the special bar
+  specialsPerLevel: 2.7,   // the bar is sized so a level's regular enemies fill it about this many times
   charmDamageUp: 1.10,     // each lucky charm broken: +10% blade damage for the rest of the run
   bossSlow: 0.97,          // the run slows 3% once the boss is down
   shake: 0.4,              // screen-shake strength multiplier (0 = off)
@@ -63,13 +63,14 @@ const CFG = {
       reach: 85, cleave: 4, cleaveShare: 0.10, powerChance: 0.35, powerWindMs: 1070, powerReach: 100, powerMult: 2, powerStyle: 'jump' },
     giant: { key: 'giant', name: 'GIANT ZOMBIE', slain: 'GIANT SLAIN', r: 44, souls: 20, speed: 40, chaseMs: 1400, windMs: 900, recoverMs: 500,
       reach: 85, cleave: 2, cleaveShare: 0.05, powerChance: 0, trickle: true, trickleMs: 1500 },       // half the fat demon's speed and damage
-    // The saga boss. Phase 1: three-swing sword combos and an occasional lightning slash down a lane.
-    // Phase 2 (below `phase2` of his health): faster, his swings leave lightning on the ground for `linger` ms,
-    // and he sometimes dashes to where the army stands.
-    thunder: { key: 'thunder', name: 'TAKEMIKAZUCHI', slain: 'THE THUNDER GOD FALLS', r: 48, souls: 150, speed: 90, chaseMs: 800, windMs: 520, recoverMs: 350,
-      reach: 85, cleave: 3, cleaveShare: 0.06, combo: 3, comboWindMs: 380, comboStep: 45,
-      powerChance: 0.35, powers: [['bolt'], ['bolt', 'dash']], powerWind: { bolt: 900, dash: 480 }, powerReach: 85, boltHalf: 48, powerMult: 2,
-      phase2: 0.5, phase2Name: 'THE STORM AWAKENS', linger: 2000, lingerTick: 500, lingerShare: 0.03 },
+    // The saga boss. Phase 1 is measured: two-swing combos and an occasional lightning slash down a lane.
+    // At `phase2` of his health he powers up (a short cutscene; he cannot be hurt and regains `powerUpHeal` of his health).
+    // Phase 2 runs `phase2Haste` times faster with three-swing combos, his swings leave lightning on the ground
+    // for `linger` ms, and he sometimes dashes to where the army stands.
+    thunder: { key: 'thunder', name: 'TAKEMIKAZUCHI', slain: 'THE THUNDER GOD FALLS', r: 48, souls: 150, speed: 68, chaseMs: 1070, windMs: 690, recoverMs: 470,
+      reach: 85, cleave: 3, cleaveShare: 0.06, combo: 2, phase2Combo: 3, comboWindMs: 510, comboStep: 45,
+      powerChance: 0.25, powers: [['bolt'], ['bolt', 'dash']], powerWind: { bolt: 1200, dash: 640 }, powerReach: 85, boltHalf: 48, powerMult: 2,
+      phase2: 0.5, phase2Haste: 1.33, phase2Name: 'THE STORM AWAKENS', powerUpMs: 2400, powerUpHeal: 0.2, linger: 2000, lingerTick: 500, lingerShare: 0.03 },
     tengu: { key: 'tenguBoss', name: 'TENGU', slain: 'TENGU SLAIN', r: 46, souls: 35, speed: 40, chaseMs: 1400, windMs: 900, recoverMs: 500,
       reach: 85, cleave: 3, cleaveShare: 0.08, powerChance: 0.45, powerWindMs: 1600, powerReach: 100, powerMult: 2, powerStyle: 'fly' },
   },
@@ -986,6 +987,7 @@ class GameScene extends BaseScene {
     }).setDepth(3500);
     this.danger = this.add.graphics().setDepth(-10);        // red warning zone under a boss attack
     this.boltG = this.add.graphics().setDepth(2960);        // lightning
+    this.shade = this.add.rectangle(W / 2, H / 2, W, H, 0x05020c, 1).setAlpha(0).setDepth(-5);   // darkens the ground during a power-up
     this.slowTint = this.add.rectangle(W / 2, H / 2, W, H, 0x5e35b1, 1).setAlpha(0).setDepth(3600);
   }
 
@@ -1128,6 +1130,7 @@ class GameScene extends BaseScene {
   }
 
   strike(e, dmg, s) {
+    if (e.powering) return;        // mid power-up: nothing can hurt him
     if (e.air) {                   // airborne: the swing finds nothing
       if (Math.random() < 0.4) this.float(e.x + (Math.random() - 0.5) * 70, e.y - 10 - Math.random() * 30, 'MISS', '#cfd8dc', 13);
       return;
@@ -1254,14 +1257,14 @@ class GameScene extends BaseScene {
         this.addEnemy(demon ? 'demon' : 'zombie', 85 + Math.random() * 230, this.dist + CFG.armyY + 10, Math.round(b.trickleHp * (demon ? CFG.enemy.demonHp : 1)));
       }
     }
-    if (B.phase2 && !b.phase2 && b.hp <= b.maxHp * B.phase2) {          // second phase begins
-      b.phase2 = true;
-      this.banner(B.phase2Name, '');
-      Sound.play('gong');
-      this.cameras.main.flash(300, 180, 140, 255);
-      this.shake(400, 0.02);
+    if (B.phase2 && !b.phase2 && !b.powering && b.hp <= b.maxHp * B.phase2) {          // second phase: he powers up first
+      Object.assign(b, { powering: true, state: 'powerup', t: B.powerUpMs, style: null, air: false, comboLeft: 0 });
+      this.hazards = [];
+      b.obj.setRotation(0);
+      Sound.play('warnPower');
     }
-    const haste = b.phase2 ? 1.15 : 1;
+    if (b.state === 'powerup') { this.powerUp(b, wdt); return; }
+    const haste = b.phase2 ? B.phase2Haste || 1 : 1;
     this.updateLightning(b, wdt);
     b.t -= wdt * 1000 * haste;
     if (b.state === 'chase') {
@@ -1269,9 +1272,9 @@ class GameScene extends BaseScene {
       const step = B.speed * haste * wdt;
       b.x = clamp(b.x + clamp(this.armyX - b.x, -step, step), 120, 280);
       if (b.t > 0) return;
-      const chance = B.powerChance * (b.phase2 ? 1.4 : 1);
+      const chance = B.powerChance * (b.phase2 ? 1.6 : 1);
       b.power = chance > 0 && b.swings > 0 && !b.power && Math.random() < chance;
-      b.comboLeft = b.power ? 0 : (B.combo || 1) - 1;
+      b.comboLeft = b.power ? 0 : ((b.phase2 && B.phase2Combo) || B.combo || 1) - 1;
       this.startWind(b, b.power ? this.pickPower(b) : null);
     } else if (b.state === 'wind') {
       const k = clamp(1 - b.t / b.windFull, 0, 1), style = b.style;
@@ -1318,6 +1321,31 @@ class GameScene extends BaseScene {
       b.state = 'recover';
       b.t = B.recoverMs;
     } else if (b.t <= 0) { b.state = 'chase'; b.t = B.chaseMs; }
+  }
+
+  // The cutscene between phases: the arena darkens, lightning pours into him, he rises, heals a little and cannot be hurt.
+  powerUp(b, wdt) {
+    const B = b.prof, ms = wdt * 1000;
+    b.t -= ms;
+    const k = clamp(1 - b.t / B.powerUpMs, 0, 1);
+    b.hp = Math.min(b.maxHp, b.hp + b.maxHp * B.powerUpHeal * ms / B.powerUpMs);
+    this.shade.setAlpha(0.6 * Math.min(1, k * 5));
+    b.obj.y -= k * 28;
+    b.obj.setScale(b.obj.scaleX * (1 + 0.22 * k)).setTint(k > 0.25 ? 0xd9c2ff : 0xffffff);
+    if (Math.random() < 0.25 + k * 0.6) this.zap(b.x + (Math.random() - 0.5) * 320, -10, b.x + (Math.random() - 0.5) * 40, b.obj.y - 20, 200);
+    if (Math.random() < 0.6) { const a = Math.random() * 6.28, r = 40 + k * 40; this.zap(b.x + Math.cos(a) * r, b.obj.y + Math.sin(a) * r, b.x + Math.cos(a + 1.2) * r, b.obj.y + Math.sin(a + 1.2) * r, 120); }
+    this.shake(120, 0.004 + 0.02 * k);
+    this.updateLightning(b, wdt);
+    if (b.t > 0) return;
+    Object.assign(b, { powering: false, phase2: true, state: 'chase', t: B.chaseMs });
+    b.obj.clearTint();
+    this.tweens.add({ targets: this.shade, alpha: 0, duration: 500 });
+    for (let i = 0; i < 8; i++) this.zap(b.x, b.y, b.x + Math.cos(i * 0.785) * 190, b.y + Math.sin(i * 0.785) * 190, 320);
+    this.burst.setParticleTint(0xb388ff); this.burst.explode(50, b.x, b.y);
+    this.banner(B.phase2Name, '');
+    Sound.play('gong'); Sound.play('slam');
+    this.cameras.main.flash(350, 200, 170, 255);
+    this.shake(450, 0.03);
   }
 
   // Begins a wind-up. `style` is null for a plain swing, or the kind of power attack.
@@ -1443,7 +1471,7 @@ class GameScene extends BaseScene {
   endFight() {
     const P = this.boss.prof;
     this.fight = false;
-    this.bolts = []; this.hazards = [];
+    this.bolts = []; this.hazards = []; this.shade.setAlpha(0);
     this.boss = this.bosses.find(b => !b.gone) || null;
     this.finaleDone = !this.boss;
     Music.set('run'); Sound.play('gong');
