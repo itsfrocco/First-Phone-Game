@@ -43,10 +43,17 @@ const CFG = {
   // Regular enemies run at the army, then strike. `hit` is the share of one samurai lost per strike.
   enemy: {
     reach: 16,
-    zombie: { speed: 38, hit: 0.40, strikeMs: 1100 },
-    demon:  { speed: 55, hit: 0.60, strikeMs: 900 },
+    zombie: { speed: 38, hit: 0.26, strikeMs: 1100 },
+    demon:  { speed: 55, hit: 0.40, strikeMs: 900 },
   },
-  boss: { hp: 520, swingMs: 1100, cleave: 4, cleaveShare: 0.10, souls: 80 },   // a swing takes the larger of `cleave` or `cleaveShare` of the army
+  boss: {
+    hp: 520, souls: 80,
+    speed: 80,                         // px/s he shuffles sideways after the army
+    chaseMs: 700, windMs: 450, recoverMs: 250,   // follow, raise the cleaver (dodge window), pause
+    reach: 85,                         // a swing hits if the army's centre is within this of him
+    cleave: 4, cleaveShare: 0.10,      // a hit takes the larger of `cleave` or `cleaveShare` of the army
+    powerChance: 0.35, powerWindMs: 800, powerReach: 100,   // jump slam: lands where the army stood, double damage
+  },
   oni: { swingMs: 750, reach: 55, hitReach: 40 },
 };
 
@@ -491,7 +498,7 @@ class GameScene extends BaseScene {
       else { this.addSpike(130, d); this.addSpike(270, d - 60); }
     });
     this.boss = this.addEnemy('boss', W / 2, LEVEL.bossAt, CFG.boss.hp);
-    this.boss.r = 50; this.boss.souls = CFG.boss.souls; this.boss.swing = CFG.boss.swingMs;
+    Object.assign(this.boss, { r: 50, souls: CFG.boss.souls, state: 'chase', t: CFG.boss.chaseMs + 500, swings: 0, power: false });
   }
 
   makeGate(x, op, good) {
@@ -523,6 +530,7 @@ class GameScene extends BaseScene {
       x: { min: 0, max: W }, y: -10, lifespan: 8000, speedY: { min: 35, max: 80 }, speedX: { min: -25, max: 10 },
       scale: S, rotate: { start: 0, end: 360 }, frequency: 500, alpha: 0.8,
     }).setDepth(3500);
+    this.danger = this.add.graphics().setDepth(-10);        // red warning zone under a boss attack
     this.slowTint = this.add.rectangle(W / 2, H / 2, W, H, 0x5e35b1, 1).setAlpha(0).setDepth(3600);
   }
 
@@ -567,14 +575,14 @@ class GameScene extends BaseScene {
       this.dist += step;
       this.grass.tilePositionY -= step * R;
       this.path.tilePositionY -= step * R;
-      this.enemies.forEach(e => { if (e.hold) e.d += step; });
+      this.enemies.forEach(e => { if (e.hold || e.behind) e.d += step; });
     }
     const place = o => {
       const y = CFG.armyY - (o.d - this.dist);
       o.y = y;
       if (y > H + 80) { o.obj.destroy(); o.gone = true; return; }
       const p = this.persp(y);
-      const bob = o.seed !== undefined && !o.r && !o.hold ? Math.sin(this.time.now * 0.02 + o.seed) * 1.5 : 0;
+      const bob = o.seed !== undefined && !o.r && !o.hold && o !== this.boss ? Math.sin(this.time.now * 0.02 + o.seed) * 1.5 : 0;
       o.obj.setVisible(y > -90).setPosition(o.x, y + bob).setScale((o.obj.type === 'Container' ? 1 : S) * p).setDepth(o.flat ? y - 30 : y);
     };
     const alive = o => !o.gone;
@@ -644,7 +652,7 @@ class GameScene extends BaseScene {
       let best = null, bestD = CFG.attackRange;
       near.forEach(e => {
         if (e.hp <= 0) return;
-        const d = e === this.boss && this.fight ? 0 : Math.hypot(e.x - s.x, e.y - s.y) - e.r;
+        const d = e === this.boss && this.fight ? (Math.abs(s.x - e.x) < CFG.boss.reach + 10 ? 0 : Infinity) : Math.hypot(e.x - s.x, e.y - s.y) - e.r;
         if (d < bestD) { bestD = d; best = e; }
       });
       if (!best) return;
@@ -696,7 +704,8 @@ class GameScene extends BaseScene {
     pack.forEach(e => {
       let near = null, L = Infinity;
       this.soldiers.forEach(s => { const d = Math.hypot(s.x - e.x, s.y - e.y); if (d < L) { L = d; near = s; } });
-      if (!near) { e.hold = false; return; }
+      if (!near) { e.hold = e.behind = false; return; }
+      e.behind = e.y > near.y;           // got past the army: turn round and chase instead of scrolling away
       const k = E[e.kind];
       e.hold = L <= E.reach;
       if (!e.hold) {
@@ -747,18 +756,47 @@ class GameScene extends BaseScene {
       o.obj.setTint(0xff8a80);
       this.lose(1, s);
     });
-    // Boss: cleaver sweep.
-    if (this.fight && !this.boss.gone) {
-      const b = this.boss;
-      b.swing -= wdt * 1000;
-      b.obj.setRotation(b.swing < 260 ? -0.12 : 0);        // wind-up tell
-      if (b.swing <= 0) {
-        b.swing = CFG.boss.swingMs;
-        this.enemySlash(b.x, b.y + 70, 3.2, 0xffffff);
-        this.shake(200, 0.012);
-        this.lose(Math.max(CFG.boss.cleave, Math.ceil(this.count * CFG.boss.cleaveShare)));
-      }
-    }
+    this.updateBoss(wdt);
+  }
+
+  // Boss cycle: shuffle after the army -> wind up (red zone shows where it lands) -> strike -> pause.
+  updateBoss(wdt) {
+    this.danger.clear();
+    const b = this.boss, B = CFG.boss;
+    if (!this.fight || b.gone) return;
+    b.t -= wdt * 1000;
+    if (b.state === 'chase') {
+      b.obj.setRotation(0);
+      b.x = clamp(b.x + clamp(this.armyX - b.x, -B.speed * wdt, B.speed * wdt), 120, 280);
+      if (b.t > 0) return;
+      b.power = b.swings > 0 && !b.power && Math.random() < B.powerChance;
+      b.state = 'wind';
+      b.t = b.windFull = b.power ? B.powerWindMs : B.windMs;
+      b.fromX = b.x;
+      b.aimX = b.power ? clamp(this.armyX, 100, 300) : b.x;
+    } else if (b.state === 'wind') {
+      const k = clamp(1 - b.t / b.windFull, 0, 1), reach = b.power ? B.powerReach : B.reach;
+      if (b.power) {                                         // leap toward where the army stood
+        const h = Math.sin(k * Math.PI);
+        b.x = b.fromX + (b.aimX - b.fromX) * k;
+        b.obj.y -= h * 80;
+        b.obj.setScale(b.obj.scaleX * (1 + h * 0.25)).setRotation(-0.35 * h);
+      } else b.obj.setRotation(-0.25 * k);
+      this.danger.fillStyle(b.power ? 0xff6d00 : 0xff1744, 0.16 + 0.24 * k).fillEllipse(b.aimX, b.y + 118, reach * 2, 124);
+      this.danger.lineStyle(2, 0xff8a80, 0.5 + 0.5 * k).strokeEllipse(b.aimX, b.y + 118, reach * 2, 124);
+      if (b.t > 0) return;
+      b.x = b.aimX;
+      b.obj.setRotation(0);
+      this.enemySlash(b.x, b.y + 75, b.power ? 4.4 : 3.2, b.power ? 0xffab91 : 0xffffff);
+      this.shake(b.power ? 320 : 200, b.power ? 0.03 : 0.012);
+      if (b.power) { this.burst.setParticleTint(0xffab91); this.burst.explode(36, b.x, b.y + 95); }
+      if (Math.abs(this.armyX - b.aimX) < reach) {
+        this.lose(Math.max(B.cleave, Math.ceil(this.count * B.cleaveShare)) * (b.power ? 2 : 1));
+      } else this.float(this.armyX, this.formY - 46, 'DODGED', '#80d8ff', 18);
+      b.swings++;
+      b.state = 'recover';
+      b.t = B.recoverMs;
+    } else if (b.t <= 0) { b.state = 'chase'; b.t = B.chaseMs; }
   }
 
   /* ---------- army bookkeeping ---------- */
