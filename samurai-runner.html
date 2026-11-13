@@ -27,7 +27,7 @@ const S = 1 / R;                              // sprite scale that undoes R
 const FONT = '"Trebuchet MS", "Avenir Next", "Segoe UI", system-ui, sans-serif';
 
 const CFG = {
-  startArmy: 4,
+  startArmy: 1,
   maxDrawn: 20,            // soldiers drawn on screen; the count can go higher
   armyY: 560,              // front row of the army
   pathLeft: 60, pathRight: 340,
@@ -38,44 +38,70 @@ const CFG = {
   slowScale: 0.30,         // world speed while the special is active
   slowMs: 4000,
   specialMax: 12,
-  oniDamageUp: 1.05,       // each oni kill: +5% blade damage for the rest of the run
+  guardDamageUp: 1.05,     // each red-gate tengu kill: +5% blade damage for the rest of the run
   bossSlow: 0.97,          // the run slows 3% once the boss is down
   shake: 0.4,              // screen-shake strength multiplier (0 = off)
   // Regular enemies run at the army, then strike. `hit` is the share of one samurai lost per strike.
   enemy: {
     reach: 16,
+    fightRush: 80,         // extra run speed while the scroll is stopped for a big fight
     zombie: { speed: 38, hit: 0.40, strikeMs: 1100 },
     demon:  { speed: 55, hit: 0.60, strikeMs: 900 },
   },
-  boss: {
-    hp: 520, souls: 80,
-    speed: 80,                         // px/s he shuffles sideways after the army
-    chaseMs: 700, windMs: 450, recoverMs: 250,   // follow, raise the cleaver (dodge window), pause
-    reach: 85,                         // a swing hits if the army's centre is within this of him
-    cleave: 4, cleaveShare: 0.10,      // a hit takes the larger of `cleave` or `cleaveShare` of the army
-    powerChance: 0.35, powerWindMs: 800, powerReach: 100,   // jump slam: lands where the army stood, double damage
+  // Big fights share one cycle: follow the army -> wind up (red zone on the ground) -> strike -> pause.
+  //   speed          px/s sideways after the army
+  //   chaseMs/windMs/recoverMs   follow, wind up (the dodge window), pause
+  //   reach          a strike hits if the army's centre is within this of the landing spot
+  //   cleave/cleaveShare   a hit takes the larger of `cleave` or `cleaveShare` of the army
+  //   power*         occasional special: 'jump' slams where the army stood; 'fly' does the same from the air, untouchable meanwhile
+  //   trickle        regular enemies keep arriving while he lives
+  bosses: {
+    demon: { key: 'boss', name: 'FAT DEMON', slain: 'DEMON SLAIN', r: 50, souls: 80, speed: 80, chaseMs: 700, windMs: 450, recoverMs: 250,
+      reach: 85, cleave: 4, cleaveShare: 0.10, powerChance: 0.35, powerWindMs: 800, powerReach: 100, powerMult: 2, powerStyle: 'jump' },
+    giant: { key: 'giant', name: 'GIANT ZOMBIE', slain: 'GIANT SLAIN', r: 44, souls: 40, speed: 40, chaseMs: 1400, windMs: 900, recoverMs: 500,
+      reach: 85, cleave: 2, cleaveShare: 0.05, powerChance: 0, trickle: true, trickleMs: 1500 },       // half the fat demon's speed and damage
+    tengu: { key: 'tenguBoss', name: 'TENGU', slain: 'TENGU SLAIN', r: 46, souls: 70, speed: 40, chaseMs: 1400, windMs: 900, recoverMs: 500,
+      reach: 85, cleave: 3, cleaveShare: 0.08, powerChance: 0.45, powerWindMs: 1600, powerReach: 100, powerMult: 2, powerStyle: 'fly' },
   },
-  finaleOni: { hp: 50, size: 1.3, speed: 60, swingMs: 1000, souls: 50 },   // the three at the end of level 2
-  oni: { swingMs: 750, reach: 55, hitReach: 40, speed: 12, lead: 70 },   // speed: px/s toward the army (a quarter of a regular enemy); lead: how far in front of his gate he stands
+  // The small tengu standing in front of a red gate. speed: px/s toward the army; lead: how far in front of the gate.
+  guard: { swingMs: 750, reach: 55, hitReach: 40, speed: 12, lead: 70 },
 };
 
-// Level layouts, measured in distance along the path (px).
-//   gates   gate rows            packs   enemy groups, each bigger than the last
-//   onis    gate rows with an oni guarding the red side
-//   spikes  each sits midway between two gate rows, never beside one
-//   finale  'onis' (three large oni) or 'boss' (the fat demon), fought with the scroll stopped
-const add = (d, bad, good) => ({ d, bad: { op: '-', n: bad }, good: { op: good[0], n: +good.slice(1) } });
-const LEVELS = [
-  { name: 'Restless Dead', demons: false, length: 2250, finale: null,
-    gates: [add(340, 2, '+4'), add(640, 3, 'x2'), add(1150, 3, '+5'), add(1550, 4, 'x2')],
-    packs: [510, 880, 1320, 1720], onis: [], spikes: [490, 895, 1350] },
-  { name: 'Oni Warband', demons: true, length: 3000, finale: 'onis', finaleAt: 2900,
-    gates: [add(340, 2, '+4'), add(640, 3, 'x2'), add(1250, 4, '+6'), add(1650, 5, 'x2'), add(2050, 4, '+8')],
-    packs: [510, 900, 1420, 1830, 2200], onis: [], spikes: [490, 945, 1450, 1850] },
-  { name: 'The Fat Demon', demons: true, length: 4050, finale: 'boss', finaleAt: 3950,
-    gates: [add(340, 2, '+4'), add(640, 3, 'x2'), add(1660, 4, '+6'), add(2010, 5, 'x2'), add(2360, 4, '+8'), add(2710, 6, 'x3'), add(3060, 6, '+10')],
-    packs: [510, 910, 1260, 1610, 1960, 2310, 2610, 2960], onis: [2, 4], spikes: [490, 1400, 1835, 2535, 2885, 3330] },
+// Levels are generated from a short spec so every one gets steadily harder as it goes.
+//   rows     gate rows; each is followed by an enemy pack
+//   pack     [size of the first pack, growth per row]
+//   hp       [enemy health in the first pack, growth per row]
+//   guards   rows where a tengu guards the red gate
+//   bosses   big fights: `after` a given row, or at the 'end'
+const LEVEL_SPECS = [
+  { name: 'Restless Dead', demons: false, rows: 10, seg: 370, pack: [3, 1.1], hp: [4, 1.2],
+    bosses: [{ type: 'giant', after: 'end', hp: 400 }] },
+  { name: 'The Tengu', demons: true, rows: 13, seg: 370, pack: [4, 1.1], hp: [6, 1.7],
+    bosses: [{ type: 'giant', after: 6, hp: 700 }, { type: 'tengu', after: 'end', hp: 1400 }] },
+  { name: 'The Fat Demon', demons: true, rows: 18, seg: 370, pack: [5, 1.0], hp: [12, 3.2], guards: [5, 11, 15],
+    bosses: [{ type: 'giant', after: 8, hp: 1800 }, { type: 'demon', after: 'end', hp: 3000 }] },
 ];
+const GOOD_GATES = ['+3', '+3', 'x2', '+4', '+5', '+6', 'x2', '+8', '+10', '+12', '+14', '+16', '+18', '+20', '+22', '+25', '+28', '+30'];
+// Turns a spec into positions measured in distance along the path (px).
+function layoutLevel(spec) {
+  const L = { name: spec.name, demons: spec.demons, guards: spec.guards || [], gates: [], packs: [], spikes: [], bosses: [] };
+  let d = 300, hp = spec.hp[0];
+  for (let i = 0; i < spec.rows; i++) {
+    const good = GOOD_GATES[i];
+    hp = spec.hp[0] + spec.hp[1] * i;
+    L.gates.push({ d, bad: { op: '-', n: Math.round(2 + i * 1.5) }, good: { op: good[0], n: +good.slice(1) } });
+    L.packs.push({ d: d + 150, n: Math.round(spec.pack[0] + spec.pack[1] * i), hp });
+    if (i % 2 === 1 || i > spec.rows * 0.6) L.spikes.push(d + spec.seg / 2);      // midway between gate rows; more of them late on
+    d += spec.seg;
+    const mid = spec.bosses.find(b => b.after === i);
+    if (mid) { L.bosses.push({ type: mid.type, hp: mid.hp, at: d + 200, trickleHp: hp }); d += 630; }   // gap keeps gates off screen during the fight
+  }
+  const end = spec.bosses.find(b => b.after === 'end');
+  if (end) { L.bosses.push({ type: end.type, hp: end.hp, at: d + 200, trickleHp: hp }); d += 200; }
+  L.length = d + 100;
+  return L;
+}
+const LEVELS = LEVEL_SPECS.map(layoutLevel);
 // Only the first saga is playable; the rest are shown locked.
 const SAGAS = ['Bamboo Road', 'Crimson Marsh', 'Frozen Pass', 'Ember Fortress', 'Demon Gate'];
 
@@ -231,7 +257,16 @@ const Music = {
   tuneB: [3,-1,4,-1, 5,-1,-1,-1, 7,-1,6,5, 4,-1,-1,-1,  3,-1,2,-1, 0,-1,2,-1, 3,-1,4,3, 2,-1,-1,-1],
   bass: { 0: 73.42, 6: 73.42, 8: 110, 12: 87.31 },
   drums: { run: { kick: [0, 4, 10, 12], rim: [6, 14] }, boss: { kick: [0, 2, 4, 8, 10, 12], rim: [6, 14, 15] } },
-  bpm: { menu: 80, run: 112, boss: 134 },
+  bpm: { menu: 66, run: 112, boss: 134 },
+  // The menu has its own calm theme: a slow flute-like line over a soft drone, in a brighter scale.
+  menuScale: [293.66, 329.63, 392, 440, 493.88, 587.33, 659.25, 783.99, 880],
+  menuA: [0,-1,-1,-1, 3,-1,-1,-1, 5,-1,-1,4, 3,-1,-1,-1,  2,-1,-1,-1, 3,-1,4,-1, 2,-1,-1,-1, -1,-1,-1,-1],
+  menuB: [5,-1,-1,-1, 6,-1,5,-1, 4,-1,-1,-1, 3,-1,-1,-1,  2,-1,3,-1, 4,-1,-1,-1, 0,-1,-1,-1, -1,-1,-1,-1],
+  menuNote(i, t) {
+    const s = i % 32, out = Sound.mus, m = (Math.floor(i / 32) % 2 ? this.menuB : this.menuA)[s];
+    if (m >= 0) Sound.tone({ f: this.menuScale[m], dur: 1.3, vol: 0.3, attack: 0.09, at: t, out });
+    if (s % 16 === 0) [146.83, s ? 196 : 220].forEach(f => Sound.tone({ f, dur: 3.6, vol: 0.11, attack: 0.7, at: t, out }));
+  },
   set(mode) { if (mode !== this.mode) { this.mode = mode; this.step = 0; this.next = 0; } },
   tick() {
     const c = Sound.ctx;
@@ -241,6 +276,7 @@ const Music = {
     while (this.next < c.currentTime + 0.16) { this.note(this.step++, this.next); this.next += stepDur; }
   },
   note(i, t) {
+    if (this.mode === 'menu') return this.menuNote(i, t);
     const s = i % 32, bar = Math.floor(i / 32) % 4, out = Sound.mus;
     const m = (bar === 2 ? this.tuneB : this.tuneA)[s];
     if (m >= 0) {
@@ -363,6 +399,71 @@ const Art = {
     Art.ell(c, 19, 10.6, 1.4, 1.4, '#1b1b1b');
     c.strokeStyle = '#33401a'; c.lineWidth = 1.2; c.beginPath(); c.moveTo(13, 14.6); c.lineTo(15, 13.8); c.lineTo(17, 14.8); c.lineTo(19, 14); c.stroke();
   },
+  giant(c) {
+    Art.shadow(c, 55, 122, 40);
+    c.fillStyle = '#3e2723'; Art.rr(c, 34, 100, 16, 22, 5); c.fill(); Art.rr(c, 60, 102, 16, 20, 5); c.fill();
+    c.save(); c.translate(94, 60); c.rotate(0.3);                                            // spiked club
+    Art.rr(c, -4, 4, 8, 34, 3); c.fillStyle = '#4e342e'; c.fill();
+    Art.rr(c, -10, -44, 20, 52, 9); c.fillStyle = Art.grad(c, -10, 0, 10, 0, [[0, '#8d6e63'], [1, '#4e342e']]); c.fill();
+    for (let y = -38; y < 2; y += 10) { Art.tri(c, [-10, y], [-17, y + 3], [-10, y + 6], '#cfd8dc'); Art.tri(c, [10, y + 4], [17, y + 7], [10, y + 10], '#cfd8dc'); }
+    c.restore();
+    Art.rr(c, 26, 52, 58, 54, 12); c.fillStyle = Art.grad(c, 26, 52, 84, 106, [[0, '#795548'], [1, '#3e2723']]); c.fill();   // rags
+    [[30, 106], [44, 106], [60, 106], [72, 106]].forEach(([x, y]) => Art.tri(c, [x, y], [x + 12, y], [x + 6, y + 9], '#3e2723'));
+    Art.ell(c, 55, 84, 15, 12, '#8bc34a');                                                   // belly through the torn shirt
+    c.strokeStyle = '#33401a'; c.lineWidth = 1.6; c.beginPath(); c.moveTo(46, 84); c.lineTo(64, 84); c.stroke();
+    [50, 55, 60].forEach(x => { c.beginPath(); c.moveTo(x, 81); c.lineTo(x, 87); c.stroke(); });
+    Art.ell(c, 18, 78, 10, 22, '#7cb342'); Art.ell(c, 92, 72, 10, 20, '#7cb342');            // arms
+    Art.ell(c, 55, 34, 27, 25, '#9ccc65');                                                   // head
+    Art.ell(c, 40, 18, 10, 6, '#558b2f'); Art.ell(c, 72, 48, 6, 4, '#689f38');               // rot
+    Art.ell(c, 45, 31, 7.5, 7.5, '#fffde7'); Art.ell(c, 46, 32, 2.8, 2.8, '#111');
+    Art.ell(c, 67, 32, 5.5, 5.5, '#1b1b1b'); Art.ell(c, 67, 32, 1.6, 1.6, '#e53935');
+    c.strokeStyle = '#33401a'; c.lineWidth = 2.5; c.beginPath(); c.moveTo(36, 22); c.lineTo(52, 26); c.moveTo(74, 23); c.lineTo(62, 27); c.stroke();
+    Art.rr(c, 40, 43, 30, 9, 3); c.fillStyle = '#2a1a12'; c.fill();
+    for (let x = 42; x < 68; x += 7) Art.tri(c, [x, 43], [x + 5, 43], [x + 2.5, 48], '#fffde7');
+  },
+  // Drawn in a 130x120 space: used full size for the level 2 boss and shrunk for the red-gate guards.
+  tengu(c) {
+    Art.shadow(c, 65, 112, 34);
+    [1, -1].forEach(side => {                                                                // wings
+      c.save(); c.translate(65, 0); c.scale(side, 1);
+      c.fillStyle = '#16161d'; c.beginPath(); c.moveTo(14, 52); c.quadraticCurveTo(40, 10, 62, 6);
+      [[58, 20], [64, 24], [57, 34], [62, 40], [53, 48], [56, 56], [44, 60], [46, 68], [30, 68]].forEach(p => c.lineTo(...p));
+      c.closePath(); c.fill();
+      c.fillStyle = Art.grad(c, 14, 20, 50, 56, [[0, '#ef5350'], [1, '#b71c1c']]);
+      c.beginPath(); c.moveTo(14, 50); c.quadraticCurveTo(34, 22, 52, 16); c.quadraticCurveTo(44, 34, 40, 46); c.quadraticCurveTo(28, 54, 16, 58); c.closePath(); c.fill();
+      c.strokeStyle = 'rgba(0,0,0,0.3)'; c.lineWidth = 1;
+      [[24, 54, 40, 26], [30, 52, 46, 24], [36, 48, 50, 22]].forEach(([a, b, x, y]) => { c.beginPath(); c.moveTo(a, b); c.lineTo(x, y); c.stroke(); });
+      c.restore();
+    });
+    c.strokeStyle = '#7f1d1d'; c.lineWidth = 4; c.beginPath(); c.moveTo(18, 106); c.lineTo(104, 30); c.stroke();   // staff
+    c.strokeStyle = '#ffca28'; c.lineWidth = 5; c.beginPath(); c.moveTo(18, 106); c.lineTo(23, 101.5); c.moveTo(99, 34.5); c.lineTo(104, 30); c.stroke();
+    c.fillStyle = '#d4a017'; Art.rr(c, 50, 92, 10, 16, 3); c.fill(); Art.rr(c, 70, 92, 10, 16, 3); c.fill();       // shin guards
+    Art.ell(c, 55, 109, 7, 3.5, '#c62828'); Art.ell(c, 75, 109, 7, 3.5, '#c62828');
+    c.fillStyle = Art.grad(c, 0, 70, 0, 98, [[0, '#e53935'], [1, '#8e0000']]);                                     // robes
+    c.beginPath(); c.moveTo(44, 68); c.lineTo(86, 68); c.lineTo(97, 98); c.lineTo(33, 98); c.closePath(); c.fill();
+    c.fillStyle = '#1a237e'; c.beginPath(); c.moveTo(58, 70); c.lineTo(72, 70); c.lineTo(76, 98); c.lineTo(54, 98); c.closePath(); c.fill();
+    Art.rr(c, 52, 70, 26, 13, 3); c.fillStyle = '#ffd54f'; c.fill();
+    Art.ell(c, 40, 55, 9, 14, '#1a237e'); Art.ell(c, 90, 55, 9, 14, '#1a237e');                                     // sleeves
+    Art.rr(c, 46, 42, 38, 30, 8); c.fillStyle = Art.grad(c, 46, 42, 84, 72, [[0, '#ffe082'], [1, '#b8860b']]); c.fill();   // gold cuirass
+    c.strokeStyle = 'rgba(120,80,0,0.55)'; c.lineWidth = 1;
+    for (let y = 50; y < 70; y += 6) for (let x = 51; x < 82; x += 7) { c.beginPath(); c.arc(x + ((y / 6) % 2 ? 3.5 : 0), y, 3.5, 0, Math.PI); c.stroke(); }
+    c.fillStyle = '#c62828'; c.fillRect(46, 66, 38, 5);
+    c.fillStyle = '#ffd54f'; Art.rr(c, 32, 40, 17, 10, 4); c.fill(); Art.rr(c, 81, 40, 17, 10, 4); c.fill();       // shoulder plates
+    Art.ell(c, 38, 70, 5, 5, '#c62828'); Art.ell(c, 92, 70, 5, 5, '#c62828');
+    Art.ell(c, 65, 32, 17, 15, '#16161d');                                                                           // feathered head
+    Art.ell(c, 65, 31, 12, 11, '#e53935');
+    c.strokeStyle = '#16161d'; c.lineWidth = 2.4; c.beginPath(); c.moveTo(54, 24); c.lineTo(63, 29); c.moveTo(76, 24); c.lineTo(67, 29); c.stroke();
+    Art.tri(c, [55, 28], [63, 31], [56, 33], '#fff'); Art.tri(c, [75, 28], [67, 31], [74, 33], '#fff');
+    Art.ell(c, 59.5, 31, 1.4, 1.6, '#111'); Art.ell(c, 70.5, 31, 1.4, 1.6, '#111');
+    Art.tri(c, [59, 33], [71, 33], [65, 49], '#ffca28'); Art.tri(c, [62, 39], [68, 39], [65, 49], '#f57f17');       // beak
+    Art.rr(c, 56, 16, 18, 8, 3); c.fillStyle = '#ffd54f'; c.fill();
+    [1, -1].forEach(side => {                                                                                       // flame crest
+      c.save(); c.translate(65, 0); c.scale(side, 1); c.fillStyle = '#e53935';
+      c.beginPath(); c.moveTo(1, 17); c.quadraticCurveTo(16, 12, 10, 0); c.quadraticCurveTo(9, 9, 1, 11); c.closePath(); c.fill();
+      c.restore();
+    });
+  },
+  // Not used yet: kept for a later boss.
   oni(c) {
     Art.shadow(c, 24, 51, 17);
     c.fillStyle = '#7f0000'; c.fillRect(15, 40, 7, 10); c.fillRect(26, 40, 7, 10);
@@ -464,7 +565,9 @@ const Art = {
   },
   buildAll(scene) {
     const m = (k, w, h) => Art.make(scene, k, w, h, Art[k]);
-    m('samurai', 36, 50); m('katana', 12, 36); m('demon', 32, 40); m('zombie', 32, 40); m('oni', 48, 56); m('boss', 130, 126);
+    m('samurai', 36, 50); m('katana', 12, 36); m('demon', 32, 40); m('zombie', 32, 40); m('boss', 130, 126); m('giant', 110, 130);
+    Art.make(scene, 'tenguBoss', 130, 120, Art.tengu);
+    Art.make(scene, 'tengu', 58, 54, c => { c.scale(0.44, 0.44); Art.tengu(c); });
     m('spike', 36, 28); m('slash', 48, 48); m('soul', 16, 16); m('dot', 8, 8); m('petal', 8, 6);
     m('grass', 64, 64); m('path', 280, 128); m('lantern', 24, 42); m('tree', 60, 58); m('menuBg', W, H);
   },
@@ -656,7 +759,7 @@ class GameScene extends BaseScene {
     this.setupCamera();
     this.dist = 0;                 // distance travelled; drives layout and the progress bar
     this.speedMod = 1;
-    this.dmgMod = 1;               // grows with each oni kill
+    this.dmgMod = 1;               // grows with each red-gate tengu kill
     this.timeScale = 1;            // 1 normally, eases to CFG.slowScale during the special
     this.slowLeft = 0;
     this.charge = 0;
@@ -664,10 +767,9 @@ class GameScene extends BaseScene {
     this.earned = 0;
     this.wound = 0;                // enemy strikes add up here; each full point costs one samurai
     this.over = false;
-    this.fight = false;            // true while the scroll is stopped for the boss
-    this.finaleDone = !this.L.finale;   // levels without a finale just run to the end
-    this.boss = null;
-    this.finaleOnis = [];
+    this.fight = false;            // true while the scroll is stopped for a big fight
+    this.boss = null;              // the next (or current) big fight; set in buildLevel
+    this.finaleDone = false;       // true once every big fight is won
     this.targetX = W / 2;
     this.armyX = W / 2;
     this.formY = CFG.armyY;
@@ -717,31 +819,27 @@ class GameScene extends BaseScene {
         right: this.makeGate(270, goodLeft ? g.bad : g.good, !goodLeft),
       });
     });
-    this.L.packs.forEach((base, idx) => {
-      const n = 6 + idx * 2;
-      for (let i = 0; i < n; i++) {
+    this.L.packs.forEach(pk => {
+      for (let i = 0; i < pk.n; i++) {
         const demon = this.L.demons && Math.random() > 0.45;
-        this.addEnemy(demon ? 'demon' : 'zombie', 85 + Math.random() * 230, base + i * 28, (demon ? 5 : 3) + idx);
+        this.addEnemy(demon ? 'demon' : 'zombie', 85 + Math.random() * 230, pk.d + i * 14, Math.round(pk.hp * (demon ? 1.4 : 1)));
       }
     });
-    this.L.onis.forEach((row, idx) => {
-      const g = this.gates[row], red = g.left.good ? g.right : g.left;
-      const e = this.addEnemy('oni', red.x, g.d - CFG.oni.lead, 19 + idx * 8);
-      Object.assign(e, { souls: 40 + idx * 20, r: 8, speed: CFG.oni.speed, swingMs: CFG.oni.swingMs, swing: CFG.oni.swingMs });
+    this.L.guards.forEach((row, idx) => {
+      const g = this.gates[row], red = g.left.good ? g.right : g.left, G = CFG.guard;
+      const e = this.addEnemy('tengu', red.x, g.d - G.lead, 40 + idx * 25);
+      Object.assign(e, { souls: 40 + idx * 20, r: 8, swing: G.swingMs });
     });
     this.L.spikes.forEach(d => {
       this.addSpike(Math.random() < 0.5 ? 130 : 270, d);
     });
-    if (this.L.finale === 'boss') {
-      this.boss = this.addEnemy('boss', W / 2, this.L.finaleAt, CFG.boss.hp);
-      Object.assign(this.boss, { r: 50, souls: CFG.boss.souls, state: 'chase', t: CFG.boss.chaseMs + 500, swings: 0, power: false });
-    }
-    if (this.L.finale === 'onis') {
-      const F = CFG.finaleOni;
-      this.finaleOnis = [120, 200, 280].map(x => Object.assign(this.addEnemy('oni', x, this.L.finaleAt, F.hp),
-        { big: true, size: F.size, r: 12, souls: F.souls, speed: F.speed, swingMs: F.swingMs, swing: F.swingMs }));
-    }
-    this.anchor = this.boss || this.finaleOnis[1] || null;     // whoever the scroll stops for
+    this.bosses = this.L.bosses.map(b => {
+      const P = CFG.bosses[b.type];
+      return Object.assign(this.addEnemy(P.key, W / 2, b.at, b.hp),
+        { prof: P, r: P.r, souls: P.souls, state: 'chase', t: P.chaseMs + 500, swings: 0, power: false, air: false, trickleHp: b.trickleHp, trickleT: P.trickleMs });
+    });
+    this.boss = this.bosses[0] || null;
+    this.finaleDone = !this.boss;
   }
 
   makeGate(x, op, good) {
@@ -838,7 +936,7 @@ class GameScene extends BaseScene {
     });
     this.decor = this.decor.filter(alive); this.spikes = this.spikes.filter(alive);
     this.enemies = this.enemies.filter(alive); this.gates = this.gates.filter(alive);
-    if (!this.fight && !this.finaleDone && this.anchor.y >= 330) this.startFinale();
+    if (!this.fight && this.boss && this.boss.y >= 330) this.startFight();
   }
 
   // Far things are drawn smaller.
@@ -846,7 +944,7 @@ class GameScene extends BaseScene {
 
   updateArmy(time, dt) {
     this.armyX += (this.targetX - this.armyX) * damp(12, dt);
-    const wantForm = this.fight ? (this.boss ? this.boss.y + 92 : 470) : CFG.armyY;
+    const wantForm = this.fight ? this.boss.y + 92 : CFG.armyY;
     this.formY += (wantForm - this.formY) * damp(5, dt);
     const n = this.soldiers.length, cols = Math.min(5, Math.ceil(Math.sqrt(n || 1)));
     this.soldiers.forEach((s, i) => {
@@ -876,7 +974,7 @@ class GameScene extends BaseScene {
       const other = side === g.left ? g.right : g.left;
       const before = this.count;
       if (side.op.op === '+') this.count += side.op.n;
-      if (side.op.op === '-') this.count = Math.max(0, this.count - side.op.n);
+      if (side.op.op === '-') this.count = Math.max(1, this.count - side.op.n);   // a red gate never takes the last samurai
       if (side.op.op === 'x') this.count *= side.op.n;
       const diff = this.count - before;
       this.float(this.armyX, this.formY - 40, (diff >= 0 ? '+' : '−') + Math.abs(diff), side.good ? '#64b5f6' : '#ff5252', 30);
@@ -898,7 +996,7 @@ class GameScene extends BaseScene {
       let best = null, bestD = CFG.attackRange;
       near.forEach(e => {
         if (e.hp <= 0) return;
-        const d = e === this.boss && this.fight ? (Math.abs(s.x - e.x) < CFG.boss.reach + 10 ? 0 : Infinity) : Math.hypot(e.x - s.x, e.y - s.y) - e.r;
+        const d = e === this.boss && this.fight ? (Math.abs(s.x - e.x) < e.prof.reach + 10 ? 0 : Infinity) : Math.hypot(e.x - s.x, e.y - s.y) - e.r;
         if (d < bestD) { bestD = d; best = e; }
       });
       if (!best) return;
@@ -909,6 +1007,10 @@ class GameScene extends BaseScene {
   }
 
   strike(e, dmg, s) {
+    if (e.air) {                   // airborne: the swing finds nothing
+      if (Math.random() < 0.4) this.float(e.x + (Math.random() - 0.5) * 70, e.y - 10 - Math.random() * 30, 'MISS', '#cfd8dc', 13);
+      return;
+    }
     e.hp -= dmg;
     Sound.play('slash');
     const spread = e.r ? e.r * 0.6 : 4;
@@ -916,8 +1018,15 @@ class GameScene extends BaseScene {
     const sl = this.img(hx, hy, 'slash').setDepth(2900).setRotation(Math.atan2(e.y - s.y, e.x - s.x) + (Math.random() - 0.5))
       .setScale(S * (e.r ? 1.1 : 0.75));
     this.tweens.add({ targets: sl, alpha: 0, scaleX: sl.scaleX * 1.5, scaleY: sl.scaleY * 1.5, duration: 140, onComplete: () => sl.destroy() });
-    e.obj.setTintFill(0xffffff);
-    this.time.delayedCall(55, () => { if (e.obj.active) e.obj.clearTint(); });
+    if (!e.prof) {                 // small enemies flash white
+      e.obj.setTintFill(0xffffff);
+      this.time.delayedCall(55, () => { if (e.obj.active) e.obj.clearTint(); });
+    } else if (!e.flash) {         // big ones take a short red tint now and then, so the art stays visible
+      e.flash = true;
+      e.obj.setTint(0xff9a9a);
+      this.time.delayedCall(60, () => { if (e.obj.active) e.obj.clearTint(); });
+      this.time.delayedCall(260, () => { e.flash = false; });
+    }
     if (e.r || Math.random() < 0.5) this.float(hx, hy - 12, fmt(dmg), '#ffeb3b', 13);
     if (e.hp <= 0) this.kill(e);
   }
@@ -926,8 +1035,8 @@ class GameScene extends BaseScene {
     const gain = e.souls || Stats.soulsPerKill();
     this.earned += gain; Save.souls += gain;
     Sound.play('kill');
-    this.charge = Math.min(CFG.specialMax, this.charge + (e.kind === 'oni' ? 3 : 1));
-    const tint = { demon: 0xab47bc, zombie: 0x9ccc65, oni: 0xef5350, boss: 0xab47bc }[e.kind];
+    this.charge = Math.min(CFG.specialMax, this.charge + (e.r ? 3 : 1));
+    const tint = { demon: 0xab47bc, zombie: 0x9ccc65, giant: 0x9ccc65, tengu: 0xef5350, tenguBoss: 0xef5350, boss: 0xab47bc }[e.kind];
     this.burst.setParticleTint(tint);
     this.burst.explode(e.r ? 40 : 10, e.x, e.y);
     const orb = this.img(e.x, e.y, 'soul').setDepth(5001).setScale(S * (e.r ? 2 : 1.2));
@@ -935,15 +1044,14 @@ class GameScene extends BaseScene {
       orb.destroy(); Sound.play('soul');
       this.tweens.add({ targets: this.soulIcon, scale: S * 1.8, duration: 80, yoyo: true });
     } });
-    if (e.big) { Sound.play('gong'); this.shake(180, 0.008); }
-    else if (e.kind === 'oni') {
-      this.dmgMod *= CFG.oniDamageUp;
-      this.banner('ONI SLAIN', 'blade damage +5%'); Sound.play('gong');
+    if (e.kind === 'tengu') {
+      this.dmgMod *= CFG.guardDamageUp;
+      this.banner('TENGU SLAIN', 'blade damage +5%'); Sound.play('gong');
       this.shake(180, 0.008);
       Save.save();
     }
     e.obj.destroy(); e.gone = true;
-    if (e === this.boss || (e.big && this.finaleOnis.every(o => o.gone))) this.endFinale();
+    if (e === this.boss) this.endFight();
   }
 
   // Demons and zombies run at the nearest samurai, stop in reach, and strike on a timer.
@@ -952,15 +1060,15 @@ class GameScene extends BaseScene {
     const pack = this.enemies.filter(e => !e.r && !e.gone && e.y > -20);
     const backRow = this.soldiers.reduce((m, s) => Math.max(m, s.y), 0);
     pack.forEach(e => {
-      const k = E[e.kind];
+      const k = E[e.kind], run = k.speed + (this.fight ? E.fightRush : 0);
       // Once past the back row an enemy gives up and keeps running off the bottom.
-      if (e.passed || e.y > backRow + 12) { e.passed = true; e.hold = false; e.d -= k.speed * wdt; e.obj.setRotation(0); return; }
+      if (e.passed || e.y > backRow + 12) { e.passed = true; e.hold = false; e.d -= run * wdt; e.obj.setRotation(0); return; }
       let near = null, L = Infinity;
       this.soldiers.forEach(s => { const d = Math.hypot(s.x - e.x, s.y - e.y); if (d < L) { L = d; near = s; } });
       if (!near) { e.hold = false; return; }
       e.hold = L <= E.reach;
       if (!e.hold) {
-        const v = k.speed * wdt / L;
+        const v = run * wdt / L;
         e.x = clamp(e.x + (near.x - e.x) * v, CFG.pathLeft + 12, CFG.pathRight - 12);
         e.d -= (near.y - e.y) * v;
         e.obj.setRotation(clamp((near.x - e.x) * 0.006, -0.2, 0.2));
@@ -987,22 +1095,22 @@ class GameScene extends BaseScene {
   }
 
   updateHazards(wdt) {
-    // Oni: club swing on a timer.
+    // Red-gate tengu: creeps toward the army and swings on a timer.
     this.enemies.forEach(e => {
-      if (e.kind !== 'oni' || e.gone) return;
+      if (e.kind !== 'tengu' || e.gone) return;
       let best = null, bestD = Infinity;
       this.soldiers.forEach(s => { const d = Math.hypot(s.x - e.x, s.y - e.y); if (d < bestD) { bestD = d; best = s; } });
       if (!best) return;
       if (e.y > -20 && e.y < best.y && bestD > 20) {       // lumber toward the army while it is still ahead
-        const v = e.speed * wdt / bestD;
+        const v = CFG.guard.speed * wdt / bestD;
         e.x += (best.x - e.x) * v; e.d -= (best.y - e.y) * v;
       }
       e.swing -= wdt * 1000;
-      if (e.swing > 0 || bestD > CFG.oni.reach) return;
-      e.swing = e.swingMs;
+      if (e.swing > 0 || bestD > CFG.guard.reach) return;
+      e.swing = CFG.guard.swingMs;
       Sound.play('swing');
-      this.enemySlash(e.x, e.y + 14, 1.2 * (e.size || 1), 0xffd54f);
-      if (bestD < CFG.oni.hitReach) this.lose(1, best);
+      this.enemySlash(e.x, e.y + 14, 1.2, 0xffd54f);
+      if (bestD < CFG.guard.hitReach) this.lose(1, best);
     });
     // Spikes.
     this.spikes.forEach(o => {
@@ -1019,38 +1127,50 @@ class GameScene extends BaseScene {
   // Boss cycle: shuffle after the army -> wind up (red zone shows where it lands) -> strike -> pause.
   updateBoss(wdt) {
     this.danger.clear();
-    const b = this.boss, B = CFG.boss;
+    const b = this.boss;
     if (!b || !this.fight || b.gone) return;
+    const B = b.prof;
+    if (B.trickle) {                                         // regular enemies keep arriving
+      b.trickleT -= wdt * 1000;
+      if (b.trickleT <= 0) {
+        b.trickleT = B.trickleMs;
+        const demon = this.L.demons && Math.random() > 0.45;
+        this.addEnemy(demon ? 'demon' : 'zombie', 85 + Math.random() * 230, this.dist + CFG.armyY + 10, Math.round(b.trickleHp * (demon ? 1.4 : 1)));
+      }
+    }
     b.t -= wdt * 1000;
     if (b.state === 'chase') {
       b.obj.setRotation(0);
       b.x = clamp(b.x + clamp(this.armyX - b.x, -B.speed * wdt, B.speed * wdt), 120, 280);
       if (b.t > 0) return;
-      b.power = b.swings > 0 && !b.power && Math.random() < B.powerChance;
+      b.power = B.powerChance > 0 && b.swings > 0 && !b.power && Math.random() < B.powerChance;
       b.state = 'wind';
       b.t = b.windFull = b.power ? B.powerWindMs : B.windMs;
       b.fromX = b.x;
       b.aimX = b.power ? clamp(this.armyX, 100, 300) : b.x;
+      b.air = b.power && B.powerStyle === 'fly';             // in the air he cannot be hit
       Sound.play(b.power ? 'warnPower' : 'warn');
     } else if (b.state === 'wind') {
       const k = clamp(1 - b.t / b.windFull, 0, 1), reach = b.power ? B.powerReach : B.reach;
       if (b.power) {                                         // leap toward where the army stood
         const h = Math.sin(k * Math.PI);
         b.x = b.fromX + (b.aimX - b.fromX) * k;
-        b.obj.y -= h * 80;
-        b.obj.setScale(b.obj.scaleX * (1 + h * 0.25)).setRotation(-0.35 * h);
+        b.obj.y -= h * (b.air ? 130 : 80);
+        b.obj.setScale(b.obj.scaleX * (1 + h * 0.25)).setRotation(b.air ? Math.sin(this.time.now * 0.02) * 0.08 : -0.35 * h);
+        if (b.air) this.danger.fillStyle(0x000000, 0.28).fillEllipse(b.x, b.y + 50, 70 - h * 30, 22 - h * 9);   // his shadow
       } else b.obj.setRotation(-0.25 * k);
       this.danger.fillStyle(b.power ? 0xff6d00 : 0xff1744, 0.16 + 0.24 * k).fillEllipse(b.aimX, b.y + 118, reach * 2, 124);
       this.danger.lineStyle(2, 0xff8a80, 0.5 + 0.5 * k).strokeEllipse(b.aimX, b.y + 118, reach * 2, 124);
       if (b.t > 0) return;
       b.x = b.aimX;
+      b.air = false;
       b.obj.setRotation(0);
       this.enemySlash(b.x, b.y + 75, b.power ? 4.4 : 3.2, b.power ? 0xffab91 : 0xffffff);
       Sound.play(b.power ? 'slam' : 'swing');
       this.shake(b.power ? 320 : 200, b.power ? 0.03 : 0.012);
       if (b.power) { this.burst.setParticleTint(0xffab91); this.burst.explode(36, b.x, b.y + 95); }
       if (Math.abs(this.armyX - b.aimX) < reach) {
-        this.lose(Math.max(B.cleave, Math.ceil(this.count * B.cleaveShare)) * (b.power ? 2 : 1));
+        this.lose(Math.max(B.cleave, Math.ceil(this.count * B.cleaveShare)) * (b.power ? B.powerMult : 1));
       } else { Sound.play('dodge'); this.float(this.armyX, this.formY - 46, 'DODGED', '#80d8ff', 18); }
       b.swings++;
       b.state = 'recover';
@@ -1099,32 +1219,39 @@ class GameScene extends BaseScene {
   }
 
   /* ---------- boss ---------- */
-  startFinale() {
+  startFight() {
+    const P = this.boss.prof;
     this.fight = true;
     Music.set('boss'); Sound.play('gong');
-    const cast = this.boss ? [this.boss] : this.finaleOnis;
-    [...this.spikes, ...this.enemies.filter(e => !cast.includes(e))].forEach(o => { o.obj.destroy(); o.gone = true; });
-    this.gates.forEach(g => { g.left.obj.destroy(); g.right.obj.destroy(); g.gone = true; });
-    this.spikes = []; this.gates = []; this.enemies = cast.slice();
+    if (!P.trickle) {                                        // final bosses fight alone
+      const keep = this.bosses.filter(b => !b.gone);
+      [...this.spikes, ...this.enemies.filter(e => !keep.includes(e))].forEach(o => { o.obj.destroy(); o.gone = true; });
+      this.gates.forEach(g => { g.left.obj.destroy(); g.right.obj.destroy(); g.gone = true; });
+      this.spikes = []; this.gates = []; this.enemies = keep;
+    }
+    if (this.bars) this.bars.forEach(o => o.destroy());
     this.bars = [this.add.rectangle(W / 2, -30, W, 60, 0x000000).setDepth(4500), this.add.rectangle(W / 2, H + 30, W, 60, 0x000000).setDepth(4500)];
     this.tweens.add({ targets: this.bars[0], y: 30, duration: 400, ease: 'Cubic.out' });
     this.tweens.add({ targets: this.bars[1], y: H - 30, duration: 400, ease: 'Cubic.out' });
-    this.bossName = this.txt(W / 2, 88, this.boss ? 'FAT DEMON' : 'ONI WARBAND', 17, '#fff', { stroke: '#2a0038', strokeThickness: 4 }).setDepth(5001);
+    this.bossName = this.txt(W / 2, 88, P.name, 17, '#fff', { stroke: '#2a0038', strokeThickness: 4 }).setDepth(5001);
     this.bossGhost = 1;
     this.shake(300, 0.008);
   }
 
-  endFinale() {
+  // Called when the current big fight is won; the run resumes toward the next one, if any.
+  endFight() {
+    const P = this.boss.prof;
     this.fight = false;
-    this.finaleDone = true;
+    this.boss = this.bosses.find(b => !b.gone) || null;
+    this.finaleDone = !this.boss;
     Music.set('run'); Sound.play('gong');
-    this.speedMod *= CFG.bossSlow;
+    if (this.finaleDone) this.speedMod *= CFG.bossSlow;
     this.bossName.destroy();
     this.tweens.add({ targets: this.bars[0], y: -30, duration: 300 });
     this.tweens.add({ targets: this.bars[1], y: H + 30, duration: 300 });
     this.shake(350, 0.014);
     this.cameras.main.flash(250, 255, 240, 200);
-    if (this.boss) this.banner('DEMON SLAIN', '+' + CFG.boss.souls + ' souls'); else this.banner('WARBAND SLAIN', '');
+    this.banner(P.slain, '+' + P.souls + ' souls');
     Save.save();
   }
 
@@ -1156,12 +1283,11 @@ class GameScene extends BaseScene {
     const px = 70, pw = 260, p = clamp(this.dist / this.L.length, 0, 1);
     g.fillStyle(0x000000, 0.5).fillRoundedRect(px - 3, 21, pw + 6, 16, 8);
     if (p > 0.004) g.fillStyle(0xff7043, 1).fillRoundedRect(px, 24, pw * p, 10, Math.min(5, pw * p / 2));
-    if (this.L.finale) g.fillStyle(0xab47bc, 1).fillCircle(px + pw * (this.L.finaleAt - 230) / this.L.length, 29, 6);     // finale marker
+    this.L.bosses.forEach(b => g.fillStyle(0xab47bc, 1).fillCircle(px + pw * (b.at - 230) / this.L.length, 29, 6));       // big-fight markers
     g.fillStyle(0xffffff, 1).fillCircle(px + pw * p, 29, 4);
     // boss bar
     if (this.fight) {
-      const cast = this.boss ? [this.boss] : this.finaleOnis;
-      const r = clamp(cast.reduce((a, e) => a + Math.max(0, e.hp), 0) / cast.reduce((a, e) => a + e.maxHp, 0), 0, 1), bw = 240, bx = W / 2 - bw / 2;
+      const r = clamp(this.boss.hp / this.boss.maxHp, 0, 1), bw = 240, bx = W / 2 - bw / 2;
       this.bossGhost += (r - this.bossGhost) * damp(4, dt);
       g.fillStyle(0x000000, 0.7).fillRoundedRect(bx - 3, 101, bw + 6, 18, 6);
       g.fillStyle(0xffffff, 0.8).fillRect(bx, 104, bw * this.bossGhost, 12);
