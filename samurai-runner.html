@@ -2,702 +2,835 @@
 <html lang="en">
 <head>
 <meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="theme-color" content="#120c14">
 <title>Samurai Runner</title>
 <script src="https://cdn.jsdelivr.net/npm/phaser@3.70.0/dist/phaser.min.js"></script>
 <style>
-  body { margin: 0; background: #111; display: flex; justify-content: center; align-items: center; height: 100vh; overflow: hidden; touch-action: none; }
-  #game { border-radius: 16px; overflow: hidden; box-shadow: 0 0 40px rgba(180,80,40,0.5); }
+  html, body { margin: 0; height: 100%; background: #120c14; overflow: hidden; touch-action: none;
+    -webkit-user-select: none; user-select: none; -webkit-tap-highlight-color: transparent; }
+  #game { width: 100%; height: 100%; }
 </style>
 </head>
 <body>
 <div id="game"></div>
 <script>
-let coins = parseInt(localStorage.getItem('samurai_souls')) || 500;
-let fireRateLevel = parseInt(localStorage.getItem('samurai_fire')) || 1;
-let damageLevel = parseInt(localStorage.getItem('samurai_damage')) || 1;
-let revenueLevel = parseInt(localStorage.getItem('samurai_revenue')) || 1;
+'use strict';
 
-function saveProgress() {
-  try {
-    localStorage.setItem('samurai_souls', coins);
-    localStorage.setItem('samurai_fire', fireRateLevel);
-    localStorage.setItem('samurai_damage', damageLevel);
-    localStorage.setItem('samurai_revenue', revenueLevel);
-  } catch (e) {}
+/* ============================================================
+   CONFIG — every tuning number lives here
+   ============================================================ */
+const W = 400, H = 720;                       // logical size; everything is laid out in these units
+const R = Math.min(3, Math.max(1, Math.round(window.devicePixelRatio || 1)));  // render scale for crisp art
+const S = 1 / R;                              // sprite scale that undoes R
+const FONT = '"Trebuchet MS", "Avenir Next", "Segoe UI", system-ui, sans-serif';
+
+const CFG = {
+  startArmy: 4,
+  maxDrawn: 20,            // soldiers drawn on screen; the count can go higher
+  armyY: 560,              // front row of the army
+  pathLeft: 60, pathRight: 340,
+  steerMin: 78, steerMax: 322,
+  baseSpeed: 90,           // px/s at the start of a level
+  speedRamp: 0.30,         // +30% by the end
+  attackRange: 38,
+  slowScale: 0.30,         // world speed while the special is active
+  slowMs: 4000,
+  specialMax: 12,
+  oniSlow: 0.97,           // each oni kill slows the run 3%
+  contactLossChance: 0.4,
+  boss: { hp: 240, swingMs: 1100, cleave: 4, souls: 80 },
+  oni: { swingMs: 750, reach: 55, hitReach: 40 },
+};
+
+// Level layout, measured in distance along the path (px).
+const LEVEL = {
+  gates: [
+    { d: 340,  bad: { op: '-', n: 2 }, good: { op: '+', n: 4 } },
+    { d: 640,  bad: { op: '-', n: 3 }, good: { op: 'x', n: 2 } },
+    { d: 1660, bad: { op: '-', n: 4 }, good: { op: '+', n: 6 } },
+    { d: 2010, bad: { op: '-', n: 5 }, good: { op: 'x', n: 2 } },
+    { d: 2360, bad: { op: '-', n: 4 }, good: { op: '+', n: 8 } },
+    { d: 2710, bad: { op: '-', n: 6 }, good: { op: 'x', n: 3 } },
+  ],
+  packs:  [510, 910, 1260, 1610, 1960, 2310, 2610],   // enemy groups; each is bigger than the last
+  onis:   [1160, 2160],
+  spikes: [480, 880, 1230, 1580, 1930, 2280, 2630],
+  bossAt: 3600,
+  length: 3700,
+};
+
+/* ============================================================
+   SAVE — same localStorage keys as the prototype
+   ============================================================ */
+const Save = {
+  souls: 500, fire: 1, damage: 1, revenue: 1,
+  load() {
+    const num = (k, def) => {
+      try { const v = parseInt(localStorage.getItem(k), 10); return Number.isFinite(v) ? v : def; }
+      catch (e) { return def; }
+    };
+    this.souls = num('samurai_souls', 500);
+    this.fire = num('samurai_fire', 1);
+    this.damage = num('samurai_damage', 1);
+    this.revenue = num('samurai_revenue', 1);
+  },
+  save() {
+    try {
+      localStorage.setItem('samurai_souls', this.souls);
+      localStorage.setItem('samurai_fire', this.fire);
+      localStorage.setItem('samurai_damage', this.damage);
+      localStorage.setItem('samurai_revenue', this.revenue);
+    } catch (e) {}
+  },
+};
+Save.load();
+window.addEventListener('pagehide', () => Save.save());
+document.addEventListener('visibilitychange', () => { if (document.hidden) Save.save(); });
+
+const Stats = {
+  cost: lvl => Math.floor(40 * Math.pow(1.55, lvl - 1)),
+  attackMs: () => Math.max(180, 400 - Save.fire * 25),
+  damage: () => 1 + (Save.damage - 1) * 0.5,
+  soulsPerKill: () => 5 * Save.revenue,
+};
+const fmt = n => Number.isInteger(n) ? String(n) : n.toFixed(1);
+const clamp = (v, a, b) => Math.max(a, Math.min(b, v));
+const damp = (rate, dt) => 1 - Math.exp(-rate * dt);   // frame-rate independent lerp factor
+
+/* ============================================================
+   ART — every texture is drawn here with Canvas 2D at R× scale
+   ============================================================ */
+const Art = {
+  make(scene, key, w, h, draw) {
+    if (scene.textures.exists(key)) return;
+    const t = scene.textures.createCanvas(key, Math.ceil(w * R), Math.ceil(h * R));
+    const c = t.getContext();
+    c.scale(R, R);
+    c.lineJoin = c.lineCap = 'round';
+    draw(c, w, h);
+    t.refresh();
+  },
+  rr(c, x, y, w, h, r) {
+    c.beginPath();
+    c.moveTo(x + r, y); c.arcTo(x + w, y, x + w, y + h, r); c.arcTo(x + w, y + h, x, y + h, r);
+    c.arcTo(x, y + h, x, y, r); c.arcTo(x, y, x + w, y, r); c.closePath();
+  },
+  ell(c, x, y, rx, ry, fill) { c.beginPath(); c.ellipse(x, y, rx, ry, 0, 0, 7); c.fillStyle = fill; c.fill(); },
+  tri(c, a, b, d, fill) { c.beginPath(); c.moveTo(...a); c.lineTo(...b); c.lineTo(...d); c.closePath(); c.fillStyle = fill; c.fill(); },
+  grad(c, x0, y0, x1, y1, stops) {
+    const g = c.createLinearGradient(x0, y0, x1, y1);
+    stops.forEach(([o, col]) => g.addColorStop(o, col));
+    return g;
+  },
+  shadow(c, x, y, rx) { Art.ell(c, x, y, rx, rx * 0.35, 'rgba(0,0,0,0.32)'); },
+
+  samurai(c) {
+    Art.shadow(c, 16, 36, 10);
+    c.fillStyle = '#1b1b2e'; c.fillRect(11, 29, 4, 7); c.fillRect(17, 29, 4, 7);          // legs
+    c.strokeStyle = '#3a2a1a'; c.lineWidth = 2.4; c.beginPath(); c.moveTo(22, 26); c.lineTo(24, 21); c.stroke();  // hilt
+    c.strokeStyle = '#f2f6ff'; c.lineWidth = 1.8; c.beginPath(); c.moveTo(24, 21); c.quadraticCurveTo(28, 12, 29, 3); c.stroke(); // blade
+    Art.rr(c, 9, 15, 14, 16, 3); c.fillStyle = Art.grad(c, 9, 15, 23, 31, [[0, '#3f51b5'], [1, '#1a237e']]); c.fill();  // cuirass
+    c.fillStyle = '#ffca28'; c.fillRect(9, 24, 14, 1.6);                                    // sash
+    c.strokeStyle = 'rgba(255,255,255,0.18)'; c.lineWidth = 0.8;
+    [18.5, 21.5, 28].forEach(y => { c.beginPath(); c.moveTo(10, y); c.lineTo(22, y); c.stroke(); });
+    Art.rr(c, 5, 14, 8, 6, 2.5); c.fillStyle = '#283593'; c.fill();                         // shoulders
+    Art.rr(c, 19, 14, 8, 6, 2.5); c.fill();
+    Art.ell(c, 16, 11, 5, 5, '#f1c9a5');                                                    // face
+    c.fillStyle = '#1b1b2e'; c.fillRect(12.5, 10, 7, 1.4);                                  // eye slit
+    c.beginPath(); c.arc(16, 9.5, 6.6, Math.PI, 0); c.closePath(); c.fillStyle = '#1a237e'; c.fill();   // helmet
+    c.fillStyle = '#283593'; c.fillRect(8.4, 8.6, 15.2, 2);
+    c.strokeStyle = '#ffca28'; c.lineWidth = 1.6;                                           // crest
+    c.beginPath(); c.moveTo(16, 5); c.quadraticCurveTo(10, 4, 9, 1); c.stroke();
+    c.beginPath(); c.moveTo(16, 5); c.quadraticCurveTo(22, 4, 23, 1); c.stroke();
+  },
+  demon(c) {
+    Art.shadow(c, 16, 36, 10);
+    c.fillStyle = '#38006b'; c.fillRect(11, 29, 4, 6); c.fillRect(17, 29, 4, 6);
+    Art.rr(c, 8, 15, 16, 16, 5); c.fillStyle = Art.grad(c, 8, 15, 24, 31, [[0, '#8e24aa'], [1, '#4a148c']]); c.fill();
+    Art.ell(c, 6.5, 22, 2.6, 5, '#6a1b9a'); Art.ell(c, 25.5, 22, 2.6, 5, '#6a1b9a');       // arms
+    Art.tri(c, [9, 7], [7, 0], [13, 5], '#ffe0b2'); Art.tri(c, [23, 7], [25, 0], [19, 5], '#ffe0b2');   // horns
+    Art.ell(c, 16, 11, 7.5, 6.8, '#ab47bc');
+    c.shadowColor = '#ff1744'; c.shadowBlur = 4;
+    Art.tri(c, [11, 9], [15, 11], [11.5, 12], '#ff5252'); Art.tri(c, [21, 9], [17, 11], [20.5, 12], '#ff5252');  // eyes
+    c.shadowBlur = 0;
+    c.fillStyle = '#2a0038'; c.fillRect(12.5, 14, 7, 2);
+    Art.tri(c, [13, 14], [14.5, 14], [13.7, 16.4], '#fff'); Art.tri(c, [17.5, 14], [19, 14], [18.3, 16.4], '#fff');
+  },
+  zombie(c) {
+    Art.shadow(c, 16, 36, 9);
+    c.fillStyle = '#3e2723'; c.fillRect(11, 29, 4, 6); c.fillRect(17, 30, 4, 5);
+    Art.rr(c, 9, 15, 14, 15, 3); c.fillStyle = Art.grad(c, 9, 15, 23, 30, [[0, '#6d4c41'], [1, '#4e342e']]); c.fill(); // rags
+    Art.tri(c, [9, 30], [13, 30], [11, 33], '#4e342e'); Art.tri(c, [16, 30], [21, 30], [19, 34], '#4e342e');
+    c.fillStyle = '#7cb342'; Art.rr(c, 4, 17, 4.5, 13, 2); c.fill(); Art.rr(c, 23.5, 17, 4.5, 11, 2); c.fill();   // reaching arms
+    Art.ell(c, 16, 11, 6.6, 6.4, '#9ccc65');
+    Art.ell(c, 12, 7, 3, 2, '#558b2f');                                                      // rot patch
+    Art.ell(c, 13.4, 10.4, 1.9, 1.9, '#fffde7'); Art.ell(c, 13.6, 10.6, 0.7, 0.7, '#111');
+    Art.ell(c, 19, 10.6, 1.4, 1.4, '#1b1b1b');
+    c.strokeStyle = '#33401a'; c.lineWidth = 1.2; c.beginPath(); c.moveTo(13, 14.6); c.lineTo(15, 13.8); c.lineTo(17, 14.8); c.lineTo(19, 14); c.stroke();
+  },
+  oni(c) {
+    Art.shadow(c, 24, 51, 17);
+    c.fillStyle = '#7f0000'; c.fillRect(15, 40, 7, 10); c.fillRect(26, 40, 7, 10);
+    c.save(); c.translate(40, 24); c.rotate(0.35);                                           // kanabo club
+    Art.rr(c, -3.5, -22, 7, 30, 3); c.fillStyle = '#3e2723'; c.fill();
+    c.fillStyle = '#bdbdbd'; for (let y = -19; y < 2; y += 5) { c.fillRect(-4.6, y, 2, 2); c.fillRect(2.6, y + 2, 2, 2); }
+    c.restore();
+    Art.rr(c, 10, 20, 28, 24, 8); c.fillStyle = Art.grad(c, 10, 20, 38, 44, [[0, '#e53935'], [1, '#8e0000']]); c.fill();
+    Art.rr(c, 12, 36, 24, 8, 3); c.fillStyle = '#ffb300'; c.fill();                          // tiger-skin wrap
+    [15, 21, 27, 32].forEach(x => Art.tri(c, [x, 36], [x + 3, 36], [x + 1.5, 42], '#3e2723'));
+    Art.ell(c, 8, 29, 4.2, 8, '#c62828'); Art.ell(c, 40, 30, 4.2, 7, '#c62828');
+    Art.tri(c, [14, 9], [11, 0], [19, 6], '#ffd54f'); Art.tri(c, [34, 9], [37, 0], [29, 6], '#ffd54f');   // horns
+    Art.ell(c, 24, 14, 11, 9.5, '#ef5350');
+    c.strokeStyle = '#3e0000'; c.lineWidth = 2; c.beginPath(); c.moveTo(16, 9.5); c.lineTo(22, 12); c.moveTo(32, 9.5); c.lineTo(26, 12); c.stroke();
+    c.shadowColor = '#ffeb3b'; c.shadowBlur = 5; Art.ell(c, 19.5, 13.5, 2, 1.6, '#ffee58'); Art.ell(c, 28.5, 13.5, 2, 1.6, '#ffee58'); c.shadowBlur = 0;
+    c.fillStyle = '#3e0000'; c.fillRect(18, 18, 12, 3);
+    Art.tri(c, [18.5, 21], [21, 21], [19.7, 16.5], '#fff'); Art.tri(c, [27, 21], [29.5, 21], [28.3, 16.5], '#fff');   // tusks
+  },
+  boss(c) {
+    Art.shadow(c, 65, 118, 46);
+    c.save(); c.translate(108, 62); c.rotate(0.3);                                           // cleaver
+    c.fillStyle = '#4e342e'; c.fillRect(-3, 6, 6, 26);
+    Art.rr(c, -9, -34, 20, 42, 3); c.fillStyle = Art.grad(c, -9, 0, 11, 0, [[0, '#eceff1'], [1, '#78909c']]); c.fill();
+    c.restore();
+    c.fillStyle = '#38006b'; Art.rr(c, 36, 96, 20, 20, 6); c.fill(); Art.rr(c, 74, 96, 20, 20, 6); c.fill();
+    const g = c.createRadialGradient(56, 62, 6, 65, 74, 50);
+    g.addColorStop(0, '#ab47bc'); g.addColorStop(1, '#4a148c');
+    Art.ell(c, 65, 74, 46, 38, g);                                                           // belly
+    Art.ell(c, 65, 82, 26, 20, 'rgba(225,190,231,0.35)');
+    Art.ell(c, 65, 84, 2, 2.6, '#38006b');
+    Art.ell(c, 22, 72, 9, 17, '#6a1b9a'); Art.ell(c, 108, 70, 9, 17, '#6a1b9a');
+    c.strokeStyle = '#ffb300'; c.lineWidth = 3; c.beginPath(); c.arc(65, 54, 30, 0.25, Math.PI - 0.25); c.stroke();   // bead necklace
+    Art.tri(c, [44, 26], [34, 2], [56, 18], '#ffd54f'); Art.tri(c, [86, 26], [96, 2], [74, 18], '#ffd54f');
+    Art.ell(c, 65, 34, 26, 21, '#7b1fa2');
+    c.strokeStyle = '#2a0038'; c.lineWidth = 3.5; c.beginPath(); c.moveTo(47, 24); c.lineTo(60, 30); c.moveTo(83, 24); c.lineTo(70, 30); c.stroke();
+    c.shadowColor = '#ffea00'; c.shadowBlur = 8; Art.ell(c, 54, 33, 4.5, 3.4, '#ffee58'); Art.ell(c, 76, 33, 4.5, 3.4, '#ffee58'); c.shadowBlur = 0;
+    Art.ell(c, 54.5, 33.4, 1.4, 2, '#3e0000'); Art.ell(c, 75.5, 33.4, 1.4, 2, '#3e0000');
+    Art.rr(c, 49, 41, 32, 9, 3); c.fillStyle = '#2a0038'; c.fill();
+    for (let x = 51; x < 79; x += 5.6) Art.tri(c, [x, 41], [x + 4.4, 41], [x + 2.2, 46.5], '#fff');
+  },
+  spike(c) {
+    Art.ell(c, 18, 23, 16, 5, 'rgba(0,0,0,0.38)');
+    Art.ell(c, 18, 21.5, 14, 4, '#3b3b44');
+    [[7, 21, 9], [29, 21, 9], [13, 22, 14], [23, 22, 14], [18, 23, 19]].forEach(([x, y, h]) => {
+      Art.tri(c, [x - 4.2, y], [x, y - h], [x, y], '#eceff1');
+      Art.tri(c, [x, y], [x, y - h], [x + 4.2, y], '#78909c');
+      Art.tri(c, [x - 1, y - h + 3.5], [x, y - h], [x + 1, y - h + 3.5], '#ef5350');
+    });
+  },
+  slash(c) {
+    c.beginPath(); c.arc(24, 24, 20, -1.2, 1.2); c.arc(15, 24, 21, 1.0, -1.0, true); c.closePath();
+    c.fillStyle = Art.grad(c, 24, 4, 24, 44, [[0, 'rgba(255,255,255,0)'], [0.5, 'rgba(255,255,255,1)'], [1, 'rgba(255,255,255,0)']]);
+    c.fill();
+  },
+  soul(c) {
+    const g = c.createRadialGradient(8, 8, 0.5, 8, 8, 8);
+    g.addColorStop(0, '#ffffff'); g.addColorStop(0.35, '#e1bee7'); g.addColorStop(1, 'rgba(171,71,188,0)');
+    Art.ell(c, 8, 8, 8, 8, g);
+  },
+  dot(c) { Art.ell(c, 4, 4, 4, 4, '#fff'); },
+  petal(c) { Art.ell(c, 4, 3, 4, 2.4, '#ffc1d9'); Art.ell(c, 3, 2.6, 1.8, 1, '#ffe3ee'); },
+  grass(c, w, h) {
+    c.fillStyle = '#2f5d2a'; c.fillRect(0, 0, w, h);
+    for (let i = 0; i < 90; i++) {
+      const x = Math.random() * w, y = 4 + Math.random() * (h - 4);
+      c.strokeStyle = ['#3c7a33', '#27501f', '#4b8f3c'][i % 3]; c.lineWidth = 1.2;
+      c.beginPath(); c.moveTo(x, y); c.lineTo(x + 1.5, y - 4); c.stroke();
+    }
+  },
+  path(c, w, h) {
+    c.fillStyle = Art.grad(c, 0, 0, w, 0, [[0, '#6a4a3a'], [0.12, '#8a6650'], [0.88, '#8a6650'], [1, '#6a4a3a']]);
+    c.fillRect(0, 0, w, h);
+    for (let i = 0; i < 70; i++) {
+      Art.ell(c, 16 + Math.random() * (w - 32), 3 + Math.random() * (h - 6), 1 + Math.random() * 2.2, 0.8 + Math.random() * 1.2,
+        ['rgba(60,40,30,0.35)', 'rgba(190,160,130,0.3)'][i % 2]);
+    }
+    for (let y = 0; y < h; y += 16) {                    // stone kerbs
+      [2, w - 12].forEach(x => { Art.rr(c, x, y + 2, 10, 12, 3); c.fillStyle = (y / 16) % 2 ? '#9e9e9e' : '#868686'; c.fill(); });
+    }
+  },
+  lantern(c) {
+    Art.shadow(c, 12, 38, 9);
+    c.fillStyle = '#8d8d8d'; c.fillRect(9, 22, 6, 15); Art.rr(c, 5, 34, 14, 4, 1.5); c.fill();
+    Art.rr(c, 5, 12, 14, 11, 2); c.fillStyle = '#a5a5a5'; c.fill();
+    c.shadowColor = '#ffb300'; c.shadowBlur = 8; Art.rr(c, 8, 14, 8, 7, 1); c.fillStyle = '#ffd54f'; c.fill(); c.shadowBlur = 0;
+    Art.tri(c, [1, 13], [12, 3], [23, 13], '#6d6d6d');
+  },
+  tree(c) {
+    Art.shadow(c, 30, 52, 20);
+    c.fillStyle = '#4e342e'; c.fillRect(27, 34, 6, 18);
+    [[30, 22, 19], [17, 29, 12], [43, 28, 12], [30, 34, 13]].forEach(([x, y, r], i) => Art.ell(c, x, y, r, r * 0.85, ['#f48fb1', '#f8bbd0', '#f06292', '#f8bbd0'][i]));
+    for (let i = 0; i < 16; i++) Art.ell(c, 14 + Math.random() * 32, 10 + Math.random() * 30, 1.6, 1.2, 'rgba(255,255,255,0.6)');
+  },
+  menuBg(c, w, h) {
+    c.fillStyle = Art.grad(c, 0, 0, 0, h, [[0, '#1a1030'], [0.45, '#7b1e3a'], [0.7, '#e2603a'], [1, '#2a1420']]); c.fillRect(0, 0, w, h);
+    Art.ell(c, 200, 300, 95, 95, '#ff7043'); Art.ell(c, 200, 300, 82, 82, '#ffab91');
+    c.fillStyle = '#3a1830'; c.beginPath(); c.moveTo(0, 400); c.lineTo(70, 320); c.lineTo(140, 380); c.lineTo(230, 300); c.lineTo(320, 385); c.lineTo(400, 330); c.lineTo(400, h); c.lineTo(0, h); c.fill();
+    c.fillStyle = '#22101e'; c.beginPath(); c.moveTo(0, 470); c.quadraticCurveTo(200, 400, 400, 470); c.lineTo(400, h); c.lineTo(0, h); c.fill();
+  },
+  buildAll(scene) {
+    const m = (k, w, h) => Art.make(scene, k, w, h, Art[k]);
+    m('samurai', 32, 40); m('demon', 32, 40); m('zombie', 32, 40); m('oni', 48, 56); m('boss', 130, 126);
+    m('spike', 36, 28); m('slash', 48, 48); m('soul', 16, 16); m('dot', 8, 8); m('petal', 8, 6);
+    m('grass', 64, 64); m('path', 280, 128); m('lantern', 24, 42); m('tree', 60, 58); m('menuBg', W, H);
+  },
+};
+
+/* ============================================================
+   SHARED SCENE HELPERS
+   ============================================================ */
+class BaseScene extends Phaser.Scene {
+  setupCamera() { this.cameras.main.setOrigin(0, 0).setZoom(R); }
+  img(x, y, key) { return this.add.image(x, y, key).setScale(S); }
+  txt(x, y, str, size, color = '#fff', extra = {}) {
+    return this.add.text(x, y, str, Object.assign({
+      fontFamily: FONT, fontSize: size + 'px', color, fontStyle: 'bold', resolution: R,
+    }, extra)).setOrigin(0.5);
+  }
+  button(x, y, w, h, color, label, size, onTap) {
+    const g = this.add.graphics();
+    const draw = (pressed) => {
+      g.clear();
+      g.fillStyle(0x000000, 0.35).fillRoundedRect(x - w / 2, y - h / 2 + 4, w, h, 10);
+      g.fillStyle(color, 1).fillRoundedRect(x - w / 2, y - h / 2 + (pressed ? 3 : 0), w, h, 10);
+      g.fillStyle(0xffffff, 0.16).fillRoundedRect(x - w / 2 + 3, y - h / 2 + 3 + (pressed ? 3 : 0), w - 6, h * 0.4, 8);
+    };
+    draw(false);
+    const t = this.txt(x, y, label, size);
+    const z = this.add.zone(x, y, w, h).setInteractive({ useHandCursor: true });
+    z.on('pointerdown', () => { draw(true); t.y = y + 3; });
+    z.on('pointerout', () => { draw(false); t.y = y; });
+    z.on('pointerup', () => { draw(false); t.y = y; onTap(); });
+    return { g, t, z };
+  }
 }
-window.addEventListener('beforeunload', saveProgress);
 
-const START_ARMY = 4;
-// Scroll distance (px) of a full level. Progress is distance travelled, so it
-// stays in step with the world when the scroll slows or stops.
-const LEVEL_LENGTH = 4700;
-const BOSS_HP_BAR_WIDTH = 180;
+class BootScene extends BaseScene {
+  constructor() { super('Boot'); }
+  create() { Art.buildAll(this); this.scene.start('Menu'); }
+}
 
-// Every blade level adds half a point, so each purchase is felt.
-function bladeDamage() { return 1 + (damageLevel - 1) * 0.5; }
-function fmtDamage(d) { return Number.isInteger(d) ? String(d) : d.toFixed(1); }
-
-class UpgradeScene extends Phaser.Scene {
-  constructor() { super({ key: 'UpgradeScene' }); }
-
+/* ============================================================
+   MENU — souls and upgrades
+   ============================================================ */
+class MenuScene extends BaseScene {
+  constructor() { super('Menu'); }
   create() {
-    this.cameras.main.setBackgroundColor('#5d4037');
-    this.add.rectangle(200, 360, 400, 720, 0x5d4037);
-    this.add.rectangle(200, 420, 320, 420, 0x8d6e63).setStrokeStyle(5, 0x4e342e);
+    this.setupCamera();
+    this.img(W / 2, H / 2, 'menuBg');
+    this.add.particles(0, 0, 'petal', {
+      x: { min: 0, max: W }, y: -10, lifespan: 9000, speedY: { min: 30, max: 70 }, speedX: { min: -25, max: 10 },
+      scale: S, rotate: { start: 0, end: 360 }, frequency: 450, alpha: 0.85,
+    });
 
-    this.add.text(200, 50, 'SOUL UPGRADES', { fontSize: '32px', color: '#fff8e1', fontStyle: 'bold' }).setOrigin(0.5);
-    this.coinText = this.add.text(200, 100, '', { fontSize: '24px', color: '#ffd54f', fontStyle: 'bold' }).setOrigin(0.5);
+    this.txt(W / 2, 62, 'SAMURAI', 46, '#fff3e0', { stroke: '#2a0a14', strokeThickness: 6 });
+    this.txt(W / 2, 104, 'R U N N E R', 20, '#ffcc80', { stroke: '#2a0a14', strokeThickness: 4 });
 
-    // Samurai preview
+    const pill = this.add.graphics();
+    pill.fillStyle(0x000000, 0.45).fillRoundedRect(W / 2 - 80, 136, 160, 36, 18);
+    this.img(W / 2 - 58, 154, 'soul').setScale(S * 1.5);
+    this.txt(W / 2 + 8, 154, Save.souls + ' souls', 18, '#e1bee7');
+
     for (let i = 0; i < 5; i++) {
-      this.drawSamurai(this, 140 + i * 28, 500, true);
+      const s = this.img(140 + i * 30, 452, 'samurai').setScale(S * 1.25);
+      this.tweens.add({ targets: s, y: 448, duration: 420, yoyo: true, repeat: -1, delay: i * 90, ease: 'Sine.inOut' });
     }
 
-    this.makeCard(70, 220, 'ATTACK SPEED', 0x4caf50, fireRateLevel, () => { fireRateLevel++; });
-    this.makeCard(200, 220, 'BLADE DAMAGE', 0x2196f3, damageLevel, () => { damageLevel++; });
-    this.makeCard(330, 220, 'SOUL REWARD', 0x9c27b0, revenueLevel, () => { revenueLevel++; });
+    this.card(72, 'ATTACK\nSPEED', 0x2e7d32, 'fire', (Stats.attackMs() / 1000).toFixed(2) + 's swing');
+    this.card(200, 'BLADE\nDAMAGE', 0x1565c0, 'damage', fmt(Stats.damage()) + ' per hit');
+    this.card(328, 'SOUL\nREWARD', 0x6a1b9a, 'revenue', Stats.soulsPerKill() + ' per kill');
 
-    const start = this.add.rectangle(200, 620, 240, 70, 0xd32f2f).setInteractive({ useHandCursor: true });
-    this.add.text(200, 620, 'BEGIN RUN', { fontSize: '28px', color: '#fff', fontStyle: 'bold' }).setOrigin(0.5);
-    start.on('pointerdown', () => this.scene.start('GameScene'));
-
-    this.refreshCoins();
+    this.button(W / 2, 620, 250, 68, 0xc62828, 'BEGIN RUN', 28, () => this.scene.start('Game'));
+    this.txt(W / 2, 680, 'drag left / right to steer', 13, '#d7b9a8', { fontStyle: 'normal' });
   }
 
-  drawSamurai(scene, x, y, small) {
-    const s = small ? 0.7 : 1;
-    scene.add.ellipse(x, y + 8*s, 14*s, 5*s, 0x000000, 0.2);
-    scene.add.rectangle(x, y, 12*s, 16*s, 0x1a237e);
-    scene.add.ellipse(x, y - 10*s, 14*s, 10*s, 0x0d1642);
-    scene.add.rectangle(x + 7*s, y, 10*s, 3*s, 0xc0c0c0); // katana
-  }
-
-  getCost(level) { return Math.floor(40 * Math.pow(1.55, level - 1)); }
-
-  makeCard(x, y, title, color, level, onUpgrade) {
-    const cost = this.getCost(level);
-    this.add.rectangle(x, y, 115, 170, color).setStrokeStyle(4, 0xffffff);
-    this.add.text(x, y - 60, title, { fontSize: '13px', color: '#fff', fontStyle: 'bold' }).setOrigin(0.5);
-    this.add.text(x, y - 25, 'Lv ' + level, { fontSize: '22px', color: '#fff' }).setOrigin(0.5);
-    this.add.text(x, y + 15, cost + ' souls', { fontSize: '14px', color: '#fff' }).setOrigin(0.5);
-    const btn = this.add.rectangle(x, y + 55, 95, 34, 0x000000, 0.45).setInteractive({ useHandCursor: true });
-    this.add.text(x, y + 55, 'UPGRADE', { fontSize: '13px', color: '#fff' }).setOrigin(0.5);
-    btn.on('pointerdown', () => {
-      if (coins >= cost) {
-        coins -= cost;
-        onUpgrade();
-        saveProgress();
-        this.scene.restart();
-      }
+  card(x, title, color, key, statLine) {
+    const y = 300, w = 116, h = 196, lvl = Save[key], cost = Stats.cost(lvl), can = Save.souls >= cost;
+    const g = this.add.graphics();
+    g.fillStyle(0x000000, 0.4).fillRoundedRect(x - w / 2, y - h / 2 + 5, w, h, 12);
+    g.fillStyle(0x1c1220, 0.92).fillRoundedRect(x - w / 2, y - h / 2, w, h, 12);
+    g.fillStyle(color, 1).fillRoundedRect(x - w / 2, y - h / 2, w, 52, { tl: 12, tr: 12, bl: 0, br: 0 });
+    g.lineStyle(2, 0xffffff, 0.25).strokeRoundedRect(x - w / 2, y - h / 2, w, h, 12);
+    this.txt(x, y - h / 2 + 26, title, 13, '#fff', { align: 'center' });
+    this.txt(x, y - 22, 'Lv ' + lvl, 26);
+    this.txt(x, y + 8, statLine, 12, '#cfc3d6', { fontStyle: 'normal' });
+    const b = this.button(x, y + 62, 96, 44, can ? color : 0x4a4250, cost + '', 17, () => {
+      if (Save.souls < cost) { this.cameras.main.shake(90, 0.004); return; }
+      Save.souls -= cost; Save[key]++; Save.save();
+      this.scene.restart();
     });
+    if (!can) b.t.setColor('#9a90a0');
   }
-
-  refreshCoins() { this.coinText.setText('Souls: ' + coins); }
 }
 
-class GameScene extends Phaser.Scene {
-  constructor() { super({ key: 'GameScene' }); }
+/* ============================================================
+   GAME — the run
+   ============================================================ */
+class GameScene extends BaseScene {
+  constructor() { super('Game'); }
 
   create() {
-    this.cameras.main.setBackgroundColor('#33691e');
-    this.add.rectangle(200, 360, 400, 720, 0x33691e);
-    // Grass sides
-    this.add.rectangle(50, 450, 100, 700, 0x558b2f);
-    this.add.rectangle(350, 450, 100, 700, 0x558b2f);
-    // Dirt path
-    this.add.rectangle(200, 450, 180, 700, 0x795548);
-    // Path edges
-    this.add.rectangle(110, 450, 6, 700, 0x4e342e);
-    this.add.rectangle(290, 450, 6, 700, 0x4e342e);
-
-    this.armyCount = START_ARMY;
-    this.coinsEarned = 0;
-    this.progress = 0;
-    this.over = false;
-    this.targetX = 200;
+    this.setupCamera();
+    this.dist = 0;                 // distance travelled; drives layout and the progress bar
     this.speedMod = 1;
-    this.miniBossActive = false;
+    this.timeScale = 1;            // 1 normally, eases to CFG.slowScale during the special
+    this.slowLeft = 0;
+    this.charge = 0;
+    this.count = CFG.startArmy;
+    this.earned = 0;
+    this.over = false;
+    this.fight = false;            // true while the scroll is stopped for the boss
     this.bossDefeated = false;
-    this.miniBoss = null;
-    this.miniBossHpBar = null;
-    this.miniBossHpFill = null;
-    this.army = [];
-    this.gates = [];
+    this.targetX = W / 2;
+    this.armyX = W / 2;
+    this.formY = CFG.armyY;
+    this.soldiers = [];
     this.enemies = [];
-    this.obstacles = [];
+    this.gates = [];
+    this.spikes = [];
+    this.decor = [];
 
-    this.spawnArmy();
-    this.buildGates();
-    this.spawnEnemies();
-    this.spawnMiniBosses();
-    this.spawnObstacles();
+    this.buildGround();
+    this.buildLevel();
+    this.buildFx();
+    this.buildHud();
+    this.syncArmy(true);
 
-    this.specialCharge = 0;
-    this.specialMax = 12;
-    this.slowTimer = 0;
-    this.slowActive = false;
-
-    this.input.on('pointermove', p => { this.targetX = Phaser.Math.Clamp(p.x, 80, 320); });
-    this.input.on('pointerdown', p => { this.targetX = Phaser.Math.Clamp(p.x, 80, 320); });
-
-    this.progBg = this.add.rectangle(200, 30, 250, 12, 0x3e2723);
-    this.prog = this.add.rectangle(75, 30, 0, 8, 0xff5722).setOrigin(0, 0.5);
-    this.coinLabel = this.add.text(20, 50, '', { fontSize: '18px', color: '#ce93d8' });
-    this.armyLabel = this.add.text(20, 74, '', { fontSize: '16px', color: '#fff' });
-
-    // Special bar + button
-    this.specialBg = this.add.rectangle(200, 680, 180, 16, 0x3e2723);
-    this.specialFill = this.add.rectangle(110, 680, 0, 12, 0x7c4dff).setOrigin(0, 0.5);
-    this.specialBtn = this.add.rectangle(340, 680, 90, 40, 0x5e35b1).setInteractive({ useHandCursor: true });
-    this.specialBtnText = this.add.text(340, 680, 'SPECIAL', { fontSize: '14px', color: '#fff', fontStyle: 'bold' }).setOrigin(0.5);
-    this.specialBtn.on('pointerdown', () => this.activateSlow());
+    const steer = p => {
+      if (p.worldY > 636 && p.worldX > 280) return;        // special button area
+      this.targetX = clamp(p.worldX, CFG.steerMin, CFG.steerMax);
+    };
+    this.input.on('pointerdown', steer);
+    this.input.on('pointermove', steer);
   }
 
-  spawnArmy() {
-    this.army.forEach(s => s.destroy());
-    this.army = [];
-    const n = Math.min(this.armyCount, 12);
-    const cols = Math.min(4, Math.ceil(Math.sqrt(n * 1.1)));
-    for (let i = 0; i < n; i++) {
-      const col = i % cols;
-      const row = Math.floor(i / cols);
-      const c = this.add.container(this.targetX + (col - (cols - 1) / 2) * 20, 560 + row * 16);
-      // Samurai
-      c.add([
-        this.add.ellipse(0, 10, 14, 6, 0x000000, 0.25),
-        this.add.rectangle(0, 2, 14, 18, 0x1a237e),
-        this.add.ellipse(0, -10, 16, 12, 0x0d1642),
-        this.add.rectangle(0, -8, 10, 3, 0x7986cb),
-        this.add.rectangle(9, 1, 14, 3, 0xc0c0c0) // katana
-      ]);
-      this.army.push(c);
+  /* ---------- construction ---------- */
+  buildGround() {
+    this.grass = this.add.tileSprite(W / 2, H / 2, W, H, 'grass').setTileScale(S).setDepth(-20);
+    const pw = CFG.pathRight - CFG.pathLeft;
+    this.path = this.add.tileSprite(W / 2, H / 2, pw, H, 'path').setTileScale(S).setDepth(-19);
+    const fog = this.add.graphics().setDepth(-18);           // distance haze at the top
+    fog.fillGradientStyle(0x1a1030, 0x1a1030, 0x1a1030, 0x1a1030, 0.75, 0.75, 0, 0).fillRect(0, 0, W, 200);
+    for (let d = 100; d < LEVEL.length + 600; d += 150) {
+      const left = (d / 150) % 2 < 1;
+      const key = Math.random() < 0.55 ? 'tree' : 'lantern';
+      this.decor.push({ d, x: left ? 24 + Math.random() * 12 : W - 24 - Math.random() * 12, obj: this.img(0, -200, key), flat: true });
     }
   }
 
-  buildGates() {
-    const data = [
-      { y: 220, bad: {op:'-',n:2}, good: {op:'+',n:4} },
-      { y: -80, bad: {op:'-',n:3}, good: {op:'x',n:2} },
-      // Big gap before mini-boss (around progress 48)
-      { y: -1100, bad: {op:'-',n:4}, good: {op:'+',n:6} },
-      { y: -1450, bad: {op:'-',n:5}, good: {op:'x',n:2} },
-      { y: -1800, bad: {op:'-',n:4}, good: {op:'+',n:8} },
-      { y: -2150, bad: {op:'-',n:6}, good: {op:'x',n:3} }
-    ];
-    data.forEach(d => {
-      this.gates.push(this.add.rectangle(200, d.y, 8, 48, 0xffffff));
-      const blueOnLeft = Math.random() > 0.5;
-      const good = this.createGate(blueOnLeft ? 110 : 290, d.y, d.good, 0x1565c0);
-      const bad = this.createGate(blueOnLeft ? 290 : 110, d.y, d.bad, 0xc62828);
-      good.partner = bad;
-      bad.partner = good;
-      this.gates.push(good, bad);
+  buildLevel() {
+    LEVEL.gates.forEach(g => {
+      const goodLeft = Math.random() < 0.5;
+      this.gates.push({
+        d: g.d, used: false,
+        left: this.makeGate(130, goodLeft ? g.good : g.bad, goodLeft),
+        right: this.makeGate(270, goodLeft ? g.bad : g.good, !goodLeft),
+      });
     });
-  }
-
-  createGate(x, y, op, color) {
-    const c = this.add.container(x, y);
-    const label = op.op === '+' ? '+' + op.n : op.op === '-' ? '-' + op.n : '×' + op.n;
-    c.add([
-      this.add.rectangle(-55, 0, 8, 52, 0x3e2723),
-      this.add.rectangle(55, 0, 8, 52, 0x3e2723),
-      this.add.rectangle(0, 0, 120, 48, color).setStrokeStyle(4, 0xffffff),
-      this.add.text(0, 0, label, { fontSize: '26px', color: '#fff', fontStyle: 'bold', stroke: '#000', strokeThickness: 3 }).setOrigin(0.5)
-    ]);
-    c.op = op;
-    c.used = false;
-    return c;
-  }
-
-  spawnEnemies() {
-    const enemySpots = [50, -300, -650, -1000, -1350, -1700, -2050];
-    enemySpots.forEach((baseY, idx) => {
-      const count = 6 + idx * 2;
-      for (let i = 0; i < count; i++) {
-        const x = 80 + Math.random() * 240;
-        const y = baseY - i * 28;
-        const isDemon = Math.random() > 0.45;
-        const e = this.add.container(x, y);
-        if (isDemon) {
-          // Demon
-          e.add([
-            this.add.ellipse(0, 9, 14, 5, 0x000000, 0.25),
-            this.add.rectangle(0, 1, 14, 17, 0x4a148c),
-            this.add.ellipse(0, -10, 16, 12, 0x6a1b9a),
-            this.add.rectangle(-4, -12, 3, 6, 0xff1744),
-            this.add.rectangle(4, -12, 3, 6, 0xff1744),
-            this.add.rectangle(0, -7, 8, 2, 0xff80ab)
-          ]);
-          e.hp = 5 + idx;
-        } else {
-          // Zombie
-          e.add([
-            this.add.ellipse(0, 9, 12, 5, 0x000000, 0.2),
-            this.add.rectangle(0, 1, 13, 16, 0x33691e),
-            this.add.ellipse(0, -9, 15, 11, 0x1b5e20),
-            this.add.rectangle(0, -7, 8, 2, 0xc5e1a5)
-          ]);
-          e.hp = 3 + idx;
-        }
-        this.enemies.push(e);
+    LEVEL.packs.forEach((base, idx) => {
+      const n = 6 + idx * 2;
+      for (let i = 0; i < n; i++) {
+        const demon = Math.random() > 0.45;
+        this.addEnemy(demon ? 'demon' : 'zombie', 85 + Math.random() * 230, base + i * 28, (demon ? 5 : 3) + idx);
       }
     });
-  }
-
-  spawnObstacles() {
-    // Spikes sit in the gaps between gate rows
-    const safeSpots = [80, -320, -670, -1020, -1370, -1720, -2070];
-    safeSpots.forEach(baseY => {
-      const side = Math.random();
-      if (side < 0.45) {
-        this.createObstacle(145, baseY);
-      } else if (side < 0.9) {
-        this.createObstacle(255, baseY);
-      } else {
-        this.createObstacle(145, baseY);
-        this.createObstacle(255, baseY + 60);
-      }
+    LEVEL.onis.forEach((d, idx) => {
+      const e = this.addEnemy('oni', W / 2, d, 19 + idx * 8);
+      e.souls = 40 + idx * 20; e.r = 8; e.swing = CFG.oni.swingMs;
     });
-  }
-
-  createObstacle(x, y) {
-    const o = this.add.container(x, y);
-    // Small spikes
-    o.add([
-      this.add.triangle(0, 2, 0, -10, 8, 6, -8, 6, 0x757575),
-      this.add.triangle(-6, 4, 0, -6, 6, 6, -6, 6, 0x616161),
-      this.add.triangle(6, 4, 0, -6, 6, 6, -6, 6, 0x9e9e9e),
-      this.add.ellipse(0, 8, 20, 6, 0x000000, 0.2)
-    ]);
-    o.hit = false;
-    this.obstacles.push(o);
-  }
-
-  spawnMiniBosses() {
-    const bossSpots = [-600, -1600];
-    bossSpots.forEach((y, idx) => {
-      const e = this.add.container(200, y);
-      // Bigger oni-style boss
-      e.add([
-        this.add.ellipse(0, 14, 28, 10, 0x000000, 0.3),
-        this.add.rectangle(0, 2, 22, 26, 0xb71c1c),
-        this.add.ellipse(0, -14, 24, 16, 0x7f0000),
-        this.add.rectangle(-7, -20, 5, 10, 0xffd600),
-        this.add.rectangle(7, -20, 5, 10, 0xffd600),
-        this.add.rectangle(0, -10, 12, 3, 0xffeb3b),
-        this.add.rectangle(14, 2, 18, 5, 0x5d4037) // club
-      ]);
-      e.hp = 19 + idx * 8;
-      e.isBoss = true;
-      e.soulValue = 40 + idx * 20;
-      this.enemies.push(e);
+    LEVEL.spikes.forEach(d => {
+      const roll = Math.random();
+      if (roll < 0.45) this.addSpike(130, d);
+      else if (roll < 0.9) this.addSpike(270, d);
+      else { this.addSpike(130, d); this.addSpike(270, d - 60); }
     });
+    this.boss = this.addEnemy('boss', W / 2, LEVEL.bossAt, CFG.boss.hp);
+    this.boss.r = 50; this.boss.souls = CFG.boss.souls; this.boss.swing = CFG.boss.swingMs;
   }
 
+  makeGate(x, op, good) {
+    const col = good ? 0x1e88e5 : 0xe53935, dark = good ? 0x0d47a1 : 0x8e0000;
+    const g = this.add.graphics();
+    g.fillStyle(col, 0.5).fillRoundedRect(-62, -24, 124, 48, 6);
+    g.lineStyle(3, 0xffffff, 0.9).strokeRoundedRect(-62, -24, 124, 48, 6);
+    g.fillStyle(dark, 1).fillRect(-66, -30, 8, 60).fillRect(58, -30, 8, 60);     // posts
+    g.fillStyle(dark, 1).fillRoundedRect(-72, -38, 144, 10, 3);                    // torii beam
+    g.fillStyle(col, 1).fillRoundedRect(-68, -42, 136, 5, 2);
+    const label = (op.op === 'x' ? '×' : op.op === '-' ? '−' : '+') + op.n;
+    const t = this.txt(0, 0, label, 28, '#fff', { stroke: good ? '#0d2a5c' : '#5c0d0d', strokeThickness: 5 });
+    return { x, op, good, obj: this.add.container(x, -200, [g, t]) };
+  }
+
+  addEnemy(kind, x, d, hp) {
+    const e = { kind, x, d, hp, maxHp: hp, r: 0, obj: this.img(x, -200, kind) };
+    this.enemies.push(e);
+    return e;
+  }
+
+  addSpike(x, d) { this.spikes.push({ x, d, hit: false, obj: this.img(x, -200, 'spike'), flat: true }); }
+
+  buildFx() {
+    this.burst = this.add.particles(0, 0, 'dot', {
+      speed: { min: 40, max: 150 }, lifespan: { min: 250, max: 480 }, scale: { start: S, end: 0 }, emitting: false,
+    }).setDepth(3000);
+    this.add.particles(0, 0, 'petal', {
+      x: { min: 0, max: W }, y: -10, lifespan: 8000, speedY: { min: 35, max: 80 }, speedX: { min: -25, max: 10 },
+      scale: S, rotate: { start: 0, end: 360 }, frequency: 500, alpha: 0.8,
+    }).setDepth(3500);
+    this.slowTint = this.add.rectangle(W / 2, H / 2, W, H, 0x5e35b1, 1).setAlpha(0).setDepth(3600);
+  }
+
+  buildHud() {
+    const D = 5000;
+    this.hud = this.add.graphics().setDepth(D);
+    this.soulIcon = this.img(22, 56, 'soul').setScale(S * 1.2).setDepth(D);
+    this.soulText = this.txt(34, 56, '', 16, '#e1bee7', { stroke: '#1a0a20', strokeThickness: 3 }).setOrigin(0, 0.5).setDepth(D);
+    this.countText = this.txt(0, 0, '', 15, '#fff', { stroke: '#0d1642', strokeThickness: 4 }).setDepth(D);
+    this.specialText = this.txt(336, 676, 'SLOW', 13).setDepth(D + 1);
+    this.specialHint = this.txt(130, 662, 'SPECIAL', 10, '#b39ddb').setDepth(D);
+    this.add.zone(336, 676, 84, 76).setInteractive().on('pointerdown', () => this.activateSpecial());
+  }
+
+  /* ---------- main loop ---------- */
   update(time, delta) {
     if (this.over) return;
+    const dt = Math.min(delta, 50) / 1000;                 // real time: steering, samurai attacks
+    const slowing = this.slowLeft > 0;
+    this.timeScale += ((slowing ? CFG.slowScale : 1) - this.timeScale) * damp(10, dt);
+    const wdt = dt * this.timeScale;                       // world time: scroll, enemy attacks
 
-    // Spawn fat demon ahead, then start fight on contact
-    if (!this.miniBoss && !this.bossDefeated && this.progress >= 88) {
-      this.spawnFatDemon();
+    if (slowing) this.slowLeft = Math.max(0, this.slowLeft - delta);
+    this.slowTint.setAlpha((1 - this.timeScale) / (1 - CFG.slowScale) * 0.2);
+
+    this.updateScroll(wdt);
+    this.updateArmy(time, dt);
+    this.updateGates();
+    this.updateCombat(dt);
+    this.updateHazards(wdt);
+    this.updateHud(dt);
+
+    if (this.count <= 0) this.finish(false);
+    else if (this.bossDefeated && this.dist >= LEVEL.length) this.finish(true);
+  }
+
+  updateScroll(wdt) {
+    if (!this.fight) {
+      const speed = CFG.baseSpeed * (1 + CFG.speedRamp * this.dist / LEVEL.length) * this.speedMod;
+      const step = speed * wdt;
+      this.dist += step;
+      this.grass.tilePositionY -= step * R;
+      this.path.tilePositionY -= step * R;
     }
-    if (!this.miniBossActive && this.miniBoss && this.miniBoss.active) {
-      let touched = false;
-      this.army.forEach(s => {
-        if (Math.abs(s.x - this.miniBoss.x) < 45 && Math.abs(s.y - this.miniBoss.y) < 45) touched = true;
-      });
-      if (touched) this.beginMiniBossFight();
-    }
-
-    // Speed increases slightly as the level progresses
-    const progressFactor = 1 + (this.progress / 100) * 0.30;
-    const baseSpeed = 90 * progressFactor * this.speedMod;
-    const speed = (this.slowActive || this.miniBossActive) ? 0 : baseSpeed;
-
-    if (!this.miniBossActive) {
-      this.gates.forEach(g => g.y += speed * delta / 1000);
-      this.enemies.forEach(e => e.y += speed * delta / 1000);
-      this.obstacles.forEach(o => o.y += speed * delta / 1000);
-      if (this.miniBoss && this.miniBoss.active) this.miniBoss.y += speed * delta / 1000;
-    }
-
-    // Simple perspective: things higher on screen (farther) are smaller
-    const applyPerspective = (obj) => {
-      if (!obj || !obj.active) return;
-      const t = Phaser.Math.Clamp((obj.y - 80) / 520, 0, 1);
-      const scale = 0.55 + t * 0.55;
-      obj.setScale(scale);
+    const place = o => {
+      const y = CFG.armyY - (o.d - this.dist);
+      o.y = y;
+      if (y > H + 80) { o.obj.destroy(); o.gone = true; return; }
+      const p = this.persp(y);
+      o.obj.setVisible(y > -90).setPosition(o.x, y).setScale((o.obj.type === 'Container' ? 1 : S) * p).setDepth(o.flat ? y - 30 : y);
     };
-    this.army.forEach(applyPerspective);
-    this.enemies.forEach(applyPerspective);
-    this.obstacles.forEach(applyPerspective);
+    const alive = o => !o.gone;
+    this.decor.forEach(place); this.spikes.forEach(place); this.enemies.forEach(place);
     this.gates.forEach(g => {
-      if (g.op) applyPerspective(g);
+      [g.left, g.right].forEach(s => { s.d = g.d; place(s); });
+      g.y = g.left.y; g.gone = g.left.gone;
     });
+    this.decor = this.decor.filter(alive); this.spikes = this.spikes.filter(alive);
+    this.enemies = this.enemies.filter(alive); this.gates = this.gates.filter(alive);
+    if (!this.fight && !this.bossDefeated && this.boss.y >= 330) this.startBossFight();
+  }
 
-    // During mini-boss, let the army move freely up to attack
-    if (this.miniBossActive) {
-      this.army.forEach((s, i) => {
-        const cols = Math.min(4, Math.max(1, this.army.length));
-        const col = i % cols;
-        const want = this.targetX + (col - (cols - 1) / 2) * 14;
-        s.x = Phaser.Math.Linear(s.x, want, 0.35);
-        // Push army up into the boss
-        s.y = Phaser.Math.Linear(s.y, 460, 0.12);
+  // Far things are drawn smaller.
+  persp(y) { return 0.7 + 0.3 * clamp((y - 60) / 500, 0, 1); }
+
+  updateArmy(time, dt) {
+    this.armyX += (this.targetX - this.armyX) * damp(12, dt);
+    const wantForm = this.fight ? this.boss.y + 92 : CFG.armyY;
+    this.formY += (wantForm - this.formY) * damp(5, dt);
+    const n = this.soldiers.length, cols = Math.min(5, Math.ceil(Math.sqrt(n || 1)));
+    this.soldiers.forEach((s, i) => {
+      const col = i % cols, row = Math.floor(i / cols);
+      const inRow = Math.min(cols, n - row * cols);
+      const wx = this.armyX + (col - (inRow - 1) / 2) * 17;
+      const wy = this.formY + row * 15;
+      const k = damp(16 - row * 2.5, dt);                 // back rows trail a little
+      const lean = clamp((wx - s.x) * 0.02, -0.25, 0.25);
+      s.x += (wx - s.x) * k; s.y += (wy - s.y) * k;
+      s.lunge *= 1 - damp(14, dt);
+      s.pop += (1 - s.pop) * damp(14, dt);
+      const bob = Math.sin(time * 0.018 + i * 1.7) * 1.6;
+      s.img.setPosition(s.x, s.y + bob - s.lunge).setRotation(lean).setScale(S * this.persp(s.y) * s.pop).setDepth(s.y);
+    });
+  }
+
+  updateGates() {
+    this.gates.forEach(g => {
+      if (g.used || g.y < this.formY - 14) return;
+      g.used = true;
+      const side = this.armyX < W / 2 ? g.left : g.right;
+      const other = side === g.left ? g.right : g.left;
+      const before = this.count;
+      if (side.op.op === '+') this.count += side.op.n;
+      if (side.op.op === '-') this.count = Math.max(0, this.count - side.op.n);
+      if (side.op.op === 'x') this.count *= side.op.n;
+      const diff = this.count - before;
+      this.float(this.armyX, this.formY - 40, (diff >= 0 ? '+' : '−') + Math.abs(diff), side.good ? '#64b5f6' : '#ff5252', 30);
+      if (side.good) this.cameras.main.flash(120, 30, 110, 220); else this.cameras.main.flash(120, 120, 20, 20);
+      if (!side.good) this.cameras.main.shake(140, 0.006);
+      this.tweens.add({ targets: side.obj, alpha: 0, duration: 220 });
+      this.tweens.add({ targets: other.obj, alpha: 0.25, duration: 220 });
+      this.syncArmy();
+    });
+  }
+
+  updateCombat(dt) {
+    const cd = Stats.attackMs(), dmg = Stats.damage();
+    const near = this.enemies.filter(e => e.y > 250 && e.y < H);
+    this.soldiers.forEach(s => {
+      s.cd -= dt * 1000;
+      if (s.cd > 0) return;
+      let best = null, bestD = CFG.attackRange;
+      near.forEach(e => {
+        if (e.hp <= 0) return;
+        const d = e === this.boss && this.fight ? 0 : Math.hypot(e.x - s.x, e.y - s.y) - e.r;
+        if (d < bestD) { bestD = d; best = e; }
       });
-    } else {
-      const cols = Math.min(4, Math.ceil(Math.sqrt(this.army.length || 1)));
-      this.army.forEach((s, i) => {
-        const col = i % cols;
-        const want = this.targetX + (col - (cols - 1) / 2) * 18;
-        const distFromCenter = Math.abs(s.x - 200);
-        const grassFactor = Phaser.Math.Clamp((distFromCenter - 70) / 50, 0, 1);
-        let lerpSpeed = 0.22 - grassFactor * 0.14;
+      if (!best) return;
+      s.cd = cd * (0.9 + Math.random() * 0.2);
+      s.lunge = 7;
+      this.strike(best, dmg, s);
+    });
+  }
 
-        let touchingBoss = false;
-        this.enemies.forEach(e => {
-          if (e.isBoss && e.active && Math.abs(s.x - e.x) < 28 && Math.abs(s.y - e.y) < 28) {
-            touchingBoss = true;
-          }
-        });
-        if (touchingBoss) lerpSpeed *= 0.45;
+  strike(e, dmg, s) {
+    e.hp -= dmg;
+    const spread = e.r ? e.r * 0.6 : 4;
+    const hx = e.x + (Math.random() - 0.5) * spread * 2, hy = e.y + (Math.random() - 0.5) * spread;
+    const sl = this.img(hx, hy, 'slash').setDepth(2900).setRotation(Math.atan2(e.y - s.y, e.x - s.x) + (Math.random() - 0.5))
+      .setScale(S * (e.r ? 1.1 : 0.75));
+    this.tweens.add({ targets: sl, alpha: 0, scaleX: sl.scaleX * 1.5, scaleY: sl.scaleY * 1.5, duration: 140, onComplete: () => sl.destroy() });
+    e.obj.setTintFill(0xffffff);
+    this.time.delayedCall(55, () => { if (e.obj.active) e.obj.clearTint(); });
+    if (e.r || Math.random() < 0.5) this.float(hx, hy - 12, fmt(dmg), '#ffeb3b', 13);
+    if (e.hp <= 0) this.kill(e);
+  }
 
-        s.x = Phaser.Math.Linear(s.x, want, lerpSpeed);
-      });
+  kill(e) {
+    const gain = e.souls || Stats.soulsPerKill();
+    this.earned += gain; Save.souls += gain;
+    this.charge = Math.min(CFG.specialMax, this.charge + (e.kind === 'oni' ? 3 : 1));
+    const tint = { demon: 0xab47bc, zombie: 0x9ccc65, oni: 0xef5350, boss: 0xab47bc }[e.kind];
+    this.burst.setParticleTint(tint);
+    this.burst.explode(e.r ? 40 : 10, e.x, e.y);
+    const orb = this.img(e.x, e.y, 'soul').setDepth(5001).setScale(S * (e.r ? 2 : 1.2));
+    this.tweens.add({ targets: orb, x: 22, y: 56, duration: 520, ease: 'Cubic.in', onComplete: () => {
+      orb.destroy();
+      this.tweens.add({ targets: this.soulIcon, scale: S * 1.8, duration: 80, yoyo: true });
+    } });
+    if (e.kind === 'oni') {
+      this.speedMod *= CFG.oniSlow;
+      this.banner('ONI SLAIN', 'game speed −3%');
+      this.cameras.main.shake(180, 0.008);
+      Save.save();
     }
+    e.obj.destroy(); e.gone = true;
+    if (e === this.boss) this.endBossFight();
+  }
 
-    this.army.forEach(s => {
-      this.gates.forEach(g => {
-        if (!g.op || g.used) return;
-        if (Math.abs(s.x - g.x) < 50 && Math.abs(s.y - g.y) < 26) {
-          if (g.op.op === '+') this.armyCount += g.op.n;
-          if (g.op.op === '-') this.armyCount = Math.max(0, this.armyCount - g.op.n);
-          if (g.op.op === 'x') this.armyCount = Math.floor(this.armyCount * g.op.n);
-          g.used = true;
-          if (g.partner) g.partner.used = true;
-          this.tweens.add({ targets: g, alpha: 0, duration: 180 });
-          this.spawnArmy();
-        }
-      });
-    });
-
-    // Melee combat with sword swings
-    const attackRange = 36;
-    const attackCooldown = Math.max(180, 400 - fireRateLevel * 25);
-    this.army.forEach(s => {
-      if (!s.lastAttack) s.lastAttack = 0;
-      if (time - s.lastAttack < attackCooldown) return;
-
-      let closest = null;
-      let closestDist = attackRange;
-      this.enemies.forEach(e => {
-        if (!e.active) return;
-        const dist = Phaser.Math.Distance.Between(s.x, s.y, e.x, e.y);
-        if (dist < closestDist) {
-          closestDist = dist;
-          closest = e;
-        }
-      });
-
-      if (closest) {
-        s.lastAttack = time;
-        // Sword swing animation
-        const sword = this.add.rectangle(s.x + 6, s.y - 4, 22, 4, 0xe0e0e0);
-        sword.setOrigin(0, 0.5);
-        this.tweens.add({
-          targets: sword,
-          angle: 70,
-          duration: 120,
-          yoyo: true,
-          onComplete: () => sword.destroy()
-        });
-
-        // Damage enemy
-        const dmg = bladeDamage();
-        closest.hp -= dmg;
-        const dmgTxt = this.add.text(closest.x, closest.y - 12, '-' + fmtDamage(dmg), { fontSize: '16px', color: '#ffeb3b', fontStyle: 'bold' }).setOrigin(0.5);
-        this.tweens.add({ targets: dmgTxt, y: closest.y - 30, alpha: 0, duration: 400, onComplete: () => dmgTxt.destroy() });
-
-        if (closest.hp <= 0) {
-          const gain = closest.isBoss ? (closest.soulValue || 40) : (5 * revenueLevel);
-          this.coinsEarned += gain;
-          coins += gain;
-          this.specialCharge = Math.min(this.specialMax, this.specialCharge + (closest.isBoss ? 3 : 1));
-          saveProgress();
-          if (closest.isBoss) {
-            const boom = this.add.text(closest.x, closest.y - 20, 'ONI SLAIN! (slowdown -3%)', { fontSize: '15px', color: '#ffd600', fontStyle: 'bold' }).setOrigin(0.5);
-            this.tweens.add({ targets: boom, y: closest.y - 50, alpha: 0, duration: 2800, onComplete: () => boom.destroy() });
-            this.speedMod *= 0.97;
-          }
-          closest.destroy();
-        }
-      }
-    });
-
-    // Enemies can still damage samurai if they get very close (overwhelmed)
-    const overwhelmed = [];
-    this.army.forEach(s => {
-      this.enemies.forEach(e => {
-        if (!e.active || e.hitSamurai) return;
-        if (Math.abs(s.x - e.x) < 14 && Math.abs(s.y - e.y) < 14) {
-          e.hitSamurai = true;
-          overwhelmed.push(e);
-        }
-      });
-    });
-    if (overwhelmed.length > 0 && Math.random() < 0.4) {
-      this.armyCount = Math.max(0, this.armyCount - 1);
-      const e = overwhelmed[0];
-      const txt = this.add.text(e.x, e.y, '-1', { fontSize: '20px', color: '#ff1744', fontStyle: 'bold' }).setOrigin(0.5);
-      this.tweens.add({ targets: txt, y: e.y - 30, alpha: 0, duration: 400, onComplete: () => txt.destroy() });
-      this.spawnArmy();
-    }
-
-    // Oni counter-attack
+  updateHazards(wdt) {
+    // Demons and zombies: a touch may cost one samurai.
     this.enemies.forEach(e => {
-      if (!e.isBoss || !e.active) return;
-      if (!e.lastSwing) e.lastSwing = 0;
-      if (time - e.lastSwing < 750) return;
-
-      let nearest = null;
-      let nearestDist = 55;
-      this.army.forEach(s => {
-        const d = Phaser.Math.Distance.Between(e.x, e.y, s.x, s.y);
-        if (d < nearestDist) {
-          nearestDist = d;
-          nearest = s;
-        }
-      });
-
-      if (nearest) {
-        e.lastSwing = time;
-        // Better sword swing animation
-        const swing = this.add.rectangle(e.x - 4, e.y - 4, 32, 5, 0xffd600);
-        swing.setOrigin(0.15, 0.5);
-        swing.angle = -20;
-        this.tweens.add({
-          targets: swing,
-          angle: 90,
-          x: e.x + 6,
-          duration: 100,
-          yoyo: true,
-          ease: 'Power2',
-          onComplete: () => swing.destroy()
-        });
-        // Slash flash
-        const flash = this.add.circle(e.x, e.y - 6, 8, 0xffeb3b, 0.6);
-        this.tweens.add({ targets: flash, alpha: 0, scale: 1.8, duration: 120, onComplete: () => flash.destroy() });
-
-        // Stronger, more reliable damage
-        if (nearestDist < 34) {
-          const loss = 1;
-          this.armyCount = Math.max(0, this.armyCount - loss);
-          const txt = this.add.text(nearest.x, nearest.y - 12, '-' + loss, { fontSize: '22px', color: '#ff1744', fontStyle: 'bold' }).setOrigin(0.5);
-          this.tweens.add({ targets: txt, y: nearest.y - 40, alpha: 0, duration: 350, onComplete: () => txt.destroy() });
-          this.spawnArmy();
-        }
-      }
+      if (e.gone || e.touched || e.r || e.y < this.formY - 30) return;
+      const s = this.soldiers.find(s => Math.abs(s.x - e.x) < 13 && Math.abs(s.y - e.y) < 13);
+      if (!s) return;
+      e.touched = true;
+      if (Math.random() < CFG.contactLossChance) this.lose(1, s);
     });
-
-    // Obstacles damage on hit
-    this.army.forEach(s => {
-      this.obstacles.forEach(o => {
-        if (!o.active || o.hit) return;
-        if (Math.abs(s.x - o.x) < 20 && Math.abs(s.y - o.y) < 16) {
-          o.hit = true;
-          this.armyCount = Math.max(0, this.armyCount - 1);
-          const txt = this.add.text(o.x, o.y - 10, '-1', { fontSize: '20px', color: '#ff1744', fontStyle: 'bold' }).setOrigin(0.5);
-          this.tweens.add({ targets: txt, y: o.y - 35, alpha: 0, duration: 400, onComplete: () => txt.destroy() });
-          this.spawnArmy();
-        }
-      });
+    // Oni: club swing on a timer.
+    this.enemies.forEach(e => {
+      if (e.kind !== 'oni' || e.gone) return;
+      e.swing -= wdt * 1000;
+      if (e.swing > 0) return;
+      let best = null, bestD = CFG.oni.reach;
+      this.soldiers.forEach(s => { const d = Math.hypot(s.x - e.x, s.y - e.y); if (d < bestD) { bestD = d; best = s; } });
+      if (!best) return;
+      e.swing = CFG.oni.swingMs;
+      this.enemySlash(e.x, e.y + 14, 1.2, 0xffd54f);
+      if (bestD < CFG.oni.hitReach) this.lose(1, best);
     });
-
-    this.gates = this.gates.filter(g => g.y < 740);
-    this.enemies = this.enemies.filter(e => e.active && e.y < 740);
-    this.obstacles = this.obstacles.filter(o => o.active && o.y < 740);
-
-    this.progress = Math.min(100, this.progress + (speed * delta / 1000) / LEVEL_LENGTH * 100);
-    this.prog.width = 250 * (this.progress / 100);
-    this.specialFill.width = 180 * (this.specialCharge / this.specialMax);
-    this.coinLabel.setText('Souls: ' + coins + ' (+' + this.coinsEarned + ')');
-    this.armyLabel.setText('Samurai: ' + this.armyCount);
-
-    if (this.slowActive) {
-      this.slowTimer -= delta;
-      if (this.slowTimer <= 0) {
-        this.slowActive = false;
-        this.specialBtn.setFillStyle(0x5e35b1);
-        this.specialBtnText.setText('SPECIAL');
+    // Spikes.
+    this.spikes.forEach(o => {
+      if (o.hit || o.y < this.formY - 20) return;
+      const s = this.soldiers.find(s => Math.abs(s.x - o.x) < 17 && Math.abs(s.y - o.y) < 13);
+      if (!s) return;
+      o.hit = true;
+      o.obj.setTint(0xff8a80);
+      this.lose(1, s);
+    });
+    // Boss: cleaver sweep.
+    if (this.fight && !this.boss.gone) {
+      const b = this.boss;
+      b.swing -= wdt * 1000;
+      b.obj.setRotation(b.swing < 260 ? -0.12 : 0);        // wind-up tell
+      if (b.swing <= 0) {
+        b.swing = CFG.boss.swingMs;
+        this.enemySlash(b.x, b.y + 70, 3.2, 0xffffff);
+        this.cameras.main.shake(200, 0.012);
+        this.lose(CFG.boss.cleave);
       }
     }
-
-    if (this.miniBossActive) {
-      this.updateMiniBoss(time);
-    }
-
-    if (this.armyCount <= 0) this.finish('CLAN WIPED');
-    if (this.progress >= 100 && this.bossDefeated) this.finish('PATH CLEARED');
   }
 
-  activateSlow() {
-    if (this.specialCharge >= this.specialMax && !this.slowActive) {
-      this.specialCharge = 0;
-      this.slowActive = true;
-      this.slowTimer = 4000;
-      this.specialBtn.setFillStyle(0x311b92);
-      this.specialBtnText.setText('ACTIVE');
+  /* ---------- army bookkeeping ---------- */
+  syncArmy(instant) {
+    const want = Math.min(this.count, CFG.maxDrawn);
+    while (this.soldiers.length < want) {
+      this.soldiers.push({ x: this.armyX + (Math.random() - 0.5) * 30, y: this.formY + 20 + Math.random() * 30,
+        cd: Math.random() * 200, lunge: 0, pop: instant ? 1 : 0, img: this.img(0, -200, 'samurai') });
     }
+    while (this.soldiers.length > want) this.dropSoldier(this.soldiers[this.soldiers.length - 1]);
   }
 
-  spawnFatDemon() {
-    this.miniBoss = this.add.container(200, 200);
-    this.miniBoss.add([
-      this.add.ellipse(0, 36, 90, 24, 0x000000, 0.35),
-      this.add.ellipse(0, 0, 80, 70, 0x6a1b9a),
-      this.add.ellipse(0, -36, 60, 42, 0x4a148c),
-      this.add.rectangle(-16, -50, 12, 22, 0xffd600),
-      this.add.rectangle(16, -50, 12, 22, 0xffd600),
-      this.add.rectangle(0, -28, 28, 8, 0xff80ab),
-      this.add.rectangle(48, 4, 56, 12, 0x8d6e63)
-    ]);
-    this.miniBoss.hp = 180;
-    this.miniBoss.maxHp = 180;
-    this.miniBoss.lastSwing = 0;
+  dropSoldier(s) {
+    const i = this.soldiers.indexOf(s);
+    if (i < 0) return;
+    this.soldiers.splice(i, 1);
+    this.burst.setParticleTint(0x5c6bc0);
+    this.burst.explode(8, s.x, s.y);
+    s.img.destroy();
   }
 
-  beginMiniBossFight() {
-    this.miniBossActive = true;
-
-    // Clear the entire screen of clutter
-    this.gates.forEach(g => g.destroy());
-    this.gates = [];
-    this.enemies.forEach(e => e.destroy());
-    this.enemies = [];
-    this.obstacles.forEach(o => o.destroy());
-    this.obstacles = [];
-
-    // Move boss closer to the army
-    if (this.miniBoss) {
-      this.miniBoss.x = 200;
-      this.miniBoss.y = 420;
-    }
-
-    // Cinematic bars
-    this.topBar = this.add.rectangle(200, -40, 400, 80, 0x000000).setDepth(100);
-    this.bottomBar = this.add.rectangle(200, 760, 400, 80, 0x000000).setDepth(100);
-    this.tweens.add({ targets: this.topBar, y: 40, duration: 400, ease: 'Power2' });
-    this.tweens.add({ targets: this.bottomBar, y: 680, duration: 400, ease: 'Power2' });
-
-    // Health bar
-    this.miniBossHpBar = this.add.rectangle(200, 100, BOSS_HP_BAR_WIDTH + 4, 16, 0x3e2723).setDepth(50);
-    this.miniBossHpFill = this.add.rectangle(200 - BOSS_HP_BAR_WIDTH / 2, 100, BOSS_HP_BAR_WIDTH, 12, 0xff1744).setOrigin(0, 0.5).setDepth(51);
-    this.bossLabel = this.add.text(200, 78, 'FAT DEMON', { fontSize: '18px', color: '#fff', fontStyle: 'bold' }).setOrigin(0.5).setDepth(52);
+  lose(n, victim) {
+    if (this.count <= 0) return;
+    this.count = Math.max(0, this.count - n);
+    const at = victim || this.soldiers[0] || { x: this.armyX, y: this.formY };
+    this.float(at.x, at.y - 16, '−' + n, '#ff5252', n > 1 ? 26 : 20);
+    if (victim && this.count < CFG.maxDrawn) this.dropSoldier(victim);
+    this.syncArmy();
+    if (n === 1) this.cameras.main.shake(90, 0.004);
   }
 
-  updateMiniBoss(time) {
-    if (!this.miniBoss || !this.miniBoss.active) return;
-
-    // Health bar
-    if (this.miniBossHpFill) {
-      this.miniBossHpFill.width = BOSS_HP_BAR_WIDTH * Math.max(0, this.miniBoss.hp / this.miniBoss.maxHp);
-    }
-
-    // Machete swings
-    if (time - this.miniBoss.lastSwing > 1100) {
-      this.miniBoss.lastSwing = time;
-      const swing = this.add.rectangle(this.miniBoss.x + 10, this.miniBoss.y, 36, 6, 0xbdbdbd);
-      swing.setOrigin(0, 0.5);
-      this.tweens.add({
-        targets: swing,
-        angle: 70,
-        duration: 180,
-        yoyo: true,
-        onComplete: () => swing.destroy()
-      });
-
-      // Check if any samurai is in swing range
-      this.army.forEach(s => {
-        if (Math.abs(s.x - this.miniBoss.x) < 90 && Math.abs(s.y - this.miniBoss.y) < 70) {
-          this.armyCount = Math.max(0, this.armyCount - 1);
-          const txt = this.add.text(s.x, s.y - 10, '-1', { fontSize: '20px', color: '#ff1744', fontStyle: 'bold' }).setOrigin(0.5);
-          this.tweens.add({ targets: txt, y: s.y - 30, alpha: 0, duration: 400, onComplete: () => txt.destroy() });
-          this.spawnArmy();
-        }
-      });
-    }
-
-    // Player damages the fat demon
-    this.army.forEach(s => {
-      // The killing blow clears the boss; later samurai in this loop must stop.
-      if (!this.miniBoss) return;
-      if (!s.lastAttack) s.lastAttack = 0;
-      if (time - s.lastAttack < 180) return;
-      const dist = Phaser.Math.Distance.Between(s.x, s.y, this.miniBoss.x, this.miniBoss.y);
-      if (dist < 140) {
-        s.lastAttack = time;
-        // Show sword swing
-        const sword = this.add.rectangle(s.x + 4, s.y - 6, 20, 4, 0xe0e0e0);
-        sword.setOrigin(0, 0.5);
-        this.tweens.add({ targets: sword, angle: 60, duration: 100, yoyo: true, onComplete: () => sword.destroy() });
-
-        const dmg = bladeDamage();
-        this.miniBoss.hp -= dmg;
-        const dmgTxt = this.add.text(this.miniBoss.x + Phaser.Math.Between(-20, 20), this.miniBoss.y - 20, '-' + fmtDamage(dmg), { fontSize: '16px', color: '#ffeb3b' }).setOrigin(0.5);
-        this.tweens.add({ targets: dmgTxt, y: this.miniBoss.y - 40, alpha: 0, duration: 350, onComplete: () => dmgTxt.destroy() });
-
-        if (this.miniBoss.hp <= 0) {
-          this.endMiniBoss();
-        }
-      }
-    });
+  /* ---------- special ---------- */
+  activateSpecial() {
+    if (this.over || this.slowLeft > 0 || this.charge < CFG.specialMax) return;
+    this.charge = 0;
+    this.slowLeft = CFG.slowMs;
+    this.cameras.main.flash(180, 150, 110, 255);
+    this.banner('SLOW MOTION', '');
   }
 
-  endMiniBoss() {
-    const gain = 80;
-    this.coinsEarned += gain;
-    coins += gain;
-    saveProgress();
-    const txt = this.add.text(200, 300, 'MINI BOSS DOWN!', { fontSize: '24px', color: '#ffd600', fontStyle: 'bold' }).setOrigin(0.5);
-    this.tweens.add({ targets: txt, y: 260, alpha: 0, duration: 1000, onComplete: () => txt.destroy() });
+  /* ---------- boss ---------- */
+  startBossFight() {
+    this.fight = true;
+    [...this.spikes, ...this.enemies.filter(e => e !== this.boss)].forEach(o => { o.obj.destroy(); o.gone = true; });
+    this.gates.forEach(g => { g.left.obj.destroy(); g.right.obj.destroy(); g.gone = true; });
+    this.spikes = []; this.gates = []; this.enemies = [this.boss];
+    this.bars = [this.add.rectangle(W / 2, -30, W, 60, 0x000000).setDepth(4500), this.add.rectangle(W / 2, H + 30, W, 60, 0x000000).setDepth(4500)];
+    this.tweens.add({ targets: this.bars[0], y: 30, duration: 400, ease: 'Cubic.out' });
+    this.tweens.add({ targets: this.bars[1], y: H - 30, duration: 400, ease: 'Cubic.out' });
+    this.bossName = this.txt(W / 2, 88, 'FAT DEMON', 17, '#fff', { stroke: '#2a0038', strokeThickness: 4 }).setDepth(5001);
+    this.bossGhost = 1;
+    this.cameras.main.shake(300, 0.008);
+  }
 
-    if (this.topBar) this.tweens.add({ targets: this.topBar, y: -40, duration: 300, onComplete: () => this.topBar.destroy() });
-    if (this.bottomBar) this.tweens.add({ targets: this.bottomBar, y: 760, duration: 300, onComplete: () => this.bottomBar.destroy() });
-
-    if (this.miniBoss) this.miniBoss.destroy();
-    if (this.miniBossHpBar) this.miniBossHpBar.destroy();
-    if (this.miniBossHpFill) this.miniBossHpFill.destroy();
-    if (this.bossLabel) this.bossLabel.destroy();
-    this.miniBoss = null;
-    this.miniBossActive = false;
+  endBossFight() {
+    this.fight = false;
     this.bossDefeated = true;
-    this.speedMod *= 0.97;
-
-    // Reset army position for running
-    this.army.forEach(s => { s.y = 560; });
+    this.speedMod *= CFG.oniSlow;
+    this.bossName.destroy();
+    this.tweens.add({ targets: this.bars[0], y: -30, duration: 300 });
+    this.tweens.add({ targets: this.bars[1], y: H + 30, duration: 300 });
+    this.cameras.main.shake(350, 0.014);
+    this.cameras.main.flash(250, 255, 240, 200);
+    this.banner('DEMON SLAIN', '+' + CFG.boss.souls + ' souls');
+    Save.save();
   }
 
-  finish(msg) {
+  /* ---------- fx ---------- */
+  enemySlash(x, y, scale, tint) {
+    const sl = this.img(x, y, 'slash').setDepth(2950).setRotation(Math.PI / 2 - 0.8).setScale(S * scale).setTint(tint);
+    this.tweens.add({ targets: sl, rotation: Math.PI / 2 + 0.8, alpha: 0, duration: 200, onComplete: () => sl.destroy() });
+  }
+
+  float(x, y, str, color, size) {
+    const t = this.txt(x, y, str, size, color, { stroke: '#000', strokeThickness: 3 }).setDepth(4000);
+    this.tweens.add({ targets: t, y: y - 30, alpha: 0, duration: 550, ease: 'Cubic.out', onComplete: () => t.destroy() });
+  }
+
+  banner(title, sub) {
+    const t = this.txt(W / 2, 250, title, 30, '#ffd54f', { stroke: '#2a0a14', strokeThickness: 6 }).setDepth(5200).setScale(0.4);
+    const s = this.txt(W / 2, 282, sub, 14, '#fff', { stroke: '#2a0a14', strokeThickness: 4 }).setDepth(5200).setAlpha(0);
+    this.tweens.add({ targets: t, scale: 1, duration: 220, ease: 'Back.out' });
+    this.tweens.add({ targets: s, alpha: 1, duration: 220 });
+    this.tweens.add({ targets: [t, s], alpha: 0, delay: 1300, duration: 400, onComplete: () => { t.destroy(); s.destroy(); } });
+  }
+
+  /* ---------- hud ---------- */
+  updateHud(dt) {
+    const g = this.hud; g.clear();
+    // progress
+    const px = 70, pw = 260, p = clamp(this.dist / LEVEL.length, 0, 1);
+    g.fillStyle(0x000000, 0.5).fillRoundedRect(px - 3, 21, pw + 6, 16, 8);
+    if (p > 0.02) g.fillStyle(0xff7043, 1).fillRoundedRect(px, 24, pw * p, 10, 5);
+    g.fillStyle(0xab47bc, 1).fillCircle(px + pw * (LEVEL.bossAt - 230) / LEVEL.length, 29, 6);     // boss marker
+    g.fillStyle(0xffffff, 1).fillCircle(px + pw * p, 29, 4);
+    // boss bar
+    if (this.fight) {
+      const r = clamp(this.boss.hp / this.boss.maxHp, 0, 1), bw = 240, bx = W / 2 - bw / 2;
+      this.bossGhost += (r - this.bossGhost) * damp(4, dt);
+      g.fillStyle(0x000000, 0.7).fillRoundedRect(bx - 3, 101, bw + 6, 18, 6);
+      g.fillStyle(0xffffff, 0.8).fillRect(bx, 104, bw * this.bossGhost, 12);
+      g.fillStyle(0xe53935, 1).fillRect(bx, 104, bw * r, 12);
+    }
+    // special bar + button
+    const slowing = this.slowLeft > 0;
+    const fill = slowing ? this.slowLeft / CFG.slowMs : this.charge / CFG.specialMax;
+    const ready = !slowing && this.charge >= CFG.specialMax;
+    g.fillStyle(0x000000, 0.5).fillRoundedRect(27, 673, 206, 16, 8);
+    if (fill > 0.03) g.fillStyle(slowing ? 0xb388ff : 0x7c4dff, 1).fillRoundedRect(30, 676, 200 * fill, 10, 5);
+    const pulse = ready ? 1 + Math.sin(this.time.now * 0.008) * 0.07 : 1;
+    g.fillStyle(0x000000, 0.4).fillCircle(336, 679, 33 * pulse);
+    g.fillStyle(ready ? 0x7c4dff : slowing ? 0x311b92 : 0x3a3050, 1).fillCircle(336, 676, 32 * pulse);
+    g.lineStyle(3, ready ? 0xffffff : 0x8c80a8, ready ? 1 : 0.5).strokeCircle(336, 676, 32 * pulse);
+    this.specialText.setText(slowing ? (this.slowLeft / 1000).toFixed(1) : 'SLOW').setAlpha(ready || slowing ? 1 : 0.45);
+    this.specialHint.setText(ready ? 'SPECIAL READY' : slowing ? 'SLOW MOTION' : 'SPECIAL');
+
+    this.soulText.setText(Save.souls + (this.earned ? '  +' + this.earned : ''));
+    this.countText.setText(this.count).setPosition(this.armyX, this.formY - 30);
+  }
+
+  /* ---------- end ---------- */
+  finish(win) {
     this.over = true;
-    saveProgress();
-    this.add.rectangle(200, 360, 400, 720, 0x000000, 0.75);
-    this.add.text(200, 300, msg, { fontSize: '34px', color: '#fff' }).setOrigin(0.5);
-    this.add.text(200, 355, '+' + this.coinsEarned + ' souls', { fontSize: '22px', color: '#ce93d8' }).setOrigin(0.5);
-    this.add.text(200, 420, 'Tap to continue', { fontSize: '18px', color: '#bbb' }).setOrigin(0.5);
-    this.input.once('pointerdown', () => this.scene.start('UpgradeScene'));
+    Save.save();
+    this.countText.setVisible(false);
+    const D = 6000;
+    const shade = this.add.rectangle(W / 2, H / 2, W, H, 0x0a0610, 1).setAlpha(0).setDepth(D);
+    this.tweens.add({ targets: shade, alpha: 0.78, duration: 350 });
+    const title = this.txt(W / 2, 280, win ? 'PATH CLEARED' : 'CLAN WIPED', 38, win ? '#ffd54f' : '#ff5252', { stroke: '#000', strokeThickness: 6 }).setDepth(D + 1).setScale(0.3);
+    this.tweens.add({ targets: title, scale: 1, duration: 350, ease: 'Back.out' });
+    this.img(W / 2 - 62, 346, 'soul').setScale(S * 1.6).setDepth(D + 1);
+    this.txt(W / 2 + 6, 346, '+' + this.earned + ' souls', 24, '#e1bee7').setDepth(D + 1);
+    const tap = this.txt(W / 2, 430, 'tap to continue', 16, '#bbb', { fontStyle: 'normal' }).setDepth(D + 1).setAlpha(0);
+    this.time.delayedCall(700, () => {
+      this.tweens.add({ targets: tap, alpha: 1, duration: 500, yoyo: true, repeat: -1 });
+      this.input.once('pointerdown', () => this.scene.start('Menu'));
+    });
   }
 }
 
-const config = {
+/* ============================================================
+   BOOT
+   ============================================================ */
+window.samuraiGame = new Phaser.Game({
   type: Phaser.AUTO,
-  width: 400,
-  height: 720,
   parent: 'game',
-  backgroundColor: '#6d4c41',
-  scene: [UpgradeScene, GameScene]
-};
-new Phaser.Game(config);
+  width: W * R,
+  height: H * R,
+  backgroundColor: '#120c14',
+  scale: { mode: Phaser.Scale.FIT, autoCenter: Phaser.Scale.CENTER_BOTH },
+  scene: [BootScene, MenuScene, GameScene],
+});
 </script>
 </body>
 </html>
