@@ -76,6 +76,8 @@ const CFG = {
   },
   // The glowing lucky charm that slides from side to side. Harmless; break it for the damage bonus.
   charm: { speed: 70, lead: 110, souls: 15 },   // speed: px/s sideways; lead: how far in front of its gate row it appears
+  // The saga boss stage's storm: every `everyMs` a wave of lightning sweeps down the lane the army stands in.
+  storm: { everyMs: [4000, 5000], warnMs: 1100, sweepMs: 380, half: 52, cleave: 2, cleaveShare: 0.08 },
   levelPace: 0.10,         // each level in a saga runs this much faster than the one before (the army and the enemies)
 };
 
@@ -94,7 +96,7 @@ const LEVEL_SPECS = [
   { name: 'The Fat Demon', demons: true, rows: 18, seg: 370, pack: [6, 2.4, 0.16], crowd: 0.14, hp: 8, charms: [[5, 11, 15], 11, 4],
     bosses: [{ type: 'giant', after: 8, hp: 1800 }, { type: 'demon', after: 'end', hp: 3000 }] },
   // The saga boss stage: a short run to build an army, then the fight.
-  { name: 'Takemikazuchi', demons: true, rows: 8, seg: 370, pack: [5, 2.4, 0.30], crowd: 0.15, hp: 8, pace: 1.2, charms: [[4], 11, 0],
+  { name: 'Takemikazuchi', demons: true, storm: true, rows: 8, seg: 370, pack: [5, 2.4, 0.30], crowd: 0.15, hp: 8, pace: 1.2, charms: [[4], 11, 0],
     bosses: [{ type: 'thunder', after: 'end', hp: 2600 }] },
 ];
 const SAGA_LEVELS = 3;                                        // ordinary levels per saga; the stage after them is the saga boss
@@ -102,6 +104,7 @@ const GOOD_GATES = ['+3', '+3', 'x2', '+4', '+5', '+6', 'x2', '+8', '+10', '+12'
 // Turns a spec into positions measured in distance along the path (px).
 function layoutLevel(spec, index) {
   const L = { name: spec.name, demons: spec.demons, charms: spec.charms || [[], 0, 0], gates: [], packs: [], spikes: [], bosses: [] };
+  L.storm = !!spec.storm;                                    // dark sky, broken ground and lightning waves
   L.pace = spec.pace || 1 + CFG.levelPace * (index % 3);                 // level 1, 2, 3 of each saga
   let d = 300;
   const hp = spec.hp;
@@ -257,6 +260,7 @@ const Sound = {
     warn: (S) => S.tone({ type: 'square', f: 220, to: 440, dur: 0.3, vol: 0.14 }),
     warnPower: (S) => S.tone({ type: 'sawtooth', f: 130, to: 620, dur: 0.7, vol: 0.18, attack: 0.3 }),
     slam: (S) => { S.tone({ f: 130, to: 32, dur: 0.45, vol: 0.9 }); S.noise({ type: 'lowpass', f: 700, to: 120, dur: 0.35, vol: 0.5 }); },
+    thunder: (S, r) => { S.noise({ type: 'lowpass', f: 320 * r, to: 60, dur: 1.3, vol: 0.45, attack: 0.03 }); S.tone({ f: 70, to: 32, dur: 1.1, vol: 0.4 }); },
     dodge: (S, r, t) => { S.tone({ type: 'triangle', f: 988, dur: 0.07, vol: 0.25 }); S.tone({ type: 'triangle', f: 1319, dur: 0.12, vol: 0.25, at: t + 0.06 }); },
     win: (S, r, t) => [294, 349, 440, 587, 698, 880].forEach((f, i) => S.tone({ type: 'triangle', f, dur: 0.5, vol: 0.35, at: t + i * 0.11 })),
     defeat: (S, r, t) => [440, 349, 294, 233, 147].forEach((f, i) => S.tone({ type: 'triangle', f, dur: 0.6, vol: 0.3, at: t + i * 0.2 })),
@@ -624,6 +628,26 @@ const Art = {
       [2, w - 12].forEach(x => { Art.rr(c, x, y + 2, 10, 12, 3); c.fillStyle = (y / 16) % 2 ? '#9e9e9e' : '#868686'; c.fill(); });
     }
   },
+  deadTree(c) {
+    Art.shadow(c, 30, 54, 16);
+    c.strokeStyle = '#1c1512'; c.lineWidth = 6; c.beginPath(); c.moveTo(30, 54); c.lineTo(29, 26); c.stroke();
+    c.lineWidth = 3; c.beginPath();
+    [[29, 36, 14, 22], [29, 30, 46, 16], [29, 26, 22, 6], [29, 28, 38, 4], [14, 22, 6, 14], [46, 16, 54, 6], [22, 6, 16, 0]].forEach(([a, b, x, y]) => { c.moveTo(a, b); c.lineTo(x, y); });
+    c.stroke();
+    c.strokeStyle = 'rgba(255,120,60,0.55)'; c.lineWidth = 1; c.beginPath(); c.moveTo(29, 46); c.lineTo(27, 38); c.lineTo(30, 32); c.stroke();   // ember crack
+  },
+  rubble(c) {
+    Art.ell(c, 15, 20, 14, 4, 'rgba(0,0,0,0.4)');
+    [[4, 12, 10, 9, '#4a4a52'], [12, 8, 12, 12, '#5d5d66'], [20, 14, 8, 7, '#3b3b44']].forEach(([x, y, w, h, col]) => { Art.rr(c, x, y, w, h, 2.5); c.fillStyle = col; c.fill(); });
+    c.strokeStyle = '#1c1c22'; c.lineWidth = 1; c.beginPath(); c.moveTo(14, 9); c.lineTo(18, 14); c.lineTo(16, 19); c.stroke();
+  },
+  crack(c) {
+    Art.ell(c, 30, 20, 26, 14, 'rgba(10,6,14,0.45)');                                         // scorch mark
+    c.strokeStyle = '#0e0a12'; c.lineWidth = 2.2; c.beginPath();
+    [[4, 22], [16, 17], [22, 23], [32, 15], [41, 22], [56, 16]].forEach((p, i) => i ? c.lineTo(...p) : c.moveTo(...p));
+    c.moveTo(22, 23); c.lineTo(20, 34); c.moveTo(32, 15); c.lineTo(36, 5); c.stroke();
+    c.strokeStyle = 'rgba(179,136,255,0.5)'; c.lineWidth = 0.8; c.beginPath(); c.moveTo(16, 17); c.lineTo(22, 23); c.lineTo(32, 15); c.stroke();
+  },
   lantern(c) {
     Art.shadow(c, 12, 38, 9);
     c.fillStyle = '#8d8d8d'; c.fillRect(9, 22, 6, 15); Art.rr(c, 5, 34, 14, 4, 1.5); c.fill();
@@ -648,7 +672,7 @@ const Art = {
     m('samurai', 36, 50); m('katana', 12, 36); m('demon', 32, 40); m('zombie', 32, 40); m('boss', 130, 126); m('giant', 110, 130); m('thunder', 130, 134);
     Art.make(scene, 'tenguBoss', 130, 120, Art.tengu); m('charm', 40, 44); m('glow', 64, 64);
     m('spike', 36, 28); m('slash', 48, 48); m('soul', 16, 16); m('dot', 8, 8); m('petal', 8, 6);
-    m('grass', 64, 64); m('path', 280, 128); m('lantern', 24, 42); m('tree', 60, 58); m('menuBg', W, H);
+    m('grass', 64, 64); m('path', 280, 128); m('lantern', 24, 42); m('deadTree', 60, 58); m('rubble', 30, 24); m('crack', 60, 40); m('tree', 60, 58); m('menuBg', W, H);
   },
 };
 
@@ -915,9 +939,22 @@ class GameScene extends BaseScene {
     fog.fillGradientStyle(0x1a1030, 0x1a1030, 0x1a1030, 0x1a1030, 0.75, 0.75, 0, 0).fillRect(0, 0, W, 200);
     for (let d = 100; d < this.L.length + 600; d += 150) {
       const left = (d / 150) % 2 < 1;
-      const key = Math.random() < 0.55 ? 'tree' : 'lantern';
+      const key = this.L.storm ? (Math.random() < 0.6 ? 'deadTree' : 'rubble') : Math.random() < 0.55 ? 'tree' : 'lantern';
       this.decor.push({ d, x: left ? 24 + Math.random() * 12 : W - 24 - Math.random() * 12, obj: this.img(0, -200, key), flat: true });
     }
+    if (!this.L.storm) return;
+    // The storm stage: scorched colours, cracked ground, a dark sky that flickers.
+    this.grass.setTint(0x4b5560); this.path.setTint(0x7d7388);
+    fog.fillGradientStyle(0x05020c, 0x05020c, 0x05020c, 0x05020c, 0.85, 0.85, 0, 0).fillRect(0, 0, W, 300);
+    for (let d = 160; d < this.L.length + 500; d += 110 + Math.random() * 120) {
+      this.decor.push({ d, x: 90 + Math.random() * 220, obj: this.img(0, -200, 'crack').setRotation(Math.random() * 3), flat: true });
+    }
+    this.add.rectangle(W / 2, H / 2, W, H, 0x05020c, 0.3).setDepth(-7);
+    this.skyFlash = this.add.rectangle(W / 2, H / 2, W, H, 0xc9b8ff, 1).setAlpha(0).setDepth(-6);
+    this.skyT = 1500;
+    this.stormT = CFG.storm.everyMs[0];
+    this.wave = null;
+    this.waveImg = this.img(0, -200, 'slash').setTint(0xd1c4e9).setBlendMode(Phaser.BlendModes.ADD).setDepth(2955).setVisible(false);
   }
 
   buildLevel() {
@@ -981,7 +1018,11 @@ class GameScene extends BaseScene {
     this.burst = this.add.particles(0, 0, 'dot', {
       speed: { min: 40, max: 150 }, lifespan: { min: 250, max: 480 }, scale: { start: S, end: 0 }, emitting: false,
     }).setDepth(3000);
-    this.add.particles(0, 0, 'petal', {
+    if (this.L.storm) this.add.particles(0, 0, 'dot', {      // rain
+      x: { min: 0, max: W + 80 }, y: -10, lifespan: 900, speedY: { min: 760, max: 900 }, speedX: -90,
+      scaleX: S * 0.25, scaleY: S * 2.6, frequency: 28, alpha: 0.28, tint: 0xb0bec5,
+    }).setDepth(3500);
+    else this.add.particles(0, 0, 'petal', {
       x: { min: 0, max: W }, y: -10, lifespan: 8000, speedY: { min: 35, max: 80 }, speedX: { min: -25, max: 10 },
       scale: S, rotate: { start: 0, end: 360 }, frequency: 500, alpha: 0.8,
     }).setDepth(3500);
@@ -1027,6 +1068,8 @@ class GameScene extends BaseScene {
     this.updateGates();
     this.updateCombat(dt);
     this.updateHazards(wdt);
+    if (this.L.storm) this.updateStorm(wdt);
+    this.drawBolts(wdt);
     this.updateHud(dt);
 
     if (this.count <= 0) this.finish(false);
@@ -1367,6 +1410,52 @@ class GameScene extends BaseScene {
     return list[Math.floor(Math.random() * list.length)];
   }
 
+  // The storm stage: lightning flickers in the sky, and on the run to the boss a wave of it sweeps down a marked lane.
+  updateStorm(wdt) {
+    const ms = wdt * 1000, C = CFG.storm;
+    this.skyT -= ms;
+    if (this.skyT <= 0) {                                    // distant lightning
+      this.skyT = 1800 + Math.random() * 3200;
+      this.skyFlash.setAlpha(0.35);
+      this.tweens.add({ targets: this.skyFlash, alpha: 0, duration: 260 });
+      const x = Math.random() * W;
+      this.zap(x, -10, x + (Math.random() - 0.5) * 160, 120 + Math.random() * 120, 240);
+      Sound.play('thunder');
+    }
+    const w = this.wave;
+    if (!w) {
+      if (this.fight || this.finaleDone) return;             // the waves stop once the boss fight begins
+      this.stormT -= ms;
+      if (this.stormT > 0) return;
+      this.stormT = C.everyMs[0] + Math.random() * (C.everyMs[1] - C.everyMs[0]);
+      this.wave = { x: clamp(this.armyX, CFG.steerMin + 20, CFG.steerMax - 20), t: C.warnMs, y: null, done: false };
+      Sound.play('warn');
+      return;
+    }
+    w.t -= ms;
+    if (w.y === null) {                                      // warning: red lines mark the lane
+      const k = clamp(1 - w.t / C.warnMs, 0, 1), blink = 0.55 + 0.45 * Math.sin(this.time.now * 0.03);
+      this.danger.fillStyle(0xff1744, 0.08 + 0.14 * k).fillRect(w.x - C.half, 0, C.half * 2, H);
+      this.danger.lineStyle(3, 0xff1744, (0.5 + 0.5 * k) * blink).lineBetween(w.x - C.half, 0, w.x - C.half, H).lineBetween(w.x + C.half, 0, w.x + C.half, H);
+      if (w.t > 0) return;
+      w.y = -40; w.t = C.sweepMs;
+      Sound.play('slam'); Sound.play('thunder');
+      this.skyFlash.setAlpha(0.5); this.tweens.add({ targets: this.skyFlash, alpha: 0, duration: 300 });
+      return;
+    }
+    w.y = -40 + (H + 80) * clamp(1 - w.t / C.sweepMs, 0, 1); // the wave itself, sweeping top to bottom
+    this.waveImg.setVisible(true).setPosition(w.x, w.y).setRotation(Math.PI / 2).setScale(S * 3, S * 2.9);
+    this.zap(w.x - C.half, w.y - 30, w.x + C.half, w.y - 30, 140);
+    if (Math.random() < 0.6) this.zap(w.x + (Math.random() - 0.5) * C.half * 2, w.y - 120, w.x + (Math.random() - 0.5) * C.half * 2, w.y, 160);
+    if (!w.done && w.y >= this.formY) {
+      w.done = true;
+      this.shake(220, 0.016);
+      if (Math.abs(this.armyX - w.x) < C.half + 14) this.lose(Math.max(C.cleave, Math.ceil(this.count * C.cleaveShare)));
+      else { Sound.play('dodge'); this.float(this.armyX, this.formY - 46, 'DODGED', '#80d8ff', 18); }
+    }
+    if (w.t <= 0) { this.wave = null; this.waveImg.setVisible(false); }
+  }
+
   // A jagged streak of lightning that fades over `life` ms.
   zap(x1, y1, x2, y2, life = 160) {
     const pts = [[x1, y1]], n = Math.max(3, Math.round(Math.hypot(x2 - x1, y2 - y1) / 28));
@@ -1380,7 +1469,7 @@ class GameScene extends BaseScene {
 
   // Draws lightning, the storm around a second-phase boss, and the lightning left on the ground.
   updateLightning(b, wdt) {
-    const g = this.boltG, ms = wdt * 1000;
+    const ms = wdt * 1000;
     if (b.phase2 && Math.random() < 0.5) {                   // storm crackling around him
       const a = Math.random() * 6.28, r = 46 + Math.random() * 16;
       this.zap(b.x + Math.cos(a) * r, b.obj.y + Math.sin(a) * r, b.x + Math.cos(a + 1) * r, b.obj.y + Math.sin(a + 1) * r, 110);
@@ -1396,6 +1485,10 @@ class GameScene extends BaseScene {
         this.lose(Math.max(1, Math.ceil(this.count * b.prof.lingerShare)));
       }
     });
+  }
+
+  drawBolts(wdt) {
+    const g = this.boltG, ms = wdt * 1000;
     this.bolts = this.bolts.filter(z => (z.t -= ms) > 0);
     this.bolts.forEach(z => {
       const a = z.t / z.life;
