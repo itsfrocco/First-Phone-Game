@@ -78,8 +78,8 @@ const CFG = {
   charm: { speed: 70, lead: 110, souls: 15 },   // speed: px/s sideways; lead: how far in front of its gate row it appears
   // The saga boss stage's storm: every `everyMs` a wave of lightning sweeps down the lane the army stands in.
   storm: { everyMs: [4000, 5000], warnMs: 1100, sweepMs: 380, half: 52, cleave: 2, cleaveShare: 0.08 },
-  // Futsu-no-mitama: extra lightning damage on top of each hit, as a share of the hit, doubled or halved by the target's element.
-  thunderBlade: { bonus: 0.25, strong: ['water', 'metal', 'flying'], weak: ['earth', 'fire', 'thunder'], strongMult: 2, weakMult: 0.5 },
+  // Futsu-no-mitama: its lightning adds to hits on some kinds of foe and is shrugged off by others. Everything else takes normal damage.
+  thunderBlade: { strong: ['water', 'metal', 'flying'], strongBonus: 0.15, weak: ['earth', 'fire', 'thunder'], weakPenalty: 0.15 },
   levelPace: 0.10,         // each level in a saga runs this much faster than the one before (the army and the enemies)
 };
 
@@ -110,13 +110,13 @@ const GEAR = {
   ],
   weapon: [
     { id: '', name: 'Clan Katana', effect: 'A trusty blade.' },
-    { id: 'thunder', name: 'Futsu-no-mitama', boss: true, effect: '+25% lightning damage. Strong against water, metal and flying foes; weak against earth, fire and thunder.',
+    { id: 'thunder', name: 'Futsu-no-mitama', boss: true, effect: '+15% damage to flying, armoured and water foes. 15% less to earth, fire and thunder foes.',
       lore: "A sword once carried by Takemikazuchi. In the old stories, when the first emperor's forces were stalled, Takemikazuchi did not descend himself. Instead he sent this blade down from the heavens so the campaign could continue. It is said the sword carries a fragment of his thunder, striking with the same force he used when he crushed those who opposed the heavenly order. Those who wield it now do so with his reluctant respect, not his blessing." },
   ],
 };
 // What each kind of enemy is made of, for weapons that favour or struggle against certain foes.
 // Kinds not listed are neutral. Future enemies (water, metal, earth, fire...) get their entry here.
-const ELEMENT = { tenguBoss: 'flying', thunder: 'thunder' };
+const ELEMENT = { tenguBoss: 'flying', thunder: 'metal' };      // 'metal' means armoured
 const SAGA_LEVELS = 3;                                        // ordinary levels per saga; the stage after them is the saga boss
 const GOOD_GATES = ['+3', '+3', 'x2', '+4', '+5', '+6', 'x2', '+8', '+10', '+12', '+14', '+16', '+18', '+20', '+22', '+25', '+28', '+30'];
 // Turns a spec into positions measured in distance along the path (px).
@@ -938,7 +938,7 @@ class GameScene extends BaseScene {
   lightningBonus(e, dmg) {
     if (!this.thunderBlade) return 0;
     const T = CFG.thunderBlade, el = ELEMENT[e.kind];
-    return dmg * T.bonus * (T.strong.includes(el) ? T.strongMult : T.weak.includes(el) ? T.weakMult : 1);
+    return dmg * (T.strong.includes(el) ? T.strongBonus : T.weak.includes(el) ? -T.weakPenalty : 0);
   }
 
   // Reads the equipped armor and weapon and restyles any samurai already on the field.
@@ -1290,7 +1290,7 @@ class GameScene extends BaseScene {
       this.time.delayedCall(60, () => { if (e.obj.active) e.obj.clearTint(); });
       this.time.delayedCall(260, () => { e.flash = false; });
     }
-    if (e.r || Math.random() < 0.5) this.float(hx, hy - 12, fmt(dmg), this.thunderBlade ? '#d9a8ff' : '#ffeb3b', 13);
+    if (e.r || Math.random() < 0.5) this.float(hx, hy - 12, fmt(dmg), this.thunderBlade && ELEMENT[e.kind] ? '#d9a8ff' : '#ffeb3b', 13);
     if (e.hp <= 0) this.kill(e);
   }
 
