@@ -69,7 +69,7 @@ const LEVEL = {
   ],
   packs:  [510, 910, 1260, 1610, 1960, 2310, 2610],   // enemy groups; each is bigger than the last
   onis:   [1160, 2160],
-  spikes: [490, 900, 1400, 1835, 2185, 2535, 2950],     // each sits midway between two gate rows, never beside one
+  spikes: [490, 1400, 1835, 2535, 2950],     // each sits midway between two gate rows, never beside one
   bossAt: 3600,
   length: 3700,
 };
@@ -111,6 +111,129 @@ const Stats = {
 const fmt = n => Number.isInteger(n) ? String(n) : n.toFixed(1);
 const clamp = (v, a, b) => Math.max(a, Math.min(b, v));
 const damp = (rate, dt) => 1 - Math.exp(-rate * dt);   // frame-rate independent lerp factor
+
+/* ============================================================
+   SOUND — effects and music are synthesised with Web Audio, so
+   there are no audio files to load
+   ============================================================ */
+const Sound = {
+  ctx: null, last: {},
+  muted: (() => { try { return localStorage.getItem('samurai_muted') === '1'; } catch (e) { return false; } })(),
+  // Browsers only allow audio after a touch, so this runs on the first one.
+  unlock() {
+    if (this.ctx) { if (this.ctx.state === 'suspended') this.ctx.resume(); return; }
+    const AC = window.AudioContext || window.webkitAudioContext;
+    if (!AC) return;
+    const c = this.ctx = new AC();
+    this.master = c.createGain(); this.master.gain.value = this.muted ? 0 : 1; this.master.connect(c.destination);
+    this.sfx = c.createGain(); this.sfx.gain.value = 0.5; this.sfx.connect(this.master);
+    this.mus = c.createGain(); this.mus.gain.value = 0.32; this.mus.connect(this.master);
+    this.noiseBuf = c.createBuffer(1, c.sampleRate, c.sampleRate);
+    const d = this.noiseBuf.getChannelData(0);
+    for (let i = 0; i < d.length; i++) d[i] = Math.random() * 2 - 1;
+    setInterval(() => Music.tick(), 50);
+  },
+  setMuted(m) {
+    this.muted = m;
+    try { localStorage.setItem('samurai_muted', m ? '1' : '0'); } catch (e) {}
+    if (this.ctx) this.master.gain.value = m ? 0 : 1;
+  },
+  env(g, t, vol, dur, attack) {
+    g.gain.setValueAtTime(0.0001, t);
+    g.gain.linearRampToValueAtTime(vol, t + (attack || 0.005));
+    g.gain.exponentialRampToValueAtTime(0.0001, t + dur);
+  },
+  // One oscillator with a pitch slide and a fade-out.
+  tone(o) {
+    const c = this.ctx, t = o.at || c.currentTime, osc = c.createOscillator(), g = c.createGain();
+    osc.type = o.type || 'sine';
+    osc.frequency.setValueAtTime(o.f, t);
+    if (o.to) osc.frequency.exponentialRampToValueAtTime(o.to, t + o.dur);
+    this.env(g, t, o.vol, o.dur, o.attack);
+    osc.connect(g); g.connect(o.out || this.sfx);
+    osc.start(t); osc.stop(t + o.dur + 0.03);
+  },
+  // A burst of filtered noise.
+  noise(o) {
+    const c = this.ctx, t = o.at || c.currentTime, src = c.createBufferSource(), f = c.createBiquadFilter(), g = c.createGain();
+    src.buffer = this.noiseBuf;
+    f.type = o.type || 'bandpass'; f.Q.value = o.q || 1;
+    f.frequency.setValueAtTime(o.f, t);
+    if (o.to) f.frequency.exponentialRampToValueAtTime(o.to, t + o.dur);
+    this.env(g, t, o.vol, o.dur, o.attack);
+    src.connect(f); f.connect(g); g.connect(o.out || this.sfx);
+    src.start(t, Math.random() * 0.5, o.dur + 0.05);
+  },
+  gaps: { slash: 45, soul: 60, claw: 70, kill: 40, lose: 60 },   // minimum ms between repeats, so a big army isn't a wall of noise
+  play(name) {
+    if (!this.ctx || this.muted || this.ctx.state !== 'running') return;
+    const now = performance.now();
+    if (now - (this.last[name] || 0) < (this.gaps[name] || 0)) return;
+    this.last[name] = now;
+    this.bank[name](this, 0.9 + Math.random() * 0.2, this.ctx.currentTime);
+  },
+  bank: {
+    click: (S) => S.tone({ type: 'triangle', f: 660, to: 880, dur: 0.07, vol: 0.3 }),
+    deny: (S) => S.tone({ type: 'square', f: 160, to: 110, dur: 0.16, vol: 0.18 }),
+    buy: (S, r, t) => [523, 659, 784, 1047].forEach((f, i) => S.tone({ type: 'triangle', f, dur: 0.16, vol: 0.3, at: t + i * 0.06 })),
+    slash: (S, r) => S.noise({ f: 3800 * r, to: 900, dur: 0.09, vol: 0.2, q: 1.4 }),
+    claw: (S, r) => S.noise({ type: 'highpass', f: 1800 * r, dur: 0.06, vol: 0.14 }),
+    swing: (S) => S.noise({ f: 900, to: 250, dur: 0.2, vol: 0.4, q: 0.8 }),
+    kill: (S, r) => { S.tone({ f: 190 * r, to: 60, dur: 0.14, vol: 0.4 }); S.noise({ type: 'lowpass', f: 900, dur: 0.08, vol: 0.2 }); },
+    lose: (S, r) => S.tone({ type: 'sawtooth', f: 330 * r, to: 110, dur: 0.18, vol: 0.2 }),
+    soul: (S, r) => S.tone({ f: 1250 * r, to: 1900, dur: 0.08, vol: 0.12 }),
+    gateGood: (S, r, t) => { S.tone({ type: 'triangle', f: 587, dur: 0.14, vol: 0.4 }); S.tone({ type: 'triangle', f: 880, dur: 0.24, vol: 0.4, at: t + 0.09 }); },
+    gateBad: (S, r, t) => { S.tone({ type: 'square', f: 233, dur: 0.14, vol: 0.2 }); S.tone({ type: 'square', f: 156, to: 110, dur: 0.3, vol: 0.2, at: t + 0.1 }); },
+    spike: (S) => { S.tone({ type: 'square', f: 1100, to: 300, dur: 0.1, vol: 0.16 }); S.noise({ type: 'highpass', f: 3000, dur: 0.1, vol: 0.2 }); },
+    special: (S) => { S.tone({ f: 900, to: 90, dur: 0.7, vol: 0.4 }); S.noise({ f: 2500, to: 200, dur: 0.7, vol: 0.2, q: 0.6 }); },
+    gong: (S) => [[98, 0.5], [147, 0.3], [233, 0.2], [311, 0.12]].forEach(([f, v]) => S.tone({ f, dur: 1.8, vol: v, attack: 0.01 })),
+    warn: (S) => S.tone({ type: 'square', f: 220, to: 440, dur: 0.3, vol: 0.14 }),
+    warnPower: (S) => S.tone({ type: 'sawtooth', f: 130, to: 620, dur: 0.7, vol: 0.18, attack: 0.3 }),
+    slam: (S) => { S.tone({ f: 130, to: 32, dur: 0.45, vol: 0.9 }); S.noise({ type: 'lowpass', f: 700, to: 120, dur: 0.35, vol: 0.5 }); },
+    dodge: (S, r, t) => { S.tone({ type: 'triangle', f: 988, dur: 0.07, vol: 0.25 }); S.tone({ type: 'triangle', f: 1319, dur: 0.12, vol: 0.25, at: t + 0.06 }); },
+    win: (S, r, t) => [294, 349, 440, 587, 698, 880].forEach((f, i) => S.tone({ type: 'triangle', f, dur: 0.5, vol: 0.35, at: t + i * 0.11 })),
+    defeat: (S, r, t) => [440, 349, 294, 233, 147].forEach((f, i) => S.tone({ type: 'triangle', f, dur: 0.6, vol: 0.3, at: t + i * 0.2 })),
+  },
+};
+['pointerdown', 'touchend', 'keydown'].forEach(ev => window.addEventListener(ev, () => Sound.unlock(), true));
+document.addEventListener('visibilitychange', () => {
+  if (!Sound.ctx) return;
+  if (document.hidden) Sound.ctx.suspend(); else Sound.ctx.resume();
+});
+
+// A looping tune in a Japanese hirajoshi scale: plucked melody, bass and taiko-style drums.
+const Music = {
+  mode: 'off', rate: 1, step: 0, next: 0,
+  scale: [293.66, 329.63, 349.23, 440, 466.16, 587.33, 659.25, 698.46, 880],
+  tuneA: [5,-1,-1,4, 3,-1,2,-1, 3,-1,-1,-1, 0,-1,2,3,  5,-1,-1,6, 7,-1,6,-1, 5,-1,4,-1, 3,-1,-1,-1],
+  tuneB: [3,-1,4,-1, 5,-1,-1,-1, 7,-1,6,5, 4,-1,-1,-1,  3,-1,2,-1, 0,-1,2,-1, 3,-1,4,3, 2,-1,-1,-1],
+  bass: { 0: 73.42, 6: 73.42, 8: 110, 12: 87.31 },
+  drums: { run: { kick: [0, 4, 10, 12], rim: [6, 14] }, boss: { kick: [0, 2, 4, 8, 10, 12], rim: [6, 14, 15] } },
+  bpm: { menu: 80, run: 112, boss: 134 },
+  set(mode) { if (mode !== this.mode) { this.mode = mode; this.step = 0; this.next = 0; } },
+  tick() {
+    const c = Sound.ctx;
+    if (!c || c.state !== 'running' || this.mode === 'off' || Sound.muted) { this.next = 0; return; }
+    if (this.next < c.currentTime) this.next = c.currentTime + 0.05;
+    const stepDur = 60 / (this.bpm[this.mode] * Math.max(0.5, this.rate)) / 4;     // slows with the special
+    while (this.next < c.currentTime + 0.16) { this.note(this.step++, this.next); this.next += stepDur; }
+  },
+  note(i, t) {
+    const s = i % 32, bar = Math.floor(i / 32) % 4, out = Sound.mus;
+    const m = (bar === 2 ? this.tuneB : this.tuneA)[s];
+    if (m >= 0) {
+      const f = this.scale[m];
+      Sound.tone({ type: 'triangle', f: f * 1.015, to: f, dur: 0.55, vol: 0.34, at: t, out });
+      Sound.tone({ f: f * 2, dur: 0.18, vol: 0.1, at: t, out });
+    }
+    const b = this.bass[s % 16];
+    if (b) Sound.tone({ type: 'triangle', f: b, dur: 0.4, vol: 0.45, at: t, out });
+    const d = this.drums[this.mode];
+    if (!d) return;
+    if (d.kick.includes(s % 16)) Sound.tone({ f: 115, to: 45, dur: 0.22, vol: 0.75, at: t, out });
+    if (d.rim.includes(s % 16)) Sound.noise({ type: 'highpass', f: 2600, dur: 0.045, vol: 0.2, at: t, out });
+  },
+};
 
 /* ============================================================
    ART — every texture is drawn here with Canvas 2D at R× scale
@@ -337,6 +460,13 @@ class BaseScene extends Phaser.Scene {
       fontFamily: FONT, fontSize: size + 'px', color, fontStyle: 'bold', resolution: R,
     }, extra)).setOrigin(0.5);
   }
+  muteButton(x, y) {
+    const t = this.txt(x, y, '♪', 22, '#fff', { stroke: '#000', strokeThickness: 4 }).setDepth(5100);
+    const show = () => t.setAlpha(Sound.muted ? 0.3 : 1);
+    show();
+    this.add.zone(x, y, 44, 44).setDepth(5100).setInteractive({ useHandCursor: true })
+      .on('pointerdown', () => { Sound.unlock(); Sound.setMuted(!Sound.muted); show(); });
+  }
   button(x, y, w, h, color, label, size, onTap) {
     const g = this.add.graphics();
     const draw = (pressed) => {
@@ -352,7 +482,7 @@ class BaseScene extends Phaser.Scene {
     const set = on => { held = on; draw(on); t.y = y + (on ? 3 : 0); };
     z.on('pointerdown', () => set(true));
     z.on('pointerout', () => set(false));
-    z.on('pointerup', () => { if (!held) return; set(false); onTap(); });
+    z.on('pointerup', () => { if (!held) return; set(false); Sound.play('click'); onTap(); });
     return { g, t, z };
   }
 }
@@ -375,6 +505,8 @@ class MenuScene extends BaseScene {
       scale: S, rotate: { start: 0, end: 360 }, frequency: 450, alpha: 0.85,
     });
 
+    Music.set('menu');
+    this.muteButton(372, 30);
     this.txt(W / 2, 62, 'SAMURAI', 46, '#fff3e0', { stroke: '#2a0a14', strokeThickness: 6 });
     this.txt(W / 2, 104, 'R U N N E R', 20, '#ffcc80', { stroke: '#2a0a14', strokeThickness: 4 });
 
@@ -407,8 +539,8 @@ class MenuScene extends BaseScene {
     this.txt(x, y - 22, 'Lv ' + lvl, 26);
     this.txt(x, y + 8, statLine, 12, '#cfc3d6', { fontStyle: 'normal' });
     const b = this.button(x, y + 62, 96, 44, can ? color : 0x4a4250, cost + '', 17, () => {
-      if (Save.souls < cost) { this.cameras.main.shake(90, 0.002); return; }
-      Save.souls -= cost; Save[key]++; Save.save();
+      if (Save.souls < cost) { Sound.play('deny'); this.cameras.main.shake(90, 0.002); return; }
+      Save.souls -= cost; Save[key]++; Save.save(); Sound.play('buy');
       this.scene.restart();
     });
     if (!can) b.t.setColor('#9a90a0');
@@ -443,6 +575,7 @@ class GameScene extends BaseScene {
     this.spikes = [];
     this.decor = [];
 
+    Music.set('run');
     this.buildGround();
     this.buildLevel();
     this.buildFx();
@@ -451,6 +584,7 @@ class GameScene extends BaseScene {
 
     const steer = p => {
       if (p.worldY > 636 && p.worldX > 280) return;        // special button area
+      if (p.worldY < 80 && p.worldX > 345) return;         // mute button area
       this.targetX = clamp(p.worldX, CFG.steerMin, CFG.steerMax);
     };
     this.input.on('pointerdown', steer);
@@ -492,10 +626,7 @@ class GameScene extends BaseScene {
       e.souls = 40 + idx * 20; e.r = 8; e.swing = CFG.oni.swingMs;
     });
     LEVEL.spikes.forEach(d => {
-      const roll = Math.random();
-      if (roll < 0.45) this.addSpike(130, d);
-      else if (roll < 0.9) this.addSpike(270, d);
-      else { this.addSpike(130, d); this.addSpike(270, d - 60); }
+      this.addSpike(Math.random() < 0.5 ? 130 : 270, d);
     });
     this.boss = this.addEnemy('boss', W / 2, LEVEL.bossAt, CFG.boss.hp);
     Object.assign(this.boss, { r: 50, souls: CFG.boss.souls, state: 'chase', t: CFG.boss.chaseMs + 500, swings: 0, power: false });
@@ -543,6 +674,7 @@ class GameScene extends BaseScene {
     this.specialText = this.txt(336, 676, 'SLOW', 13).setDepth(D + 1);
     this.specialHint = this.txt(130, 662, 'SPECIAL', 10, '#b39ddb').setDepth(D);
     this.add.zone(336, 676, 84, 76).setInteractive().on('pointerdown', () => this.activateSpecial());
+    this.muteButton(376, 58);
   }
 
   /* ---------- main loop ---------- */
@@ -552,6 +684,7 @@ class GameScene extends BaseScene {
     const slowing = this.slowLeft > 0;
     this.timeScale += ((slowing ? CFG.slowScale : 1) - this.timeScale) * damp(10, dt);
     const wdt = dt * this.timeScale;                       // world time: scroll, enemy attacks
+    Music.rate = this.timeScale;
 
     if (slowing) this.slowLeft = Math.max(0, this.slowLeft - delta);
     this.slowTint.setAlpha((1 - this.timeScale) / (1 - CFG.slowScale) * 0.2);
@@ -636,6 +769,7 @@ class GameScene extends BaseScene {
       const diff = this.count - before;
       this.float(this.armyX, this.formY - 40, (diff >= 0 ? '+' : '−') + Math.abs(diff), side.good ? '#64b5f6' : '#ff5252', 30);
       if (side.good) this.cameras.main.flash(120, 30, 110, 220); else this.cameras.main.flash(120, 120, 20, 20);
+      Sound.play(side.good ? 'gateGood' : 'gateBad');
       if (!side.good) this.shake(140, 0.006);
       this.tweens.add({ targets: side.obj, alpha: 0, duration: 220 });
       this.tweens.add({ targets: other.obj, alpha: 0.25, duration: 220 });
@@ -664,6 +798,7 @@ class GameScene extends BaseScene {
 
   strike(e, dmg, s) {
     e.hp -= dmg;
+    Sound.play('slash');
     const spread = e.r ? e.r * 0.6 : 4;
     const hx = e.x + (Math.random() - 0.5) * spread * 2, hy = e.y + (Math.random() - 0.5) * spread;
     const sl = this.img(hx, hy, 'slash').setDepth(2900).setRotation(Math.atan2(e.y - s.y, e.x - s.x) + (Math.random() - 0.5))
@@ -678,18 +813,19 @@ class GameScene extends BaseScene {
   kill(e) {
     const gain = e.souls || Stats.soulsPerKill();
     this.earned += gain; Save.souls += gain;
+    Sound.play('kill');
     this.charge = Math.min(CFG.specialMax, this.charge + (e.kind === 'oni' ? 3 : 1));
     const tint = { demon: 0xab47bc, zombie: 0x9ccc65, oni: 0xef5350, boss: 0xab47bc }[e.kind];
     this.burst.setParticleTint(tint);
     this.burst.explode(e.r ? 40 : 10, e.x, e.y);
     const orb = this.img(e.x, e.y, 'soul').setDepth(5001).setScale(S * (e.r ? 2 : 1.2));
     this.tweens.add({ targets: orb, x: 22, y: 56, duration: 520, ease: 'Cubic.in', onComplete: () => {
-      orb.destroy();
+      orb.destroy(); Sound.play('soul');
       this.tweens.add({ targets: this.soulIcon, scale: S * 1.8, duration: 80, yoyo: true });
     } });
     if (e.kind === 'oni') {
       this.speedMod *= CFG.oniSlow;
-      this.banner('ONI SLAIN', 'game speed −3%');
+      this.banner('ONI SLAIN', 'game speed −3%'); Sound.play('gong');
       this.shake(180, 0.008);
       Save.save();
     }
@@ -721,6 +857,7 @@ class GameScene extends BaseScene {
       e.strike -= wdt * 1000;
       if (e.strike > 0) return;
       e.strike = k.strikeMs;
+      Sound.play('claw');
       this.enemySlash(near.x, near.y, 0.55, e.kind === 'demon' ? 0xea80fc : 0xc5e1a5);
       near.img.setTint(0xff8a80);
       this.time.delayedCall(90, () => { if (near.img.active) near.img.clearTint(); });
@@ -746,6 +883,7 @@ class GameScene extends BaseScene {
       this.soldiers.forEach(s => { const d = Math.hypot(s.x - e.x, s.y - e.y); if (d < bestD) { bestD = d; best = s; } });
       if (!best) return;
       e.swing = CFG.oni.swingMs;
+      Sound.play('swing');
       this.enemySlash(e.x, e.y + 14, 1.2, 0xffd54f);
       if (bestD < CFG.oni.hitReach) this.lose(1, best);
     });
@@ -755,7 +893,7 @@ class GameScene extends BaseScene {
       const s = this.soldiers.find(s => Math.abs(s.x - o.x) < 17 && Math.abs(s.y - o.y) < 13);
       if (!s) return;
       o.hit = true;
-      o.obj.setTint(0xff8a80);
+      o.obj.setTint(0xff8a80); Sound.play('spike');
       this.lose(1, s);
     });
     this.updateBoss(wdt);
@@ -776,6 +914,7 @@ class GameScene extends BaseScene {
       b.t = b.windFull = b.power ? B.powerWindMs : B.windMs;
       b.fromX = b.x;
       b.aimX = b.power ? clamp(this.armyX, 100, 300) : b.x;
+      Sound.play(b.power ? 'warnPower' : 'warn');
     } else if (b.state === 'wind') {
       const k = clamp(1 - b.t / b.windFull, 0, 1), reach = b.power ? B.powerReach : B.reach;
       if (b.power) {                                         // leap toward where the army stood
@@ -790,11 +929,12 @@ class GameScene extends BaseScene {
       b.x = b.aimX;
       b.obj.setRotation(0);
       this.enemySlash(b.x, b.y + 75, b.power ? 4.4 : 3.2, b.power ? 0xffab91 : 0xffffff);
+      Sound.play(b.power ? 'slam' : 'swing');
       this.shake(b.power ? 320 : 200, b.power ? 0.03 : 0.012);
       if (b.power) { this.burst.setParticleTint(0xffab91); this.burst.explode(36, b.x, b.y + 95); }
       if (Math.abs(this.armyX - b.aimX) < reach) {
         this.lose(Math.max(B.cleave, Math.ceil(this.count * B.cleaveShare)) * (b.power ? 2 : 1));
-      } else this.float(this.armyX, this.formY - 46, 'DODGED', '#80d8ff', 18);
+      } else { Sound.play('dodge'); this.float(this.armyX, this.formY - 46, 'DODGED', '#80d8ff', 18); }
       b.swings++;
       b.state = 'recover';
       b.t = B.recoverMs;
@@ -824,6 +964,7 @@ class GameScene extends BaseScene {
   lose(n, victim) {
     if (this.count <= 0) return;
     this.count = Math.max(0, this.count - n);
+    Sound.play('lose');
     const at = victim || this.soldiers[0] || { x: this.armyX, y: this.formY };
     this.float(at.x, at.y - 16, '−' + n, '#ff5252', n > 1 ? 26 : 20);
     if (victim && this.count < CFG.maxDrawn) this.dropSoldier(victim);
@@ -835,6 +976,7 @@ class GameScene extends BaseScene {
     if (this.over || this.slowLeft > 0 || this.charge < CFG.specialMax) return;
     this.charge = 0;
     this.slowLeft = CFG.slowMs;
+    Sound.play('special');
     this.cameras.main.flash(180, 150, 110, 255);
     this.banner('SLOW MOTION', '');
   }
@@ -842,6 +984,7 @@ class GameScene extends BaseScene {
   /* ---------- boss ---------- */
   startBossFight() {
     this.fight = true;
+    Music.set('boss'); Sound.play('gong');
     [...this.spikes, ...this.enemies.filter(e => e !== this.boss)].forEach(o => { o.obj.destroy(); o.gone = true; });
     this.gates.forEach(g => { g.left.obj.destroy(); g.right.obj.destroy(); g.gone = true; });
     this.spikes = []; this.gates = []; this.enemies = [this.boss];
@@ -856,6 +999,7 @@ class GameScene extends BaseScene {
   endBossFight() {
     this.fight = false;
     this.bossDefeated = true;
+    Music.set('run'); Sound.play('gong');
     this.speedMod *= CFG.oniSlow;
     this.bossName.destroy();
     this.tweens.add({ targets: this.bars[0], y: -30, duration: 300 });
@@ -925,6 +1069,7 @@ class GameScene extends BaseScene {
   finish(win) {
     this.over = true;
     Save.save();
+    Music.set('off'); Sound.play(win ? 'win' : 'defeat');
     this.countText.setVisible(false);
     const D = 6000;
     const shade = this.add.rectangle(W / 2, H / 2, W, H, 0x0a0610, 1).setAlpha(0).setDepth(D);
