@@ -38,7 +38,8 @@ const CFG = {
   slowScale: 0.30,         // world speed while the special is active
   slowMs: 4000,
   specialMax: 12,
-  oniSlow: 0.97,           // each oni kill slows the run 3%
+  oniDamageUp: 1.05,       // each oni kill: +5% blade damage for the rest of the run
+  bossSlow: 0.97,          // the run slows 3% once the boss is down
   shake: 0.4,              // screen-shake strength multiplier (0 = off)
   // Regular enemies run at the army, then strike. `hit` is the share of one samurai lost per strike.
   enemy: {
@@ -54,7 +55,7 @@ const CFG = {
     cleave: 4, cleaveShare: 0.10,      // a hit takes the larger of `cleave` or `cleaveShare` of the army
     powerChance: 0.35, powerWindMs: 800, powerReach: 100,   // jump slam: lands where the army stood, double damage
   },
-  oni: { swingMs: 750, reach: 55, hitReach: 40 },
+  oni: { swingMs: 750, reach: 55, hitReach: 40, speed: 12, lead: 70 },   // speed: px/s toward the army (a quarter of a regular enemy); lead: how far in front of his gate he stands
 };
 
 // Level layout, measured in distance along the path (px).
@@ -68,7 +69,7 @@ const LEVEL = {
     { d: 2710, bad: { op: '-', n: 6 }, good: { op: 'x', n: 3 } },
   ],
   packs:  [510, 910, 1260, 1610, 1960, 2310, 2610],   // enemy groups; each is bigger than the last
-  onis:   [1160, 2160],
+  onis:   [2, 4],                                     // which gate rows have an oni guarding the red side
   spikes: [490, 1400, 1835, 2535, 2950],     // each sits midway between two gate rows, never beside one
   bossAt: 3600,
   length: 3700,
@@ -108,7 +109,7 @@ const Stats = {
   damage: () => 1 + (Save.damage - 1) * 0.5,
   soulsPerKill: () => 5 * Save.revenue,
 };
-const fmt = n => Number.isInteger(n) ? String(n) : n.toFixed(1);
+const fmt = n => Number.isInteger(n) ? String(n) : n.toFixed(2).replace(/0$/, '');
 const clamp = (v, a, b) => Math.max(a, Math.min(b, v));
 const damp = (rate, dt) => 1 - Math.exp(-rate * dt);   // frame-rate independent lerp factor
 
@@ -557,6 +558,7 @@ class GameScene extends BaseScene {
     this.setupCamera();
     this.dist = 0;                 // distance travelled; drives layout and the progress bar
     this.speedMod = 1;
+    this.dmgMod = 1;               // grows with each oni kill
     this.timeScale = 1;            // 1 normally, eases to CFG.slowScale during the special
     this.slowLeft = 0;
     this.charge = 0;
@@ -621,8 +623,9 @@ class GameScene extends BaseScene {
         this.addEnemy(demon ? 'demon' : 'zombie', 85 + Math.random() * 230, base + i * 28, (demon ? 5 : 3) + idx);
       }
     });
-    LEVEL.onis.forEach((d, idx) => {
-      const e = this.addEnemy('oni', W / 2, d, 19 + idx * 8);
+    LEVEL.onis.forEach((row, idx) => {
+      const g = this.gates[row], red = g.left.good ? g.right : g.left;
+      const e = this.addEnemy('oni', red.x, g.d - CFG.oni.lead, 19 + idx * 8);
       e.souls = 40 + idx * 20; e.r = 8; e.swing = CFG.oni.swingMs;
     });
     LEVEL.spikes.forEach(d => {
@@ -778,7 +781,7 @@ class GameScene extends BaseScene {
   }
 
   updateCombat(dt) {
-    const cd = Stats.attackMs(), dmg = Stats.damage();
+    const cd = Stats.attackMs(), dmg = Stats.damage() * this.dmgMod;
     const near = this.enemies.filter(e => e.y > 250 && e.y < H);
     this.soldiers.forEach(s => {
       s.cd -= dt * 1000;
@@ -824,8 +827,8 @@ class GameScene extends BaseScene {
       this.tweens.add({ targets: this.soulIcon, scale: S * 1.8, duration: 80, yoyo: true });
     } });
     if (e.kind === 'oni') {
-      this.speedMod *= CFG.oniSlow;
-      this.banner('ONI SLAIN', 'game speed −3%'); Sound.play('gong');
+      this.dmgMod *= CFG.oniDamageUp;
+      this.banner('ONI SLAIN', 'blade damage +5%'); Sound.play('gong');
       this.shake(180, 0.008);
       Save.save();
     }
@@ -877,11 +880,15 @@ class GameScene extends BaseScene {
     // Oni: club swing on a timer.
     this.enemies.forEach(e => {
       if (e.kind !== 'oni' || e.gone) return;
-      e.swing -= wdt * 1000;
-      if (e.swing > 0) return;
-      let best = null, bestD = CFG.oni.reach;
+      let best = null, bestD = Infinity;
       this.soldiers.forEach(s => { const d = Math.hypot(s.x - e.x, s.y - e.y); if (d < bestD) { bestD = d; best = s; } });
       if (!best) return;
+      if (e.y > -20 && e.y < best.y && bestD > 20) {       // lumber toward the army while it is still ahead
+        const v = CFG.oni.speed * wdt / bestD;
+        e.x += (best.x - e.x) * v; e.d -= (best.y - e.y) * v;
+      }
+      e.swing -= wdt * 1000;
+      if (e.swing > 0 || bestD > CFG.oni.reach) return;
       e.swing = CFG.oni.swingMs;
       Sound.play('swing');
       this.enemySlash(e.x, e.y + 14, 1.2, 0xffd54f);
@@ -1000,7 +1007,7 @@ class GameScene extends BaseScene {
     this.fight = false;
     this.bossDefeated = true;
     Music.set('run'); Sound.play('gong');
-    this.speedMod *= CFG.oniSlow;
+    this.speedMod *= CFG.bossSlow;
     this.bossName.destroy();
     this.tweens.add({ targets: this.bars[0], y: -30, duration: 300 });
     this.tweens.add({ targets: this.bars[1], y: H + 30, duration: 300 });
