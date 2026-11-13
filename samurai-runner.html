@@ -55,31 +55,37 @@ const CFG = {
     cleave: 4, cleaveShare: 0.10,      // a hit takes the larger of `cleave` or `cleaveShare` of the army
     powerChance: 0.35, powerWindMs: 800, powerReach: 100,   // jump slam: lands where the army stood, double damage
   },
+  finaleOni: { hp: 50, size: 1.3, speed: 60, swingMs: 1000, souls: 50 },   // the three at the end of level 2
   oni: { swingMs: 750, reach: 55, hitReach: 40, speed: 12, lead: 70 },   // speed: px/s toward the army (a quarter of a regular enemy); lead: how far in front of his gate he stands
 };
 
-// Level layout, measured in distance along the path (px).
-const LEVEL = {
-  gates: [
-    { d: 340,  bad: { op: '-', n: 2 }, good: { op: '+', n: 4 } },
-    { d: 640,  bad: { op: '-', n: 3 }, good: { op: 'x', n: 2 } },
-    { d: 1660, bad: { op: '-', n: 4 }, good: { op: '+', n: 6 } },
-    { d: 2010, bad: { op: '-', n: 5 }, good: { op: 'x', n: 2 } },
-    { d: 2360, bad: { op: '-', n: 4 }, good: { op: '+', n: 8 } },
-    { d: 2710, bad: { op: '-', n: 6 }, good: { op: 'x', n: 3 } },
-  ],
-  packs:  [510, 910, 1260, 1610, 1960, 2310, 2610],   // enemy groups; each is bigger than the last
-  onis:   [2, 4],                                     // which gate rows have an oni guarding the red side
-  spikes: [490, 1400, 1835, 2535, 2950],     // each sits midway between two gate rows, never beside one
-  bossAt: 3600,
-  length: 3700,
-};
+// Level layouts, measured in distance along the path (px).
+//   gates   gate rows            packs   enemy groups, each bigger than the last
+//   onis    gate rows with an oni guarding the red side
+//   spikes  each sits midway between two gate rows, never beside one
+//   finale  'onis' (three large oni) or 'boss' (the fat demon), fought with the scroll stopped
+const add = (d, bad, good) => ({ d, bad: { op: '-', n: bad }, good: { op: good[0], n: +good.slice(1) } });
+const LEVELS = [
+  { name: 'Restless Dead', demons: false, length: 2250, finale: null,
+    gates: [add(340, 2, '+4'), add(640, 3, 'x2'), add(1150, 3, '+5'), add(1550, 4, 'x2')],
+    packs: [510, 880, 1320, 1720], onis: [], spikes: [490, 895, 1350] },
+  { name: 'Oni Warband', demons: true, length: 3000, finale: 'onis', finaleAt: 2900,
+    gates: [add(340, 2, '+4'), add(640, 3, 'x2'), add(1250, 4, '+6'), add(1650, 5, 'x2'), add(2050, 4, '+8')],
+    packs: [510, 900, 1420, 1830, 2200], onis: [], spikes: [490, 945, 1450, 1850] },
+  { name: 'The Fat Demon', demons: true, length: 4050, finale: 'boss', finaleAt: 3950,
+    gates: [add(340, 2, '+4'), add(640, 3, 'x2'), add(1660, 4, '+6'), add(2010, 5, 'x2'), add(2360, 4, '+8'), add(2710, 6, 'x3'), add(3060, 6, '+10')],
+    packs: [510, 910, 1260, 1610, 1960, 2310, 2610, 2960], onis: [2, 4], spikes: [490, 1400, 1835, 2535, 2885, 3330] },
+];
+// Only the first saga is playable; the rest are shown locked.
+const SAGAS = ['Bamboo Road', 'Crimson Marsh', 'Frozen Pass', 'Ember Fortress', 'Demon Gate'];
 
 /* ============================================================
    SAVE — same localStorage keys as the prototype
    ============================================================ */
 const Save = {
   souls: 500, fire: 1, damage: 1, revenue: 1,
+  level: 1,                      // highest level unlocked (4 = saga 1 cleared)
+  music: true, sfx: true, shake: true,
   load() {
     const num = (k, def) => {
       try { const v = parseInt(localStorage.getItem(k), 10); return Number.isFinite(v) ? v : def; }
@@ -89,6 +95,10 @@ const Save = {
     this.fire = num('samurai_fire', 1);
     this.damage = num('samurai_damage', 1);
     this.revenue = num('samurai_revenue', 1);
+    this.level = num('samurai_level', 1);
+    this.music = num('samurai_music', 1) === 1;
+    this.sfx = num('samurai_sfx', 1) === 1;
+    this.shake = num('samurai_shake', 1) === 1;
   },
   save() {
     try {
@@ -96,8 +106,13 @@ const Save = {
       localStorage.setItem('samurai_fire', this.fire);
       localStorage.setItem('samurai_damage', this.damage);
       localStorage.setItem('samurai_revenue', this.revenue);
+      localStorage.setItem('samurai_level', this.level);
+      localStorage.setItem('samurai_music', this.music ? 1 : 0);
+      localStorage.setItem('samurai_sfx', this.sfx ? 1 : 0);
+      localStorage.setItem('samurai_shake', this.shake ? 1 : 0);
     } catch (e) {}
   },
+  resetProgress() { this.souls = 500; this.fire = this.damage = this.revenue = this.level = 1; this.save(); },
 };
 Save.load();
 window.addEventListener('pagehide', () => Save.save());
@@ -127,12 +142,18 @@ const Sound = {
     if (!AC) return;
     const c = this.ctx = new AC();
     this.master = c.createGain(); this.master.gain.value = this.muted ? 0 : 1; this.master.connect(c.destination);
-    this.sfx = c.createGain(); this.sfx.gain.value = 0.5; this.sfx.connect(this.master);
-    this.mus = c.createGain(); this.mus.gain.value = 0.32; this.mus.connect(this.master);
+    this.sfx = c.createGain(); this.sfx.connect(this.master);
+    this.mus = c.createGain(); this.mus.connect(this.master);
+    this.applyOptions();
     this.noiseBuf = c.createBuffer(1, c.sampleRate, c.sampleRate);
     const d = this.noiseBuf.getChannelData(0);
     for (let i = 0; i < d.length; i++) d[i] = Math.random() * 2 - 1;
     setInterval(() => Music.tick(), 50);
+  },
+  applyOptions() {                 // music / effects switches from Settings
+    if (!this.ctx) return;
+    this.sfx.gain.value = Save.sfx ? 0.5 : 0;
+    this.mus.gain.value = Save.music ? 0.32 : 0;
   },
   setMuted(m) {
     this.muted = m;
@@ -214,7 +235,7 @@ const Music = {
   set(mode) { if (mode !== this.mode) { this.mode = mode; this.step = 0; this.next = 0; } },
   tick() {
     const c = Sound.ctx;
-    if (!c || c.state !== 'running' || this.mode === 'off' || Sound.muted) { this.next = 0; return; }
+    if (!c || c.state !== 'running' || this.mode === 'off' || Sound.muted || !Save.music) { this.next = 0; return; }
     if (this.next < c.currentTime) this.next = c.currentTime + 0.05;
     const stepDur = 60 / (this.bpm[this.mode] * Math.max(0.5, this.rate)) / 4;     // slows with the special
     while (this.next < c.currentTime + 0.16) { this.note(this.step++, this.next); this.next += stepDur; }
@@ -488,54 +509,104 @@ class BaseScene extends Phaser.Scene {
   }
 }
 
+// Shared look for every menu screen.
+class MenuBase extends BaseScene {
+  backdrop(title) {
+    this.setupCamera();
+    Music.set('menu');
+    this.img(W / 2, H / 2, 'menuBg');
+    this.add.particles(0, 0, 'petal', {
+      x: { min: 0, max: W }, y: -10, lifespan: 9000, speedY: { min: 30, max: 70 }, speedX: { min: -25, max: 10 },
+      scale: S, rotate: { start: 0, end: 360 }, frequency: 450, alpha: 0.85,
+    });
+    if (!title) return;
+    this.add.rectangle(W / 2, H / 2, W, H, 0x0a0610, 0.45);
+    this.txt(W / 2 + 30, 42, title, 26, '#fff3e0', { stroke: '#2a0a14', strokeThickness: 5 });
+    this.button(56, 42, 84, 38, 0x3a3050, '‹ BACK', 14, () => this.scene.start('Menu'));
+  }
+  panel(x, y, w, h, alpha = 0.92) {
+    const g = this.add.graphics();
+    g.fillStyle(0x000000, 0.4).fillRoundedRect(x - w / 2, y - h / 2 + 5, w, h, 12);
+    g.fillStyle(0x1c1220, alpha).fillRoundedRect(x - w / 2, y - h / 2, w, h, 12);
+    g.lineStyle(2, 0xffffff, 0.22).strokeRoundedRect(x - w / 2, y - h / 2, w, h, 12);
+    return g;
+  }
+  soulPill(y) {
+    this.add.graphics().fillStyle(0x000000, 0.45).fillRoundedRect(W / 2 - 80, y - 18, 160, 36, 18);
+    this.img(W / 2 - 58, y, 'soul').setScale(S * 1.5);
+    this.txt(W / 2 + 8, y, Save.souls + ' souls', 18, '#e1bee7');
+  }
+}
+
 class BootScene extends BaseScene {
   constructor() { super('Boot'); }
   create() { Art.buildAll(this); this.scene.start('Menu'); }
 }
 
 /* ============================================================
-   MENU — souls and upgrades
+   MENUS — main menu, saga and level select, upgrades, settings
    ============================================================ */
-class MenuScene extends BaseScene {
+class MenuScene extends MenuBase {
   constructor() { super('Menu'); }
   create() {
-    this.setupCamera();
-    this.img(W / 2, H / 2, 'menuBg');
-    this.add.particles(0, 0, 'petal', {
-      x: { min: 0, max: W }, y: -10, lifespan: 9000, speedY: { min: 30, max: 70 }, speedX: { min: -25, max: 10 },
-      scale: S, rotate: { start: 0, end: 360 }, frequency: 450, alpha: 0.85,
-    });
-
-    Music.set('menu');
-    this.muteButton(372, 30);
+    this.backdrop();
     this.txt(W / 2, 62, 'SAMURAI', 46, '#fff3e0', { stroke: '#2a0a14', strokeThickness: 6 });
     this.txt(W / 2, 104, 'R U N N E R', 20, '#ffcc80', { stroke: '#2a0a14', strokeThickness: 4 });
-
-    const pill = this.add.graphics();
-    pill.fillStyle(0x000000, 0.45).fillRoundedRect(W / 2 - 80, 136, 160, 36, 18);
-    this.img(W / 2 - 58, 154, 'soul').setScale(S * 1.5);
-    this.txt(W / 2 + 8, 154, Save.souls + ' souls', 18, '#e1bee7');
-
+    this.soulPill(154);
     for (let i = 0; i < 5; i++) {
-      const s = this.add.container(138 + i * 31, 452, [this.img(0, 0, 'samurai'), this.sword(9.5, 5.5).setRotation(0.45)]).setScale(1.3);
-      this.tweens.add({ targets: s, y: 448, duration: 420, yoyo: true, repeat: -1, delay: i * 90, ease: 'Sine.inOut' });
+      const s = this.add.container(138 + i * 31, 276, [this.img(0, 0, 'samurai'), this.sword(9.5, 5.5).setRotation(0.45)]).setScale(1.3);
+      this.tweens.add({ targets: s, y: 272, duration: 420, yoyo: true, repeat: -1, delay: i * 90, ease: 'Sine.inOut' });
     }
+    this.button(W / 2, 400, 250, 70, 0xc62828, 'PLAY', 30, () => this.scene.start('Sagas'));
+    this.button(W / 2, 490, 250, 56, 0x1565c0, 'UPGRADES', 20, () => this.scene.start('Upgrades'));
+    this.button(W / 2, 562, 250, 56, 0x4a3f63, 'SETTINGS', 20, () => this.scene.start('Settings'));
+    this.txt(W / 2, 680, 'drag left / right to steer', 13, '#d7b9a8', { fontStyle: 'normal' });
+  }
+}
 
+class SagaScene extends MenuBase {
+  constructor() { super('Sagas'); }
+  create() {
+    this.backdrop('SAGAS');
+    const numerals = ['I', 'II', 'III', 'IV', 'V'];
+    // Saga 1: open, with its three levels.
+    this.panel(W / 2, 190, 368, 216);
+    this.txt(34, 106, numerals[0] + ' · ' + SAGAS[0].toUpperCase(), 17, '#ffd54f').setOrigin(0, 0.5);
+    this.txt(34, 128, Save.level > LEVELS.length ? 'saga cleared' : 'level ' + Save.level + ' of ' + LEVELS.length, 12, '#cfc3d6', { fontStyle: 'normal' }).setOrigin(0, 0.5);
+    LEVELS.forEach((L, i) => {
+      const n = i + 1, x = 82 + i * 118, open = n <= Save.level, done = n < Save.level;
+      const b = this.button(x, 206, 104, 96, open ? (done ? 0x2e7d32 : 0xc62828) : 0x3a3444, open ? String(n) : '—', 34, () => {
+        if (!open) { Sound.play('deny'); return; }
+        this.scene.start('Game', { level: n });
+      });
+      b.t.y -= 12; if (!open) b.t.setColor('#8a8094');
+      this.txt(x, 232, open ? L.name : 'LOCKED', 10, open ? '#fff' : '#8a8094', { align: 'center', wordWrap: { width: 96 } });
+      if (done) this.txt(x + 38, 172, '✓', 16, '#fff59d');
+    });
+    // Sagas 2-5: locked.
+    for (let i = 1; i < SAGAS.length; i++) {
+      const y = 262 + i * 88;
+      this.panel(W / 2, y, 368, 74, 0.7);
+      this.txt(34, y - 10, numerals[i] + ' · ' + SAGAS[i].toUpperCase(), 16, '#8a8094').setOrigin(0, 0.5);
+      this.txt(34, y + 12, '3 levels · coming soon', 12, '#6f6678', { fontStyle: 'normal' }).setOrigin(0, 0.5);
+      this.txt(338, y, 'LOCKED', 12, '#8a8094');
+    }
+  }
+}
+
+class UpgradeScene extends MenuBase {
+  constructor() { super('Upgrades'); }
+  create() {
+    this.backdrop('UPGRADES');
+    this.soulPill(120);
     this.card(72, 'ATTACK\nSPEED', 0x2e7d32, 'fire', (Stats.attackMs() / 1000).toFixed(2) + 's swing');
     this.card(200, 'BLADE\nDAMAGE', 0x1565c0, 'damage', fmt(Stats.damage()) + ' per hit');
     this.card(328, 'SOUL\nREWARD', 0x6a1b9a, 'revenue', Stats.soulsPerKill() + ' per kill');
-
-    this.button(W / 2, 620, 250, 68, 0xc62828, 'BEGIN RUN', 28, () => this.scene.start('Game'));
-    this.txt(W / 2, 680, 'drag left / right to steer', 13, '#d7b9a8', { fontStyle: 'normal' });
+    this.txt(W / 2, 440, 'souls are earned from every kill', 13, '#d7b9a8', { fontStyle: 'normal' });
   }
-
   card(x, title, color, key, statLine) {
-    const y = 300, w = 116, h = 196, lvl = Save[key], cost = Stats.cost(lvl), can = Save.souls >= cost;
-    const g = this.add.graphics();
-    g.fillStyle(0x000000, 0.4).fillRoundedRect(x - w / 2, y - h / 2 + 5, w, h, 12);
-    g.fillStyle(0x1c1220, 0.92).fillRoundedRect(x - w / 2, y - h / 2, w, h, 12);
-    g.fillStyle(color, 1).fillRoundedRect(x - w / 2, y - h / 2, w, 52, { tl: 12, tr: 12, bl: 0, br: 0 });
-    g.lineStyle(2, 0xffffff, 0.25).strokeRoundedRect(x - w / 2, y - h / 2, w, h, 12);
+    const y = 280, w = 116, h = 196, lvl = Save[key], cost = Stats.cost(lvl), can = Save.souls >= cost;
+    this.panel(x, y, w, h).fillStyle(color, 1).fillRoundedRect(x - w / 2, y - h / 2, w, 52, { tl: 12, tr: 12, bl: 0, br: 0 });
     this.txt(x, y - h / 2 + 26, title, 13, '#fff', { align: 'center' });
     this.txt(x, y - 22, 'Lv ' + lvl, 26);
     this.txt(x, y + 8, statLine, 12, '#cfc3d6', { fontStyle: 'normal' });
@@ -548,11 +619,38 @@ class MenuScene extends BaseScene {
   }
 }
 
+class SettingsScene extends MenuBase {
+  constructor() { super('Settings'); }
+  init(data) { this.confirming = !!(data && data.confirming); }
+  create() {
+    this.backdrop('SETTINGS');
+    this.panel(W / 2, 220, 340, 250);
+    [['Music', 'music'], ['Sound effects', 'sfx'], ['Screen shake', 'shake']].forEach(([label, key], i) => {
+      const y = 140 + i * 80;
+      this.txt(52, y, label, 18).setOrigin(0, 0.5);
+      this.button(300, y, 92, 46, Save[key] ? 0x2e7d32 : 0x4a4250, Save[key] ? 'ON' : 'OFF', 17, () => {
+        Save[key] = !Save[key]; Save.save(); Sound.applyOptions();
+        this.scene.restart();
+      });
+    });
+    this.button(W / 2, 430, 280, 54, this.confirming ? 0xc62828 : 0x4a3f63, this.confirming ? 'TAP AGAIN TO ERASE' : 'RESET PROGRESS', 17, () => {
+      if (!this.confirming) { this.scene.restart({ confirming: true }); return; }
+      Save.resetProgress();
+      this.scene.restart();
+    });
+    this.txt(W / 2, 476, this.confirming ? 'this erases souls, upgrades and unlocked levels' : 'souls, upgrades and unlocked levels', 12, '#d7b9a8', { fontStyle: 'normal' });
+  }
+}
+
 /* ============================================================
    GAME — the run
    ============================================================ */
 class GameScene extends BaseScene {
   constructor() { super('Game'); }
+  init(data) {
+    this.levelNo = clamp((data && data.level) || 1, 1, LEVELS.length);
+    this.L = LEVELS[this.levelNo - 1];
+  }
 
   create() {
     this.setupCamera();
@@ -567,7 +665,9 @@ class GameScene extends BaseScene {
     this.wound = 0;                // enemy strikes add up here; each full point costs one samurai
     this.over = false;
     this.fight = false;            // true while the scroll is stopped for the boss
-    this.bossDefeated = false;
+    this.finaleDone = !this.L.finale;   // levels without a finale just run to the end
+    this.boss = null;
+    this.finaleOnis = [];
     this.targetX = W / 2;
     this.armyX = W / 2;
     this.formY = CFG.armyY;
@@ -583,6 +683,7 @@ class GameScene extends BaseScene {
     this.buildFx();
     this.buildHud();
     this.syncArmy(true);
+    this.banner('LEVEL ' + this.levelNo, this.L.name);
 
     const steer = p => {
       if (p.worldY > 636 && p.worldX > 280) return;        // special button area
@@ -600,7 +701,7 @@ class GameScene extends BaseScene {
     this.path = this.add.tileSprite(W / 2, H / 2, pw, H, 'path').setTileScale(S).setDepth(-19);
     const fog = this.add.graphics().setDepth(-18);           // distance haze at the top
     fog.fillGradientStyle(0x1a1030, 0x1a1030, 0x1a1030, 0x1a1030, 0.75, 0.75, 0, 0).fillRect(0, 0, W, 200);
-    for (let d = 100; d < LEVEL.length + 600; d += 150) {
+    for (let d = 100; d < this.L.length + 600; d += 150) {
       const left = (d / 150) % 2 < 1;
       const key = Math.random() < 0.55 ? 'tree' : 'lantern';
       this.decor.push({ d, x: left ? 24 + Math.random() * 12 : W - 24 - Math.random() * 12, obj: this.img(0, -200, key), flat: true });
@@ -608,7 +709,7 @@ class GameScene extends BaseScene {
   }
 
   buildLevel() {
-    LEVEL.gates.forEach(g => {
+    this.L.gates.forEach(g => {
       const goodLeft = Math.random() < 0.5;
       this.gates.push({
         d: g.d, used: false,
@@ -616,23 +717,31 @@ class GameScene extends BaseScene {
         right: this.makeGate(270, goodLeft ? g.bad : g.good, !goodLeft),
       });
     });
-    LEVEL.packs.forEach((base, idx) => {
+    this.L.packs.forEach((base, idx) => {
       const n = 6 + idx * 2;
       for (let i = 0; i < n; i++) {
-        const demon = Math.random() > 0.45;
+        const demon = this.L.demons && Math.random() > 0.45;
         this.addEnemy(demon ? 'demon' : 'zombie', 85 + Math.random() * 230, base + i * 28, (demon ? 5 : 3) + idx);
       }
     });
-    LEVEL.onis.forEach((row, idx) => {
+    this.L.onis.forEach((row, idx) => {
       const g = this.gates[row], red = g.left.good ? g.right : g.left;
       const e = this.addEnemy('oni', red.x, g.d - CFG.oni.lead, 19 + idx * 8);
-      e.souls = 40 + idx * 20; e.r = 8; e.swing = CFG.oni.swingMs;
+      Object.assign(e, { souls: 40 + idx * 20, r: 8, speed: CFG.oni.speed, swingMs: CFG.oni.swingMs, swing: CFG.oni.swingMs });
     });
-    LEVEL.spikes.forEach(d => {
+    this.L.spikes.forEach(d => {
       this.addSpike(Math.random() < 0.5 ? 130 : 270, d);
     });
-    this.boss = this.addEnemy('boss', W / 2, LEVEL.bossAt, CFG.boss.hp);
-    Object.assign(this.boss, { r: 50, souls: CFG.boss.souls, state: 'chase', t: CFG.boss.chaseMs + 500, swings: 0, power: false });
+    if (this.L.finale === 'boss') {
+      this.boss = this.addEnemy('boss', W / 2, this.L.finaleAt, CFG.boss.hp);
+      Object.assign(this.boss, { r: 50, souls: CFG.boss.souls, state: 'chase', t: CFG.boss.chaseMs + 500, swings: 0, power: false });
+    }
+    if (this.L.finale === 'onis') {
+      const F = CFG.finaleOni;
+      this.finaleOnis = [120, 200, 280].map(x => Object.assign(this.addEnemy('oni', x, this.L.finaleAt, F.hp),
+        { big: true, size: F.size, r: 12, souls: F.souls, speed: F.speed, swingMs: F.swingMs, swing: F.swingMs }));
+    }
+    this.anchor = this.boss || this.finaleOnis[1] || null;     // whoever the scroll stops for
   }
 
   makeGate(x, op, good) {
@@ -701,12 +810,12 @@ class GameScene extends BaseScene {
     this.updateHud(dt);
 
     if (this.count <= 0) this.finish(false);
-    else if (this.bossDefeated && this.dist >= LEVEL.length) this.finish(true);
+    else if (this.finaleDone && this.dist >= this.L.length) this.finish(true);
   }
 
   updateScroll(wdt) {
     if (!this.fight) {
-      const speed = CFG.baseSpeed * (1 + CFG.speedRamp * this.dist / LEVEL.length) * this.speedMod;
+      const speed = CFG.baseSpeed * (1 + CFG.speedRamp * this.dist / this.L.length) * this.speedMod;
       const step = speed * wdt;
       this.dist += step;
       this.grass.tilePositionY -= step * R;
@@ -719,7 +828,7 @@ class GameScene extends BaseScene {
       if (y > H + 80) { o.obj.destroy(); o.gone = true; return; }
       const p = this.persp(y);
       const bob = o.seed !== undefined && !o.r && !o.hold && o !== this.boss ? Math.sin(this.time.now * 0.02 + o.seed) * 1.5 : 0;
-      o.obj.setVisible(y > -90).setPosition(o.x, y + bob).setScale((o.obj.type === 'Container' ? 1 : S) * p).setDepth(o.flat ? y - 30 : y);
+      o.obj.setVisible(y > -90).setPosition(o.x, y + bob).setScale((o.obj.type === 'Container' ? 1 : S) * p * (o.size || 1)).setDepth(o.flat ? y - 30 : y);
     };
     const alive = o => !o.gone;
     this.decor.forEach(place); this.spikes.forEach(place); this.enemies.forEach(place);
@@ -729,7 +838,7 @@ class GameScene extends BaseScene {
     });
     this.decor = this.decor.filter(alive); this.spikes = this.spikes.filter(alive);
     this.enemies = this.enemies.filter(alive); this.gates = this.gates.filter(alive);
-    if (!this.fight && !this.bossDefeated && this.boss.y >= 330) this.startBossFight();
+    if (!this.fight && !this.finaleDone && this.anchor.y >= 330) this.startFinale();
   }
 
   // Far things are drawn smaller.
@@ -737,7 +846,7 @@ class GameScene extends BaseScene {
 
   updateArmy(time, dt) {
     this.armyX += (this.targetX - this.armyX) * damp(12, dt);
-    const wantForm = this.fight ? this.boss.y + 92 : CFG.armyY;
+    const wantForm = this.fight ? (this.boss ? this.boss.y + 92 : 470) : CFG.armyY;
     this.formY += (wantForm - this.formY) * damp(5, dt);
     const n = this.soldiers.length, cols = Math.min(5, Math.ceil(Math.sqrt(n || 1)));
     this.soldiers.forEach((s, i) => {
@@ -826,14 +935,15 @@ class GameScene extends BaseScene {
       orb.destroy(); Sound.play('soul');
       this.tweens.add({ targets: this.soulIcon, scale: S * 1.8, duration: 80, yoyo: true });
     } });
-    if (e.kind === 'oni') {
+    if (e.big) { Sound.play('gong'); this.shake(180, 0.008); }
+    else if (e.kind === 'oni') {
       this.dmgMod *= CFG.oniDamageUp;
       this.banner('ONI SLAIN', 'blade damage +5%'); Sound.play('gong');
       this.shake(180, 0.008);
       Save.save();
     }
     e.obj.destroy(); e.gone = true;
-    if (e === this.boss) this.endBossFight();
+    if (e === this.boss || (e.big && this.finaleOnis.every(o => o.gone))) this.endFinale();
   }
 
   // Demons and zombies run at the nearest samurai, stop in reach, and strike on a timer.
@@ -884,14 +994,14 @@ class GameScene extends BaseScene {
       this.soldiers.forEach(s => { const d = Math.hypot(s.x - e.x, s.y - e.y); if (d < bestD) { bestD = d; best = s; } });
       if (!best) return;
       if (e.y > -20 && e.y < best.y && bestD > 20) {       // lumber toward the army while it is still ahead
-        const v = CFG.oni.speed * wdt / bestD;
+        const v = e.speed * wdt / bestD;
         e.x += (best.x - e.x) * v; e.d -= (best.y - e.y) * v;
       }
       e.swing -= wdt * 1000;
       if (e.swing > 0 || bestD > CFG.oni.reach) return;
-      e.swing = CFG.oni.swingMs;
+      e.swing = e.swingMs;
       Sound.play('swing');
-      this.enemySlash(e.x, e.y + 14, 1.2, 0xffd54f);
+      this.enemySlash(e.x, e.y + 14, 1.2 * (e.size || 1), 0xffd54f);
       if (bestD < CFG.oni.hitReach) this.lose(1, best);
     });
     // Spikes.
@@ -910,7 +1020,7 @@ class GameScene extends BaseScene {
   updateBoss(wdt) {
     this.danger.clear();
     const b = this.boss, B = CFG.boss;
-    if (!this.fight || b.gone) return;
+    if (!b || !this.fight || b.gone) return;
     b.t -= wdt * 1000;
     if (b.state === 'chase') {
       b.obj.setRotation(0);
@@ -989,23 +1099,24 @@ class GameScene extends BaseScene {
   }
 
   /* ---------- boss ---------- */
-  startBossFight() {
+  startFinale() {
     this.fight = true;
     Music.set('boss'); Sound.play('gong');
-    [...this.spikes, ...this.enemies.filter(e => e !== this.boss)].forEach(o => { o.obj.destroy(); o.gone = true; });
+    const cast = this.boss ? [this.boss] : this.finaleOnis;
+    [...this.spikes, ...this.enemies.filter(e => !cast.includes(e))].forEach(o => { o.obj.destroy(); o.gone = true; });
     this.gates.forEach(g => { g.left.obj.destroy(); g.right.obj.destroy(); g.gone = true; });
-    this.spikes = []; this.gates = []; this.enemies = [this.boss];
+    this.spikes = []; this.gates = []; this.enemies = cast.slice();
     this.bars = [this.add.rectangle(W / 2, -30, W, 60, 0x000000).setDepth(4500), this.add.rectangle(W / 2, H + 30, W, 60, 0x000000).setDepth(4500)];
     this.tweens.add({ targets: this.bars[0], y: 30, duration: 400, ease: 'Cubic.out' });
     this.tweens.add({ targets: this.bars[1], y: H - 30, duration: 400, ease: 'Cubic.out' });
-    this.bossName = this.txt(W / 2, 88, 'FAT DEMON', 17, '#fff', { stroke: '#2a0038', strokeThickness: 4 }).setDepth(5001);
+    this.bossName = this.txt(W / 2, 88, this.boss ? 'FAT DEMON' : 'ONI WARBAND', 17, '#fff', { stroke: '#2a0038', strokeThickness: 4 }).setDepth(5001);
     this.bossGhost = 1;
     this.shake(300, 0.008);
   }
 
-  endBossFight() {
+  endFinale() {
     this.fight = false;
-    this.bossDefeated = true;
+    this.finaleDone = true;
     Music.set('run'); Sound.play('gong');
     this.speedMod *= CFG.bossSlow;
     this.bossName.destroy();
@@ -1013,12 +1124,12 @@ class GameScene extends BaseScene {
     this.tweens.add({ targets: this.bars[1], y: H + 30, duration: 300 });
     this.shake(350, 0.014);
     this.cameras.main.flash(250, 255, 240, 200);
-    this.banner('DEMON SLAIN', '+' + CFG.boss.souls + ' souls');
+    if (this.boss) this.banner('DEMON SLAIN', '+' + CFG.boss.souls + ' souls'); else this.banner('WARBAND SLAIN', '');
     Save.save();
   }
 
   /* ---------- fx ---------- */
-  shake(ms, amount) { if (CFG.shake > 0) this.cameras.main.shake(ms, amount * CFG.shake); }
+  shake(ms, amount) { if (Save.shake && CFG.shake > 0) this.cameras.main.shake(ms, amount * CFG.shake); }
 
   enemySlash(x, y, scale, tint) {
     const sl = this.img(x, y, 'slash').setDepth(2950).setRotation(Math.PI / 2 - 0.8).setScale(S * scale).setTint(tint);
@@ -1042,14 +1153,15 @@ class GameScene extends BaseScene {
   updateHud(dt) {
     const g = this.hud; g.clear();
     // progress
-    const px = 70, pw = 260, p = clamp(this.dist / LEVEL.length, 0, 1);
+    const px = 70, pw = 260, p = clamp(this.dist / this.L.length, 0, 1);
     g.fillStyle(0x000000, 0.5).fillRoundedRect(px - 3, 21, pw + 6, 16, 8);
     if (p > 0.004) g.fillStyle(0xff7043, 1).fillRoundedRect(px, 24, pw * p, 10, Math.min(5, pw * p / 2));
-    g.fillStyle(0xab47bc, 1).fillCircle(px + pw * (LEVEL.bossAt - 230) / LEVEL.length, 29, 6);     // boss marker
+    if (this.L.finale) g.fillStyle(0xab47bc, 1).fillCircle(px + pw * (this.L.finaleAt - 230) / this.L.length, 29, 6);     // finale marker
     g.fillStyle(0xffffff, 1).fillCircle(px + pw * p, 29, 4);
     // boss bar
     if (this.fight) {
-      const r = clamp(this.boss.hp / this.boss.maxHp, 0, 1), bw = 240, bx = W / 2 - bw / 2;
+      const cast = this.boss ? [this.boss] : this.finaleOnis;
+      const r = clamp(cast.reduce((a, e) => a + Math.max(0, e.hp), 0) / cast.reduce((a, e) => a + e.maxHp, 0), 0, 1), bw = 240, bx = W / 2 - bw / 2;
       this.bossGhost += (r - this.bossGhost) * damp(4, dt);
       g.fillStyle(0x000000, 0.7).fillRoundedRect(bx - 3, 101, bw + 6, 18, 6);
       g.fillStyle(0xffffff, 0.8).fillRect(bx, 104, bw * this.bossGhost, 12);
@@ -1075,20 +1187,23 @@ class GameScene extends BaseScene {
   /* ---------- end ---------- */
   finish(win) {
     this.over = true;
+    const unlocked = win && this.levelNo === Save.level;
+    if (unlocked) Save.level++;
     Save.save();
     Music.set('off'); Sound.play(win ? 'win' : 'defeat');
     this.countText.setVisible(false);
     const D = 6000;
     const shade = this.add.rectangle(W / 2, H / 2, W, H, 0x0a0610, 1).setAlpha(0).setDepth(D);
     this.tweens.add({ targets: shade, alpha: 0.78, duration: 350 });
-    const title = this.txt(W / 2, 280, win ? 'PATH CLEARED' : 'CLAN WIPED', 38, win ? '#ffd54f' : '#ff5252', { stroke: '#000', strokeThickness: 6 }).setDepth(D + 1).setScale(0.3);
+    const title = this.txt(W / 2, 280, win ? 'LEVEL ' + this.levelNo + ' CLEARED' : 'CLAN WIPED', 38, win ? '#ffd54f' : '#ff5252', { stroke: '#000', strokeThickness: 6 }).setDepth(D + 1).setScale(0.3);
     this.tweens.add({ targets: title, scale: 1, duration: 350, ease: 'Back.out' });
     this.img(W / 2 - 62, 346, 'soul').setScale(S * 1.6).setDepth(D + 1);
     this.txt(W / 2 + 6, 346, '+' + this.earned + ' souls', 24, '#e1bee7').setDepth(D + 1);
+    if (unlocked) this.txt(W / 2, 390, this.levelNo < LEVELS.length ? 'LEVEL ' + (this.levelNo + 1) + ' UNLOCKED' : 'SAGA CLEARED', 16, '#fff59d').setDepth(D + 1);
     const tap = this.txt(W / 2, 430, 'tap to continue', 16, '#bbb', { fontStyle: 'normal' }).setDepth(D + 1).setAlpha(0);
     this.time.delayedCall(700, () => {
       this.tweens.add({ targets: tap, alpha: 1, duration: 500, yoyo: true, repeat: -1 });
-      this.input.once('pointerdown', () => this.scene.start('Menu'));
+      this.input.once('pointerdown', () => this.scene.start('Sagas'));
     });
   }
 }
@@ -1103,7 +1218,7 @@ window.samuraiGame = new Phaser.Game({
   height: H * R,
   backgroundColor: '#120c14',
   scale: { mode: Phaser.Scale.FIT, autoCenter: Phaser.Scale.CENTER_BOTH },
-  scene: [BootScene, MenuScene, GameScene],
+  scene: [BootScene, MenuScene, SagaScene, UpgradeScene, SettingsScene, GameScene],
 });
 </script>
 </body>
