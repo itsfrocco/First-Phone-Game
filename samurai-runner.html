@@ -45,8 +45,10 @@ const CFG = {
   // Regular enemies run at the army, then strike. `hit` is the share of one samurai lost per strike.
   enemy: {
     reach: 16,
+    demonShare: 0.25,      // how many regular enemies are demons, in levels that have them
+    demonHp: 2,            // a demon has this many times a zombie's health
     fightRush: 80,         // extra run speed while the scroll is stopped for a big fight
-    zombie: { speed: 38, hit: 0.28, strikeMs: 1100 },
+    zombie: { speed: 38, hit: 0.22, strikeMs: 1100 },
     demon:  { speed: 55, hit: 0.42, strikeMs: 900 },
   },
   // Big fights share one cycle: follow the army -> wind up (red zone on the ground) -> strike -> pause.
@@ -65,7 +67,7 @@ const CFG = {
       reach: 85, cleave: 3, cleaveShare: 0.08, powerChance: 0.45, powerWindMs: 1600, powerReach: 100, powerMult: 2, powerStyle: 'fly' },
   },
   // The glowing lucky charm that slides from side to side. Harmless; break it for the damage bonus.
-  charm: { speed: 95, lead: 110, souls: 15 },   // speed: px/s sideways; lead: how far in front of its gate row it appears
+  charm: { speed: 70, lead: 110, souls: 15 },   // speed: px/s sideways; lead: how far in front of its gate row it appears
   levelPace: 0.10,         // each level in a saga runs this much faster than the one before (the army and the enemies)
 };
 
@@ -73,15 +75,15 @@ const CFG = {
 //   rows     gate rows; each is followed by an enemy pack
 //   pack     [size of the first pack, growth per row, extra growth that builds toward the end]
 //   crowd    how much tighter each pack is bunched than the one before, so later packs arrive faster
-//   hp       zombie health (demons have 40% more); difficulty comes from numbers, not tougher enemies
+//   hp       zombie health (demons have more, see CFG.enemy.demonHp); difficulty comes from numbers, not tougher enemies
 //   charms   [rows where a lucky charm appears, its health, health growth per charm]
 //   bosses   big fights: `after` a given row, or at the 'end'
 const LEVEL_SPECS = [
   { name: 'Restless Dead', demons: false, rows: 10, seg: 370, pack: [3, 1.2, 0.20], crowd: 0.05, hp: 3,
     bosses: [{ type: 'giant', after: 'end', hp: 400 }] },
-  { name: 'The Tengu', demons: true, rows: 13, seg: 370, pack: [5, 2.6, 0.32], crowd: 0.18, hp: 7, charms: [[4, 10], 15, 5],
+  { name: 'The Tengu', demons: true, rows: 13, seg: 370, pack: [5, 2.4, 0.27], crowd: 0.16, hp: 5, charms: [[4, 10], 8, 3],
     bosses: [{ type: 'giant', after: 6, hp: 700 }, { type: 'tengu', after: 'end', hp: 1400 }] },
-  { name: 'The Fat Demon', demons: true, rows: 18, seg: 370, pack: [6, 2.6, 0.18], crowd: 0.16, hp: 11, charms: [[5, 11, 15], 22, 8],
+  { name: 'The Fat Demon', demons: true, rows: 18, seg: 370, pack: [6, 2.4, 0.16], crowd: 0.14, hp: 8, charms: [[5, 11, 15], 11, 4],
     bosses: [{ type: 'giant', after: 8, hp: 1800 }, { type: 'demon', after: 'end', hp: 3000 }] },
 ];
 const GOOD_GATES = ['+3', '+3', 'x2', '+4', '+5', '+6', 'x2', '+8', '+10', '+12', '+14', '+16', '+18', '+20', '+22', '+25', '+28', '+30'];
@@ -114,7 +116,7 @@ const SAGAS = ['Bamboo Road', 'Crimson Marsh', 'Frozen Pass', 'Ember Fortress', 
    SAVE — same localStorage keys as the prototype
    ============================================================ */
 const Save = {
-  souls: 500, fire: 1, damage: 1, revenue: 1,
+  souls: 0, fire: 1, damage: 1, revenue: 1,
   level: 1,                      // highest level unlocked (4 = saga 1 cleared)
   music: true, sfx: true, shake: true,
   load() {
@@ -122,7 +124,7 @@ const Save = {
       try { const v = parseInt(localStorage.getItem(k), 10); return Number.isFinite(v) ? v : def; }
       catch (e) { return def; }
     };
-    this.souls = num('samurai_souls', 500);
+    this.souls = num('samurai_souls', 0);
     this.fire = num('samurai_fire', 1);
     this.damage = num('samurai_damage', 1);
     this.revenue = num('samurai_revenue', 1);
@@ -143,7 +145,7 @@ const Save = {
       localStorage.setItem('samurai_shake', this.shake ? 1 : 0);
     } catch (e) {}
   },
-  resetProgress() { this.souls = 500; this.fire = this.damage = this.revenue = this.level = 1; this.save(); },
+  resetProgress() { this.souls = 0; this.fire = this.damage = this.revenue = this.level = 1; this.save(); },
 };
 Save.load();
 window.addEventListener('pagehide', () => Save.save());
@@ -874,8 +876,8 @@ class GameScene extends BaseScene {
     });
     this.L.packs.forEach(pk => {
       for (let i = 0; i < pk.n; i++) {
-        const demon = this.L.demons && Math.random() > 0.45;
-        this.addEnemy(demon ? 'demon' : 'zombie', 85 + Math.random() * 230, pk.d + i * pk.gap, Math.round(pk.hp * (demon ? 1.4 : 1)));
+        const demon = this.L.demons && Math.random() < CFG.enemy.demonShare;
+        this.addEnemy(demon ? 'demon' : 'zombie', 85 + Math.random() * 230, pk.d + i * pk.gap, Math.round(pk.hp * (demon ? CFG.enemy.demonHp : 1)));
       }
     });
     const [charmRows, charmHp, charmGrow] = this.L.charms;
@@ -1192,8 +1194,8 @@ class GameScene extends BaseScene {
       b.trickleT -= wdt * 1000;
       if (b.trickleT <= 0) {
         b.trickleT = B.trickleMs;
-        const demon = this.L.demons && Math.random() > 0.45;
-        this.addEnemy(demon ? 'demon' : 'zombie', 85 + Math.random() * 230, this.dist + CFG.armyY + 10, Math.round(b.trickleHp * (demon ? 1.4 : 1)));
+        const demon = this.L.demons && Math.random() < CFG.enemy.demonShare;
+        this.addEnemy(demon ? 'demon' : 'zombie', 85 + Math.random() * 230, this.dist + CFG.armyY + 10, Math.round(b.trickleHp * (demon ? CFG.enemy.demonHp : 1)));
       }
     }
     b.t -= wdt * 1000;
