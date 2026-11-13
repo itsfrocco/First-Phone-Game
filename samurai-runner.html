@@ -39,15 +39,15 @@ const CFG = {
   slowMs: 4000,
   specialMax: 12,          // fewest kills that fill the special bar
   specialsPerLevel: 8,     // the bar is sized so a level's regular enemies fill it about this many times
-  charmDamageUp: 1.05,     // each lucky charm broken: +5% blade damage for the rest of the run
+  charmDamageUp: 1.10,     // each lucky charm broken: +10% blade damage for the rest of the run
   bossSlow: 0.97,          // the run slows 3% once the boss is down
   shake: 0.4,              // screen-shake strength multiplier (0 = off)
   // Regular enemies run at the army, then strike. `hit` is the share of one samurai lost per strike.
   enemy: {
     reach: 16,
     fightRush: 80,         // extra run speed while the scroll is stopped for a big fight
-    zombie: { speed: 38, hit: 0.20, strikeMs: 1100 },
-    demon:  { speed: 55, hit: 0.30, strikeMs: 900 },
+    zombie: { speed: 38, hit: 0.28, strikeMs: 1100 },
+    demon:  { speed: 55, hit: 0.42, strikeMs: 900 },
   },
   // Big fights share one cycle: follow the army -> wind up (red zone on the ground) -> strike -> pause.
   //   speed          px/s sideways after the army
@@ -79,9 +79,9 @@ const CFG = {
 const LEVEL_SPECS = [
   { name: 'Restless Dead', demons: false, rows: 10, seg: 370, pack: [3, 1.2, 0.20], crowd: 0.05, hp: 3,
     bosses: [{ type: 'giant', after: 'end', hp: 400 }] },
-  { name: 'The Tengu', demons: true, rows: 13, seg: 370, pack: [6, 3.8, 0.60], crowd: 0.22, hp: 5, charms: [[4, 10], 30, 10],
+  { name: 'The Tengu', demons: true, rows: 13, seg: 370, pack: [5, 2.6, 0.32], crowd: 0.18, hp: 7, charms: [[4, 10], 15, 5],
     bosses: [{ type: 'giant', after: 6, hp: 700 }, { type: 'tengu', after: 'end', hp: 1400 }] },
-  { name: 'The Fat Demon', demons: true, rows: 18, seg: 370, pack: [6, 3.8, 0.36], crowd: 0.20, hp: 8, charms: [[5, 11, 15], 45, 15],
+  { name: 'The Fat Demon', demons: true, rows: 18, seg: 370, pack: [6, 2.6, 0.18], crowd: 0.16, hp: 11, charms: [[5, 11, 15], 22, 8],
     bosses: [{ type: 'giant', after: 8, hp: 1800 }, { type: 'demon', after: 'end', hp: 3000 }] },
 ];
 const GOOD_GATES = ['+3', '+3', 'x2', '+4', '+5', '+6', 'x2', '+8', '+10', '+12', '+14', '+16', '+18', '+20', '+22', '+25', '+28', '+30'];
@@ -1111,7 +1111,7 @@ class GameScene extends BaseScene {
     } });
     if (e.kind === 'charm') {
       this.dmgMod *= CFG.charmDamageUp;
-      this.banner('LUCKY CHARM', 'blade damage +5%'); Sound.play('buy');
+      this.banner('LUCKY CHARM', 'blade damage +10%'); Sound.play('buy');
       this.shake(180, 0.008);
       Save.save();
     }
