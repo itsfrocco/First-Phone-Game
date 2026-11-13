@@ -78,6 +78,8 @@ const CFG = {
   charm: { speed: 70, lead: 110, souls: 15 },   // speed: px/s sideways; lead: how far in front of its gate row it appears
   // The saga boss stage's storm: every `everyMs` a wave of lightning sweeps down the lane the army stands in.
   storm: { everyMs: [4000, 5000], warnMs: 1100, sweepMs: 380, half: 52, cleave: 2, cleaveShare: 0.08 },
+  // Futsu-no-mitama: extra lightning damage on top of each hit, as a share of the hit, doubled or halved by the target's element.
+  thunderBlade: { bonus: 0.25, strong: ['water', 'metal', 'flying'], weak: ['earth', 'fire', 'thunder'], strongMult: 2, weakMult: 0.5 },
   levelPace: 0.10,         // each level in a saga runs this much faster than the one before (the army and the enemies)
 };
 
@@ -102,14 +104,19 @@ const LEVEL_SPECS = [
 // Armor and weapons, chosen on a level's start screen. `boss: true` items are won by beating the saga boss.
 const GEAR = {
   armor: [
-    { id: '', name: 'Clan Armor', desc: 'Standard issue.' },
-    { id: 'thunder', name: 'Thunder Armor', desc: 'Halves lightning damage.', boss: true },
+    { id: '', name: 'Clan Armor', effect: 'Standard issue.' },
+    { id: 'thunder', name: 'Thunder Armor', boss: true, effect: 'Halves lightning damage.',
+      lore: "Armor forged in the image of Takemikazuchi's own war gear. It does not fully stop lightning, but it turns the worst of it aside, the same way he endured the storms he commanded. Those who wear it carry a trace of the force that once pinned the earthquake catfish and forced the land to yield. It is heavy with the memory of conquest, not protection freely given." },
   ],
   weapon: [
-    { id: '', name: 'Clan Katana', desc: 'A trusty blade.' },
-    { id: 'thunder', name: 'Futsu-no-mitama', desc: 'Leaves a trail of lightning on every swing.', boss: true },
+    { id: '', name: 'Clan Katana', effect: 'A trusty blade.' },
+    { id: 'thunder', name: 'Futsu-no-mitama', boss: true, effect: '+25% lightning damage. Strong against water, metal and flying foes; weak against earth, fire and thunder.',
+      lore: "A sword once carried by Takemikazuchi. In the old stories, when the first emperor's forces were stalled, Takemikazuchi did not descend himself. Instead he sent this blade down from the heavens so the campaign could continue. It is said the sword carries a fragment of his thunder, striking with the same force he used when he crushed those who opposed the heavenly order. Those who wield it now do so with his reluctant respect, not his blessing." },
   ],
 };
+// What each kind of enemy is made of, for weapons that favour or struggle against certain foes.
+// Kinds not listed are neutral. Future enemies (water, metal, earth, fire...) get their entry here.
+const ELEMENT = { tenguBoss: 'flying', thunder: 'thunder' };
 const SAGA_LEVELS = 3;                                        // ordinary levels per saga; the stage after them is the saga boss
 const GOOD_GATES = ['+3', '+3', 'x2', '+4', '+5', '+6', 'x2', '+8', '+10', '+12', '+14', '+16', '+18', '+20', '+22', '+25', '+28', '+30'];
 // Turns a spec into positions measured in distance along the path (px).
@@ -927,6 +934,13 @@ class GameScene extends BaseScene {
   }
 
   /* ---------- gear ---------- */
+  // The extra lightning damage Futsu-no-mitama adds to a hit on enemy `e`.
+  lightningBonus(e, dmg) {
+    if (!this.thunderBlade) return 0;
+    const T = CFG.thunderBlade, el = ELEMENT[e.kind];
+    return dmg * T.bonus * (T.strong.includes(el) ? T.strongMult : T.weak.includes(el) ? T.weakMult : 1);
+  }
+
   // Reads the equipped armor and weapon and restyles any samurai already on the field.
   applyGear() {
     this.thunderArmor = Save.armor === 'thunder';
@@ -973,22 +987,29 @@ class GameScene extends BaseScene {
       const kind = this.gearOpen, won = Save.level > SAGA_LEVELS + 1;
       this.add.rectangle(W / 2, H / 2, W, H, 0x05020c, 0.6);
       const g = this.add.graphics();
-      g.fillStyle(0x1c1220, 0.97).fillRoundedRect(30, 150, 340, 300, 14);
-      g.lineStyle(2, 0xffffff, 0.25).strokeRoundedRect(30, 150, 340, 300, 14);
-      this.txt(W / 2, 178, kind === 'armor' ? 'ARMOR' : 'WEAPON', 20, '#ffd54f');
-      GEAR[kind].forEach((item, i) => {
-        const y = 240 + i * 84, have = !item.boss || won, on = Save[kind] === item.id;
-        this.txt(48, y - 12, item.name, 16, have ? '#fff' : '#8a8094').setOrigin(0, 0.5);
-        this.txt(48, y + 10, have ? item.desc : 'Defeat the saga boss to unlock.', 11, '#cfc3d6', { fontStyle: 'normal', wordWrap: { width: 190 } }).setOrigin(0, 0.5);
-        const b = this.button(304, y, 104, 40, on ? 0x2e7d32 : have ? 0x1565c0 : 0x3a3444, on ? 'EQUIPPED' : have ? 'EQUIP' : 'LOCKED', 13, () => {
+      g.fillStyle(0x1c1220, 0.97).fillRoundedRect(24, 104, 352, 408, 14);
+      g.lineStyle(2, 0xffffff, 0.25).strokeRoundedRect(24, 104, 352, 408, 14);
+      this.txt(W / 2, 130, kind === 'armor' ? 'ARMOR' : 'WEAPON', 20, '#ffd54f');
+      let y = 172;
+      GEAR[kind].forEach(item => {
+        const have = !item.boss || won, on = Save[kind] === item.id;
+        this.txt(40, y, item.name, 16, have ? '#fff' : '#8a8094').setOrigin(0, 0.5);
+        const b = this.button(312, y + 6, 100, 38, on ? 0x2e7d32 : have ? 0x1565c0 : 0x3a3444, on ? 'EQUIPPED' : have ? 'EQUIP' : 'LOCKED', 13, () => {
           if (!have) { Sound.play('deny'); return; }
           Save[kind] = item.id; Save.save(); Sound.play('buy');
           this.applyGear();
           reopen(kind);
         });
         if (!have) b.t.setColor('#8a8094');
+        const effect = this.txt(40, y + 14, have ? item.effect : 'Defeat the saga boss to unlock.', 11, '#ffe082', { fontStyle: 'normal', wordWrap: { width: 212 } }).setOrigin(0, 0);
+        y += 22 + effect.height;
+        if (have && item.lore) {
+          const lore = this.txt(40, y, item.lore, 10.5, '#cfc3d6', { fontStyle: 'italic', wordWrap: { width: 320 }, lineSpacing: 2 }).setOrigin(0, 0);
+          y += lore.height + 6;
+        }
+        y += 22;
       });
-      this.button(W / 2, 412, 140, 40, 0x4a3f63, 'CLOSE', 14, () => reopen(null));
+      this.button(W / 2, 482, 140, 38, 0x4a3f63, 'CLOSE', 14, () => reopen(null));
     }
     this.startUi = this.children.list.filter(o => !before.has(o));
     this.startUi.forEach((o, i) => o.setDepth(5400 + i));
@@ -1241,7 +1262,7 @@ class GameScene extends BaseScene {
       if (!best) return;
       s.cd = cd * (0.9 + Math.random() * 0.2);
       s.lunge = 7; s.swing = 1;
-      this.strike(best, dmg, s);
+      this.strike(best, dmg + this.lightningBonus(best, dmg), s);
       if (this.thunderBlade && Math.random() < 0.6) this.zap(s.x + 9, s.y - 12, best.x, best.y, 90);   // Futsu-no-mitama's trail
     });
   }
@@ -1269,7 +1290,7 @@ class GameScene extends BaseScene {
       this.time.delayedCall(60, () => { if (e.obj.active) e.obj.clearTint(); });
       this.time.delayedCall(260, () => { e.flash = false; });
     }
-    if (e.r || Math.random() < 0.5) this.float(hx, hy - 12, fmt(dmg), '#ffeb3b', 13);
+    if (e.r || Math.random() < 0.5) this.float(hx, hy - 12, fmt(dmg), this.thunderBlade ? '#d9a8ff' : '#ffeb3b', 13);
     if (e.hp <= 0) this.kill(e);
   }
 
