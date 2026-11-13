@@ -63,6 +63,13 @@ const CFG = {
       reach: 85, cleave: 4, cleaveShare: 0.10, powerChance: 0.35, powerWindMs: 1070, powerReach: 100, powerMult: 2, powerStyle: 'jump' },
     giant: { key: 'giant', name: 'GIANT ZOMBIE', slain: 'GIANT SLAIN', r: 44, souls: 20, speed: 40, chaseMs: 1400, windMs: 900, recoverMs: 500,
       reach: 85, cleave: 2, cleaveShare: 0.05, powerChance: 0, trickle: true, trickleMs: 1500 },       // half the fat demon's speed and damage
+    // The saga boss. Phase 1: three-swing sword combos and an occasional lightning slash down a lane.
+    // Phase 2 (below `phase2` of his health): faster, his swings leave lightning on the ground for `linger` ms,
+    // and he sometimes dashes to where the army stands.
+    thunder: { key: 'thunder', name: 'TAKEMIKAZUCHI', slain: 'THE THUNDER GOD FALLS', r: 48, souls: 150, speed: 90, chaseMs: 800, windMs: 520, recoverMs: 350,
+      reach: 85, cleave: 3, cleaveShare: 0.06, combo: 3, comboWindMs: 380, comboStep: 45,
+      powerChance: 0.35, powers: [['bolt'], ['bolt', 'dash']], powerWind: { bolt: 900, dash: 480 }, powerReach: 85, boltHalf: 48, powerMult: 2,
+      phase2: 0.5, phase2Name: 'THE STORM AWAKENS', linger: 2000, lingerTick: 500, lingerShare: 0.03 },
     tengu: { key: 'tenguBoss', name: 'TENGU', slain: 'TENGU SLAIN', r: 46, souls: 35, speed: 40, chaseMs: 1400, windMs: 900, recoverMs: 500,
       reach: 85, cleave: 3, cleaveShare: 0.08, powerChance: 0.45, powerWindMs: 1600, powerReach: 100, powerMult: 2, powerStyle: 'fly' },
   },
@@ -85,12 +92,16 @@ const LEVEL_SPECS = [
     bosses: [{ type: 'giant', after: 6, hp: 700 }, { type: 'tengu', after: 'end', hp: 1400 }] },
   { name: 'The Fat Demon', demons: true, rows: 18, seg: 370, pack: [6, 2.4, 0.16], crowd: 0.14, hp: 8, charms: [[5, 11, 15], 11, 4],
     bosses: [{ type: 'giant', after: 8, hp: 1800 }, { type: 'demon', after: 'end', hp: 3000 }] },
+  // The saga boss stage: a short run to build an army, then the fight.
+  { name: 'Takemikazuchi', demons: true, rows: 8, seg: 370, pack: [5, 2.4, 0.30], crowd: 0.15, hp: 8, pace: 1.2, charms: [[4], 11, 0],
+    bosses: [{ type: 'thunder', after: 'end', hp: 2600 }] },
 ];
+const SAGA_LEVELS = 3;                                        // ordinary levels per saga; the stage after them is the saga boss
 const GOOD_GATES = ['+3', '+3', 'x2', '+4', '+5', '+6', 'x2', '+8', '+10', '+12', '+14', '+16', '+18', '+20', '+22', '+25', '+28', '+30'];
 // Turns a spec into positions measured in distance along the path (px).
 function layoutLevel(spec, index) {
   const L = { name: spec.name, demons: spec.demons, charms: spec.charms || [[], 0, 0], gates: [], packs: [], spikes: [], bosses: [] };
-  L.pace = 1 + CFG.levelPace * (index % 3);                 // level 1, 2, 3 of each saga
+  L.pace = spec.pace || 1 + CFG.levelPace * (index % 3);                 // level 1, 2, 3 of each saga
   let d = 300;
   const hp = spec.hp;
   for (let i = 0; i < spec.rows; i++) {
@@ -495,6 +506,42 @@ const Art = {
     g.addColorStop(0, 'rgba(255,241,170,0.95)'); g.addColorStop(0.4, 'rgba(255,213,79,0.45)'); g.addColorStop(1, 'rgba(255,193,7,0)');
     Art.ell(c, 32, 32, 32, 32, g);
   },
+  thunder(c) {                                               // Takemikazuchi
+    Art.shadow(c, 65, 126, 36);
+    c.fillStyle = '#0b0b12'; c.beginPath(); c.moveTo(42, 40);                                // wild hair
+    [[20, 26], [36, 24], [16, 10], [40, 16], [34, 2], [52, 10], [60, 0], [68, 10], [84, 2], [82, 14], [102, 8], [92, 22], [112, 24], [90, 40]].forEach(p => c.lineTo(...p));
+    c.closePath(); c.fill();
+    c.fillStyle = Art.grad(c, 0, 70, 0, 120, [[0, '#4a148c'], [1, '#14052b']]);              // robes
+    c.beginPath(); c.moveTo(38, 70); c.lineTo(92, 70); c.lineTo(106, 120); c.lineTo(24, 120); c.closePath(); c.fill();
+    c.strokeStyle = '#d4a017'; c.lineWidth = 1.4; c.beginPath(); c.moveTo(26, 116); c.lineTo(104, 116); c.moveTo(56, 72); c.lineTo(50, 118); c.moveTo(74, 72); c.lineTo(80, 118); c.stroke();
+    c.fillStyle = '#1f1238'; Art.rr(c, 47, 104, 13, 20, 4); c.fill(); Art.rr(c, 70, 104, 13, 20, 4); c.fill();   // greaves
+    c.fillStyle = '#d4a017'; c.fillRect(47, 110, 13, 2); c.fillRect(70, 110, 13, 2);
+    Art.ell(c, 30, 70, 9, 16, '#311b92'); Art.ell(c, 100, 70, 9, 16, '#311b92');             // arms
+    c.fillStyle = '#d4a017'; Art.rr(c, 23, 74, 14, 11, 4); c.fill(); Art.rr(c, 93, 74, 14, 11, 4); c.fill();
+    Art.rr(c, 42, 42, 46, 38, 9); c.fillStyle = Art.grad(c, 42, 42, 88, 80, [[0, '#5e35b1'], [1, '#1a0633']]); c.fill();   // cuirass
+    c.strokeStyle = 'rgba(212,160,23,0.75)'; c.lineWidth = 1.1;
+    for (let x = 44; x < 92; x += 9) { c.beginPath(); c.moveTo(x, 44); c.lineTo(x + 14, 78); c.moveTo(x + 6, 44); c.lineTo(x - 8, 78); c.stroke(); }
+    Art.ell(c, 65, 56, 8, 8, '#ffd54f'); Art.ell(c, 65, 56, 4.5, 4.5, '#b8860b');
+    Art.ell(c, 65, 82, 10, 6, '#d4a017'); Art.ell(c, 65, 82, 5, 3, '#8a6508');
+    [34, 96].forEach(x => {                                                                   // gold pauldrons
+      Art.ell(c, x, 50, 16, 11, '#8a6508'); Art.ell(c, x, 47, 15, 9, '#d4a017'); Art.ell(c, x, 44, 12, 6, '#ffd54f');
+    });
+    Art.ell(c, 65, 30, 11, 12.5, '#b9805a');                                                 // face
+    c.fillStyle = '#0b0b12'; c.beginPath(); c.moveTo(53, 28); c.quadraticCurveTo(65, 12, 77, 28); c.quadraticCurveTo(65, 21, 53, 28); c.fill();
+    Art.ell(c, 65, 13, 5, 6, '#0b0b12'); c.fillStyle = '#d4a017'; c.fillRect(61, 17, 8, 2);  // topknot
+    c.strokeStyle = '#2a1408'; c.lineWidth = 2; c.beginPath(); c.moveTo(56, 26); c.lineTo(63, 29); c.moveTo(74, 26); c.lineTo(67, 29); c.stroke();
+    c.shadowColor = '#b388ff'; c.shadowBlur = 9;
+    Art.tri(c, [56.5, 29], [63, 31], [57.5, 33], '#ede7f6'); Art.tri(c, [73.5, 29], [67, 31], [72.5, 33], '#ede7f6');
+    c.strokeStyle = '#b388ff'; c.lineWidth = 1; c.beginPath(); c.moveTo(72, 34); c.lineTo(75, 40); c.lineTo(72, 43); c.stroke();
+    c.shadowBlur = 0;
+    c.strokeStyle = '#3a2314'; c.lineWidth = 1.4; c.beginPath(); c.moveTo(60, 39); c.lineTo(70, 39); c.stroke();
+    c.strokeStyle = '#311b92'; c.lineWidth = 5; c.beginPath(); c.moveTo(101, 82); c.lineTo(116, 70); c.stroke();   // hilt
+    Art.ell(c, 100, 83, 6, 6, '#d4a017');
+    c.shadowColor = '#b388ff'; c.shadowBlur = 12;                                             // lightning blade
+    c.strokeStyle = '#f3e5f5'; c.lineWidth = 4.5; c.beginPath(); c.moveTo(97, 86); c.quadraticCurveTo(60, 112, 12, 128); c.stroke();
+    c.strokeStyle = '#b388ff'; c.lineWidth = 1.5; c.beginPath(); c.moveTo(80, 98); c.lineTo(72, 92); c.lineTo(66, 106); c.moveTo(48, 112); c.lineTo(40, 106); c.lineTo(32, 120); c.stroke();
+    c.shadowBlur = 0;
+  },
   // Not used yet: kept for a later boss.
   oni(c) {
     Art.shadow(c, 24, 51, 17);
@@ -597,7 +644,7 @@ const Art = {
   },
   buildAll(scene) {
     const m = (k, w, h) => Art.make(scene, k, w, h, Art[k]);
-    m('samurai', 36, 50); m('katana', 12, 36); m('demon', 32, 40); m('zombie', 32, 40); m('boss', 130, 126); m('giant', 110, 130);
+    m('samurai', 36, 50); m('katana', 12, 36); m('demon', 32, 40); m('zombie', 32, 40); m('boss', 130, 126); m('giant', 110, 130); m('thunder', 130, 134);
     Art.make(scene, 'tenguBoss', 130, 120, Art.tengu); m('charm', 40, 44); m('glow', 64, 64);
     m('spike', 36, 28); m('slash', 48, 48); m('soul', 16, 16); m('dot', 8, 8); m('petal', 8, 6);
     m('grass', 64, 64); m('path', 280, 128); m('lantern', 24, 42); m('tree', 60, 58); m('menuBg', W, H);
@@ -705,8 +752,8 @@ class SagaScene extends MenuBase {
     // Saga 1: open, with its three levels.
     this.panel(W / 2, 214, 368, 264);
     this.txt(34, 106, numerals[0] + ' · ' + SAGAS[0].toUpperCase(), 17, '#ffd54f').setOrigin(0, 0.5);
-    this.txt(34, 128, Save.level > LEVELS.length ? 'saga cleared' : 'level ' + Save.level + ' of ' + LEVELS.length, 12, '#cfc3d6', { fontStyle: 'normal' }).setOrigin(0, 0.5);
-    LEVELS.forEach((L, i) => {
+    this.txt(34, 128, Save.level > SAGA_LEVELS + 1 ? 'saga cleared' : Save.level > SAGA_LEVELS ? 'the saga boss awaits' : 'level ' + Save.level + ' of ' + SAGA_LEVELS, 12, '#cfc3d6', { fontStyle: 'normal' }).setOrigin(0, 0.5);
+    LEVELS.slice(0, SAGA_LEVELS).forEach((L, i) => {
       const n = i + 1, x = 82 + i * 118, open = n <= Save.level, done = n < Save.level;
       const b = this.button(x, 206, 104, 96, open ? (done ? 0x2e7d32 : 0xc62828) : 0x3a3444, open ? String(n) : '—', 34, () => {
         if (!open) { Sound.play('deny'); return; }
@@ -716,9 +763,13 @@ class SagaScene extends MenuBase {
       this.txt(x, 232, open ? L.name : 'LOCKED', 10, open ? '#fff' : '#8a8094', { align: 'center', wordWrap: { width: 96 } });
       if (done) this.txt(x + 38, 172, '✓', 16, '#fff59d');
     });
-    // The saga's major boss, fought after level 3. Not built yet.
-    const bossOpen = Save.level > LEVELS.length;
-    const boss = this.button(W / 2, 304, 340, 46, bossOpen ? 0x6a1b9a : 0x3a3444, bossOpen ? 'SAGA BOSS · COMING SOON' : 'SAGA BOSS · LOCKED', 14, () => Sound.play('deny'));
+    // The saga's major boss, fought after level 3.
+    const bossOpen = Save.level > SAGA_LEVELS, bossDone = Save.level > SAGA_LEVELS + 1;
+    const boss = this.button(W / 2, 304, 340, 46, bossDone ? 0x2e7d32 : bossOpen ? 0x6a1b9a : 0x3a3444,
+      bossOpen ? 'SAGA BOSS · ' + LEVELS[SAGA_LEVELS].name.toUpperCase() + (bossDone ? '  ✓' : '') : 'SAGA BOSS · LOCKED', 14, () => {
+        if (!bossOpen) { Sound.play('deny'); return; }
+        this.scene.start('Game', { level: SAGA_LEVELS + 1 });
+      });
     if (!bossOpen) boss.t.setColor('#8a8094');
     // Sagas 2-5: locked.
     for (let i = 1; i < SAGAS.length; i++) {
@@ -776,6 +827,8 @@ class GameScene extends BaseScene {
     this.earned = 0;
     this.wound = 0;                // enemy strikes add up here; each full point costs one samurai
     this.over = false;
+    this.bolts = [];               // lightning streaks being drawn
+    this.hazards = [];             // lightning left on the ground
     this.started = false;          // false while the level waits on its start screen
     this.fight = false;            // true while the scroll is stopped for a big fight
     this.boss = null;              // the next (or current) big fight; set in buildLevel
@@ -795,7 +848,8 @@ class GameScene extends BaseScene {
     this.buildFx();
     this.buildHud();
     this.syncArmy(true);
-    this.banner('LEVEL ' + this.levelNo, this.L.name);
+    this.stageName = this.levelNo > SAGA_LEVELS ? 'SAGA BOSS' : 'LEVEL ' + this.levelNo;
+    this.banner(this.stageName, this.L.name);
     this.showStartUi();
     this.input.on('pointerdown', p => { if (!this.started && p.worldY > 120 && p.worldY < 505) this.beginRun(); });
 
@@ -931,6 +985,7 @@ class GameScene extends BaseScene {
       scale: S, rotate: { start: 0, end: 360 }, frequency: 500, alpha: 0.8,
     }).setDepth(3500);
     this.danger = this.add.graphics().setDepth(-10);        // red warning zone under a boss attack
+    this.boltG = this.add.graphics().setDepth(2960);        // lightning
     this.slowTint = this.add.rectangle(W / 2, H / 2, W, H, 0x5e35b1, 1).setAlpha(0).setDepth(3600);
   }
 
@@ -1104,7 +1159,7 @@ class GameScene extends BaseScene {
     this.earned += gain; Save.souls += gain;
     Sound.play('kill');
     this.charge = Math.min(this.specialMax, this.charge + (e.r ? this.specialMax / 4 : 1));
-    const tint = { demon: 0xab47bc, zombie: 0x9ccc65, giant: 0x9ccc65, charm: 0xffd54f, tenguBoss: 0xef5350, boss: 0xab47bc }[e.kind];
+    const tint = { demon: 0xab47bc, zombie: 0x9ccc65, giant: 0x9ccc65, thunder: 0xb388ff, charm: 0xffd54f, tenguBoss: 0xef5350, boss: 0xab47bc }[e.kind];
     this.burst.setParticleTint(tint);
     this.burst.explode(e.r ? 40 : 10, e.x, e.y);
     const orb = this.img(e.x, e.y, 'soul').setDepth(5001).setScale(S * (e.r ? 2 : 1.2));
@@ -1187,6 +1242,7 @@ class GameScene extends BaseScene {
   // Boss cycle: shuffle after the army -> wind up (red zone shows where it lands) -> strike -> pause.
   updateBoss(wdt) {
     this.danger.clear();
+    this.boltG.clear();
     const b = this.boss;
     if (!b || !this.fight || b.gone) return;
     const B = b.prof;
@@ -1198,44 +1254,129 @@ class GameScene extends BaseScene {
         this.addEnemy(demon ? 'demon' : 'zombie', 85 + Math.random() * 230, this.dist + CFG.armyY + 10, Math.round(b.trickleHp * (demon ? CFG.enemy.demonHp : 1)));
       }
     }
-    b.t -= wdt * 1000;
+    if (B.phase2 && !b.phase2 && b.hp <= b.maxHp * B.phase2) {          // second phase begins
+      b.phase2 = true;
+      this.banner(B.phase2Name, '');
+      Sound.play('gong');
+      this.cameras.main.flash(300, 180, 140, 255);
+      this.shake(400, 0.02);
+    }
+    const haste = b.phase2 ? 1.15 : 1;
+    this.updateLightning(b, wdt);
+    b.t -= wdt * 1000 * haste;
     if (b.state === 'chase') {
       b.obj.setRotation(0);
-      b.x = clamp(b.x + clamp(this.armyX - b.x, -B.speed * wdt, B.speed * wdt), 120, 280);
+      const step = B.speed * haste * wdt;
+      b.x = clamp(b.x + clamp(this.armyX - b.x, -step, step), 120, 280);
       if (b.t > 0) return;
-      b.power = B.powerChance > 0 && b.swings > 0 && !b.power && Math.random() < B.powerChance;
-      b.state = 'wind';
-      b.t = b.windFull = b.power ? B.powerWindMs : B.windMs;
-      b.fromX = b.x;
-      b.aimX = b.power ? clamp(this.armyX, 100, 300) : b.x;
-      b.air = b.power && B.powerStyle === 'fly';             // in the air he cannot be hit
-      Sound.play(b.power ? 'warnPower' : 'warn');
+      const chance = B.powerChance * (b.phase2 ? 1.4 : 1);
+      b.power = chance > 0 && b.swings > 0 && !b.power && Math.random() < chance;
+      b.comboLeft = b.power ? 0 : (B.combo || 1) - 1;
+      this.startWind(b, b.power ? this.pickPower(b) : null);
     } else if (b.state === 'wind') {
-      const k = clamp(1 - b.t / b.windFull, 0, 1), reach = b.power ? B.powerReach : B.reach;
-      if (b.power) {                                         // leap toward where the army stood
+      const k = clamp(1 - b.t / b.windFull, 0, 1), style = b.style;
+      const reach = style === 'bolt' ? B.boltHalf : style ? B.powerReach : B.reach;
+      if (style === 'jump' || style === 'fly') {             // leap toward where the army stood
         const h = Math.sin(k * Math.PI);
         b.x = b.fromX + (b.aimX - b.fromX) * k;
         b.obj.y -= h * (b.air ? 130 : 80);
         b.obj.setScale(b.obj.scaleX * (1 + h * 0.25)).setRotation(b.air ? Math.sin(this.time.now * 0.02) * 0.08 : -0.35 * h);
         if (b.air) this.danger.fillStyle(0x000000, 0.28).fillEllipse(b.x, b.y + 50, 70 - h * 30, 22 - h * 9);   // his shadow
-      } else b.obj.setRotation(-0.25 * k);
-      this.danger.fillStyle(b.power ? 0xff6d00 : 0xff1744, 0.16 + 0.24 * k).fillEllipse(b.aimX, b.y + 118, reach * 2, 124);
-      this.danger.lineStyle(2, 0xff8a80, 0.5 + 0.5 * k).strokeEllipse(b.aimX, b.y + 118, reach * 2, 124);
+      } else b.obj.setRotation((style === 'dash' ? 0.3 : -0.25) * k);
+      if (style === 'bolt') {                                // a lane of lightning, from him to the bottom of the screen
+        this.danger.fillStyle(0xb388ff, 0.14 + 0.3 * k).fillRect(b.aimX - reach, b.y + 30, reach * 2, H);
+        this.danger.lineStyle(2, 0xede7f6, 0.4 + 0.6 * k).strokeRect(b.aimX - reach, b.y + 30, reach * 2, H);
+        if (Math.random() < 0.3) this.zap(b.aimX + (Math.random() - 0.5) * reach, b.y + 40 + Math.random() * 300, b.aimX + (Math.random() - 0.5) * reach, b.y + 120 + Math.random() * 300, 90);
+      } else {
+        this.danger.fillStyle(style === 'dash' ? 0x7c4dff : style ? 0xff6d00 : 0xff1744, 0.16 + 0.24 * k).fillEllipse(b.aimX, b.y + 118, reach * 2, 124);
+        this.danger.lineStyle(2, 0xff8a80, 0.5 + 0.5 * k).strokeEllipse(b.aimX, b.y + 118, reach * 2, 124);
+        if (style === 'dash') this.danger.lineStyle(4, 0xb388ff, 0.3 + 0.6 * k).lineBetween(b.x, b.y + 50, b.aimX, b.y + 110);
+      }
       if (b.t > 0) return;
-      b.x = b.aimX;
+      if (style === 'dash') this.zap(b.x, b.y + 40, b.aimX, b.y + 40, 220);
+      if (style !== 'bolt') b.x = b.aimX;
       b.air = false;
       b.obj.setRotation(0);
-      this.enemySlash(b.x, b.y + 75, b.power ? 4.4 : 3.2, b.power ? 0xffab91 : 0xffffff);
-      Sound.play(b.power ? 'slam' : 'swing');
-      this.shake(b.power ? 320 : 200, b.power ? 0.03 : 0.012);
-      if (b.power) { this.burst.setParticleTint(0xffab91); this.burst.explode(36, b.x, b.y + 95); }
+      if (style === 'bolt') {
+        for (let i = 0; i < 4; i++) this.zap(b.aimX + (Math.random() - 0.5) * 30, b.y - 60, b.aimX + (Math.random() - 0.5) * reach * 1.6, H, 260);
+        this.cameras.main.flash(120, 200, 170, 255);
+      } else this.enemySlash(b.x, b.y + 75, style ? 4.4 : 3.2, B.linger ? 0xd1c4e9 : style ? 0xffab91 : 0xffffff);
+      Sound.play(style ? 'slam' : 'swing');
+      this.shake(style ? 320 : 200, style ? 0.03 : 0.012);
+      if (style && style !== 'bolt') { this.burst.setParticleTint(B.linger ? 0xb388ff : 0xffab91); this.burst.explode(36, b.x, b.y + 95); }
       if (Math.abs(this.armyX - b.aimX) < reach) {
-        this.lose(Math.max(B.cleave, Math.ceil(this.count * B.cleaveShare)) * (b.power ? B.powerMult : 1));
+        this.lose(Math.max(B.cleave, Math.ceil(this.count * B.cleaveShare)) * (style ? B.powerMult : 1));
       } else { Sound.play('dodge'); this.float(this.armyX, this.formY - 46, 'DODGED', '#80d8ff', 18); }
+      if (b.phase2 && B.linger && style !== 'bolt') this.hazards.push({ x: b.aimX, y: b.y + 118, rx: reach, ry: 62, t: B.linger, tick: B.lingerTick });
       b.swings++;
+      if (!style && b.comboLeft > 0) {                       // next swing of the combo: a step toward the army, a shorter wind-up
+        b.comboLeft--;
+        b.x = clamp(b.x + clamp(this.armyX - b.x, -B.comboStep, B.comboStep), 120, 280);
+        this.startWind(b, null, B.comboWindMs);
+        return;
+      }
       b.state = 'recover';
       b.t = B.recoverMs;
     } else if (b.t <= 0) { b.state = 'chase'; b.t = B.chaseMs; }
+  }
+
+  // Begins a wind-up. `style` is null for a plain swing, or the kind of power attack.
+  startWind(b, style, ms) {
+    const B = b.prof;
+    b.style = style;
+    b.state = 'wind';
+    b.t = b.windFull = ms || (style ? (B.powerWind && B.powerWind[style]) || B.powerWindMs : B.windMs);
+    b.fromX = b.x;
+    b.aimX = style ? clamp(this.armyX, 100, 300) : b.x;
+    b.air = style === 'fly';                                 // in the air he cannot be hit
+    Sound.play(style ? 'warnPower' : 'warn');
+  }
+
+  pickPower(b) {
+    const B = b.prof;
+    if (!B.powers) return B.powerStyle;
+    const list = B.powers[b.phase2 ? 1 : 0];
+    return list[Math.floor(Math.random() * list.length)];
+  }
+
+  // A jagged streak of lightning that fades over `life` ms.
+  zap(x1, y1, x2, y2, life = 160) {
+    const pts = [[x1, y1]], n = Math.max(3, Math.round(Math.hypot(x2 - x1, y2 - y1) / 28));
+    for (let i = 1; i < n; i++) {
+      const t = i / n;
+      pts.push([x1 + (x2 - x1) * t + (Math.random() - 0.5) * 26, y1 + (y2 - y1) * t + (Math.random() - 0.5) * 14]);
+    }
+    pts.push([x2, y2]);
+    this.bolts.push({ pts, t: life, life });
+  }
+
+  // Draws lightning, the storm around a second-phase boss, and the lightning left on the ground.
+  updateLightning(b, wdt) {
+    const g = this.boltG, ms = wdt * 1000;
+    if (b.phase2 && Math.random() < 0.5) {                   // storm crackling around him
+      const a = Math.random() * 6.28, r = 46 + Math.random() * 16;
+      this.zap(b.x + Math.cos(a) * r, b.obj.y + Math.sin(a) * r, b.x + Math.cos(a + 1) * r, b.obj.y + Math.sin(a + 1) * r, 110);
+    }
+    this.hazards = this.hazards.filter(h => (h.t -= ms) > 0);
+    this.hazards.forEach(h => {
+      this.danger.fillStyle(0x7c4dff, 0.22 + Math.random() * 0.12).fillEllipse(h.x, h.y, h.rx * 2, h.ry * 2);
+      this.danger.lineStyle(2, 0xede7f6, 0.7).strokeEllipse(h.x, h.y, h.rx * 2, h.ry * 2);
+      if (Math.random() < 0.35) this.zap(h.x + (Math.random() - 0.5) * h.rx * 1.6, h.y + (Math.random() - 0.5) * h.ry, h.x + (Math.random() - 0.5) * h.rx * 1.6, h.y + (Math.random() - 0.5) * h.ry, 100);
+      h.tick -= ms;
+      if (h.tick <= 0 && Math.abs(this.armyX - h.x) < h.rx) {
+        h.tick = b.prof.lingerTick;
+        this.lose(Math.max(1, Math.ceil(this.count * b.prof.lingerShare)));
+      }
+    });
+    this.bolts = this.bolts.filter(z => (z.t -= ms) > 0);
+    this.bolts.forEach(z => {
+      const a = z.t / z.life;
+      [[5, 0x7c4dff, a * 0.6], [2, 0xffffff, a]].forEach(([w, col, al]) => {
+        g.lineStyle(w, col, al).beginPath().moveTo(z.pts[0][0], z.pts[0][1]);
+        for (let i = 1; i < z.pts.length; i++) g.lineTo(z.pts[i][0], z.pts[i][1]);
+        g.strokePath();
+      });
+    });
   }
 
   /* ---------- army bookkeeping ---------- */
@@ -1302,6 +1443,7 @@ class GameScene extends BaseScene {
   endFight() {
     const P = this.boss.prof;
     this.fight = false;
+    this.bolts = []; this.hazards = [];
     this.boss = this.bosses.find(b => !b.gone) || null;
     this.finaleDone = !this.boss;
     Music.set('run'); Sound.play('gong');
@@ -1386,16 +1528,16 @@ class GameScene extends BaseScene {
     const D = 6000;
     const shade = this.add.rectangle(W / 2, H / 2, W, H, 0x0a0610, 1).setAlpha(0).setDepth(D);
     this.tweens.add({ targets: shade, alpha: 0.78, duration: 350 });
-    const title = this.txt(W / 2, 280, win ? 'LEVEL ' + this.levelNo + ' CLEARED' : 'CLAN WIPED', 38, win ? '#ffd54f' : '#ff5252', { stroke: '#000', strokeThickness: 6 }).setDepth(D + 1).setScale(0.3);
+    const title = this.txt(W / 2, 280, win ? this.stageName + (this.levelNo > SAGA_LEVELS ? ' SLAIN' : ' CLEARED') : 'CLAN WIPED', 38, win ? '#ffd54f' : '#ff5252', { stroke: '#000', strokeThickness: 6 }).setDepth(D + 1).setScale(0.3);
     this.tweens.add({ targets: title, scale: 1, duration: 350, ease: 'Back.out' });
     this.img(W / 2 - 62, 346, 'soul').setScale(S * 1.6).setDepth(D + 1);
     this.txt(W / 2 + 6, 346, '+' + this.earned + ' souls', 24, '#e1bee7').setDepth(D + 1);
-    if (unlocked) this.txt(W / 2, 390, this.levelNo < LEVELS.length ? 'LEVEL ' + (this.levelNo + 1) + ' UNLOCKED' : 'SAGA BOSS UNLOCKED', 16, '#fff59d').setDepth(D + 1);
+    if (unlocked) this.txt(W / 2, 390, this.levelNo < SAGA_LEVELS ? 'LEVEL ' + (this.levelNo + 1) + ' UNLOCKED' : this.levelNo === SAGA_LEVELS ? 'SAGA BOSS UNLOCKED' : 'SAGA CLEARED', 16, '#fff59d').setDepth(D + 1);
     const tap = this.txt(W / 2, 430, 'tap to continue', 16, '#bbb', { fontStyle: 'normal' }).setDepth(D + 1).setAlpha(0);
     this.time.delayedCall(700, () => {
       this.tweens.add({ targets: tap, alpha: 1, duration: 500, yoyo: true, repeat: -1 });
       this.input.once('pointerdown', () => {
-        if (win && this.levelNo >= LEVELS.length) this.scene.start('Sagas');           // saga finished: back to the map
+        if (win && this.levelNo >= SAGA_LEVELS) this.scene.start('Sagas');             // level 3 or the saga boss beaten: back to the map
         else this.scene.start('Game', { level: this.levelNo + (win ? 1 : 0) });         // on to the next level, or retry this one
       });
     });
