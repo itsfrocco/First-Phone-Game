@@ -589,8 +589,8 @@ class GameScene extends BaseScene {
     this.soldiers.forEach((s, i) => {
       const col = i % cols, row = Math.floor(i / cols);
       const inRow = Math.min(cols, n - row * cols);
-      const wx = this.armyX + (col - (inRow - 1) / 2) * 17;
-      const wy = this.formY + row * 15;
+      const wx = this.armyX + (col - (inRow - 1) / 2) * 21;
+      const wy = this.formY + row * 18;
       const k = damp(16 - row * 2.5, dt);                 // back rows trail a little
       const lean = clamp((wx - s.x) * 0.02, -0.25, 0.25);
       s.x += (wx - s.x) * k; s.y += (wy - s.y) * k;
