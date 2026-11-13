@@ -40,7 +40,7 @@ const CFG = {
   specialMax: 12,
   oniSlow: 0.97,           // each oni kill slows the run 3%
   contactLossChance: 0.4,
-  boss: { hp: 240, swingMs: 1100, cleave: 4, souls: 80 },
+  boss: { hp: 520, swingMs: 1100, cleave: 4, cleaveShare: 0.10, souls: 80 },   // a swing takes the larger of `cleave` or `cleaveShare` of the army
   oni: { swingMs: 750, reach: 55, hitReach: 40 },
 };
 
@@ -718,7 +718,7 @@ class GameScene extends BaseScene {
         b.swing = CFG.boss.swingMs;
         this.enemySlash(b.x, b.y + 70, 3.2, 0xffffff);
         this.cameras.main.shake(200, 0.012);
-        this.lose(CFG.boss.cleave);
+        this.lose(Math.max(CFG.boss.cleave, Math.ceil(this.count * CFG.boss.cleaveShare)));
       }
     }
   }
