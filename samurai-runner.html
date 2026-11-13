@@ -37,16 +37,17 @@ const CFG = {
   attackRange: 38,
   slowScale: 0.30,         // world speed while the special is active
   slowMs: 4000,
-  specialMax: 12,
-  charmDamageUp: 1.05,     // each lucky charm broken: +5% blade damage for the rest of the run
+  specialMax: 12,          // fewest kills that fill the special bar
+  specialsPerLevel: 8,     // the bar is sized so a level's regular enemies fill it about this many times
+  charmDamageUp: 1.10,     // each lucky charm broken: +10% blade damage for the rest of the run
   bossSlow: 0.97,          // the run slows 3% once the boss is down
   shake: 0.4,              // screen-shake strength multiplier (0 = off)
   // Regular enemies run at the army, then strike. `hit` is the share of one samurai lost per strike.
   enemy: {
     reach: 16,
     fightRush: 80,         // extra run speed while the scroll is stopped for a big fight
-    zombie: { speed: 38, hit: 0.40, strikeMs: 1100 },
-    demon:  { speed: 55, hit: 0.60, strikeMs: 900 },
+    zombie: { speed: 38, hit: 0.28, strikeMs: 1100 },
+    demon:  { speed: 55, hit: 0.42, strikeMs: 900 },
   },
   // Big fights share one cycle: follow the army -> wind up (red zone on the ground) -> strike -> pause.
   //   speed          px/s sideways after the army
@@ -56,30 +57,31 @@ const CFG = {
   //   power*         occasional special: 'jump' slams where the army stood; 'fly' does the same from the air, untouchable meanwhile
   //   trickle        regular enemies keep arriving while he lives
   bosses: {
-    demon: { key: 'boss', name: 'FAT DEMON', slain: 'DEMON SLAIN', r: 50, souls: 80, speed: 80, chaseMs: 700, windMs: 450, recoverMs: 250,
-      reach: 85, cleave: 4, cleaveShare: 0.10, powerChance: 0.35, powerWindMs: 800, powerReach: 100, powerMult: 2, powerStyle: 'jump' },
-    giant: { key: 'giant', name: 'GIANT ZOMBIE', slain: 'GIANT SLAIN', r: 44, souls: 40, speed: 40, chaseMs: 1400, windMs: 900, recoverMs: 500,
+    demon: { key: 'boss', name: 'FAT DEMON', slain: 'DEMON SLAIN', r: 50, souls: 40, speed: 60, chaseMs: 930, windMs: 600, recoverMs: 330,
+      reach: 85, cleave: 4, cleaveShare: 0.10, powerChance: 0.35, powerWindMs: 1070, powerReach: 100, powerMult: 2, powerStyle: 'jump' },
+    giant: { key: 'giant', name: 'GIANT ZOMBIE', slain: 'GIANT SLAIN', r: 44, souls: 20, speed: 40, chaseMs: 1400, windMs: 900, recoverMs: 500,
       reach: 85, cleave: 2, cleaveShare: 0.05, powerChance: 0, trickle: true, trickleMs: 1500 },       // half the fat demon's speed and damage
-    tengu: { key: 'tenguBoss', name: 'TENGU', slain: 'TENGU SLAIN', r: 46, souls: 70, speed: 40, chaseMs: 1400, windMs: 900, recoverMs: 500,
+    tengu: { key: 'tenguBoss', name: 'TENGU', slain: 'TENGU SLAIN', r: 46, souls: 35, speed: 40, chaseMs: 1400, windMs: 900, recoverMs: 500,
       reach: 85, cleave: 3, cleaveShare: 0.08, powerChance: 0.45, powerWindMs: 1600, powerReach: 100, powerMult: 2, powerStyle: 'fly' },
   },
   // The glowing lucky charm that slides from side to side. Harmless; break it for the damage bonus.
-  charm: { speed: 95, lead: 110, souls: 30 },   // speed: px/s sideways; lead: how far in front of its gate row it appears
+  charm: { speed: 95, lead: 110, souls: 15 },   // speed: px/s sideways; lead: how far in front of its gate row it appears
   levelPace: 0.10,         // each level in a saga runs this much faster than the one before (the army and the enemies)
 };
 
 // Levels are generated from a short spec so every one gets steadily harder as it goes.
 //   rows     gate rows; each is followed by an enemy pack
-//   pack     [size of the first pack, growth per row]
-//   hp       [enemy health in the first pack, growth per row]
+//   pack     [size of the first pack, growth per row, extra growth that builds toward the end]
+//   crowd    how much tighter each pack is bunched than the one before, so later packs arrive faster
+//   hp       zombie health (demons have 40% more); difficulty comes from numbers, not tougher enemies
 //   charms   [rows where a lucky charm appears, its health, health growth per charm]
 //   bosses   big fights: `after` a given row, or at the 'end'
 const LEVEL_SPECS = [
-  { name: 'Restless Dead', demons: false, rows: 10, seg: 370, pack: [3, 1.1], hp: [4, 1.2],
+  { name: 'Restless Dead', demons: false, rows: 10, seg: 370, pack: [3, 1.2, 0.20], crowd: 0.05, hp: 3,
     bosses: [{ type: 'giant', after: 'end', hp: 400 }] },
-  { name: 'The Tengu', demons: true, rows: 13, seg: 370, pack: [4, 1.1], hp: [6, 1.7], charms: [[4, 10], 30, 10],
+  { name: 'The Tengu', demons: true, rows: 13, seg: 370, pack: [5, 2.6, 0.32], crowd: 0.18, hp: 7, charms: [[4, 10], 15, 5],
     bosses: [{ type: 'giant', after: 6, hp: 700 }, { type: 'tengu', after: 'end', hp: 1400 }] },
-  { name: 'The Fat Demon', demons: true, rows: 18, seg: 370, pack: [5, 1.0], hp: [12, 3.2], charms: [[5, 11, 15], 45, 15],
+  { name: 'The Fat Demon', demons: true, rows: 18, seg: 370, pack: [6, 2.6, 0.18], crowd: 0.16, hp: 11, charms: [[5, 11, 15], 22, 8],
     bosses: [{ type: 'giant', after: 8, hp: 1800 }, { type: 'demon', after: 'end', hp: 3000 }] },
 ];
 const GOOD_GATES = ['+3', '+3', 'x2', '+4', '+5', '+6', 'x2', '+8', '+10', '+12', '+14', '+16', '+18', '+20', '+22', '+25', '+28', '+30'];
@@ -87,13 +89,13 @@ const GOOD_GATES = ['+3', '+3', 'x2', '+4', '+5', '+6', 'x2', '+8', '+10', '+12'
 function layoutLevel(spec, index) {
   const L = { name: spec.name, demons: spec.demons, charms: spec.charms || [[], 0, 0], gates: [], packs: [], spikes: [], bosses: [] };
   L.pace = 1 + CFG.levelPace * (index % 3);                 // level 1, 2, 3 of each saga
-  let d = 300, hp = spec.hp[0];
+  let d = 300;
+  const hp = spec.hp;
   for (let i = 0; i < spec.rows; i++) {
     const good = GOOD_GATES[i];
-    hp = spec.hp[0] + spec.hp[1] * i;
     L.gates.push({ d, bad: { op: '-', n: Math.round(2 + i * 1.5) }, good: { op: good[0], n: +good.slice(1) } });
     // The first pack hangs back so a lone samurai gets through the first gate before anything reaches it.
-    L.packs.push({ d: d + (i ? 150 : 420), n: Math.round(spec.pack[0] + spec.pack[1] * i), hp });
+    L.packs.push({ d: d + (i ? 150 : 420), n: Math.round(spec.pack[0] + spec.pack[1] * i + spec.pack[2] * i * i), gap: 14 / (1 + spec.crowd * i), hp });
     if (i % 2 === 1 || i > spec.rows * 0.6) L.spikes.push(d + spec.seg / 2);      // midway between gate rows; more of them late on
     d += spec.seg;
     const mid = spec.bosses.find(b => b.after === i);
@@ -151,7 +153,7 @@ const Stats = {
   cost: lvl => Math.floor(40 * Math.pow(1.55, lvl - 1)),
   attackMs: () => Math.max(180, 400 - Save.fire * 25),
   damage: () => 1 + (Save.damage - 1) * 0.5,
-  soulsPerKill: () => 5 * Save.revenue,
+  soulsPerKill: () => 1.5 * Save.revenue,
 };
 const fmt = n => Number.isInteger(n) ? String(n) : n.toFixed(2).replace(/0$/, '');
 const clamp = (v, a, b) => Math.max(a, Math.min(b, v));
@@ -688,8 +690,7 @@ class MenuScene extends MenuBase {
       this.tweens.add({ targets: s, y: 272, duration: 420, yoyo: true, repeat: -1, delay: i * 90, ease: 'Sine.inOut' });
     }
     this.button(W / 2, 400, 250, 70, 0xc62828, 'PLAY', 30, () => this.scene.start('Sagas'));
-    this.button(W / 2, 490, 250, 56, 0x1565c0, 'UPGRADES', 20, () => this.scene.start('Upgrades'));
-    this.button(W / 2, 562, 250, 56, 0x4a3f63, 'SETTINGS', 20, () => this.scene.start('Settings'));
+    this.button(W / 2, 490, 250, 56, 0x4a3f63, 'SETTINGS', 20, () => this.scene.start('Settings'));
     this.txt(W / 2, 680, 'drag left / right to steer', 13, '#d7b9a8', { fontStyle: 'normal' });
   }
 }
@@ -700,7 +701,7 @@ class SagaScene extends MenuBase {
     this.backdrop('SAGAS');
     const numerals = ['I', 'II', 'III', 'IV', 'V'];
     // Saga 1: open, with its three levels.
-    this.panel(W / 2, 190, 368, 216);
+    this.panel(W / 2, 214, 368, 264);
     this.txt(34, 106, numerals[0] + ' · ' + SAGAS[0].toUpperCase(), 17, '#ffd54f').setOrigin(0, 0.5);
     this.txt(34, 128, Save.level > LEVELS.length ? 'saga cleared' : 'level ' + Save.level + ' of ' + LEVELS.length, 12, '#cfc3d6', { fontStyle: 'normal' }).setOrigin(0, 0.5);
     LEVELS.forEach((L, i) => {
@@ -713,39 +714,18 @@ class SagaScene extends MenuBase {
       this.txt(x, 232, open ? L.name : 'LOCKED', 10, open ? '#fff' : '#8a8094', { align: 'center', wordWrap: { width: 96 } });
       if (done) this.txt(x + 38, 172, '✓', 16, '#fff59d');
     });
+    // The saga's major boss, fought after level 3. Not built yet.
+    const bossOpen = Save.level > LEVELS.length;
+    const boss = this.button(W / 2, 304, 340, 46, bossOpen ? 0x6a1b9a : 0x3a3444, bossOpen ? 'SAGA BOSS · COMING SOON' : 'SAGA BOSS · LOCKED', 14, () => Sound.play('deny'));
+    if (!bossOpen) boss.t.setColor('#8a8094');
     // Sagas 2-5: locked.
     for (let i = 1; i < SAGAS.length; i++) {
-      const y = 262 + i * 88;
-      this.panel(W / 2, y, 368, 74, 0.7);
+      const y = 322 + i * 80;
+      this.panel(W / 2, y, 368, 68, 0.7);
       this.txt(34, y - 10, numerals[i] + ' · ' + SAGAS[i].toUpperCase(), 16, '#8a8094').setOrigin(0, 0.5);
       this.txt(34, y + 12, '3 levels · coming soon', 12, '#6f6678', { fontStyle: 'normal' }).setOrigin(0, 0.5);
       this.txt(338, y, 'LOCKED', 12, '#8a8094');
     }
-  }
-}
-
-class UpgradeScene extends MenuBase {
-  constructor() { super('Upgrades'); }
-  create() {
-    this.backdrop('UPGRADES');
-    this.soulPill(120);
-    this.card(72, 'ATTACK\nSPEED', 0x2e7d32, 'fire', (Stats.attackMs() / 1000).toFixed(2) + 's swing');
-    this.card(200, 'BLADE\nDAMAGE', 0x1565c0, 'damage', fmt(Stats.damage()) + ' per hit');
-    this.card(328, 'SOUL\nREWARD', 0x6a1b9a, 'revenue', Stats.soulsPerKill() + ' per kill');
-    this.txt(W / 2, 440, 'souls are earned from every kill', 13, '#d7b9a8', { fontStyle: 'normal' });
-  }
-  card(x, title, color, key, statLine) {
-    const y = 280, w = 116, h = 196, lvl = Save[key], cost = Stats.cost(lvl), can = Save.souls >= cost;
-    this.panel(x, y, w, h).fillStyle(color, 1).fillRoundedRect(x - w / 2, y - h / 2, w, 52, { tl: 12, tr: 12, bl: 0, br: 0 });
-    this.txt(x, y - h / 2 + 26, title, 13, '#fff', { align: 'center' });
-    this.txt(x, y - 22, 'Lv ' + lvl, 26);
-    this.txt(x, y + 8, statLine, 12, '#cfc3d6', { fontStyle: 'normal' });
-    const b = this.button(x, y + 62, 96, 44, can ? color : 0x4a4250, cost + '', 17, () => {
-      if (Save.souls < cost) { Sound.play('deny'); this.cameras.main.shake(90, 0.002); return; }
-      Save.souls -= cost; Save[key]++; Save.save(); Sound.play('buy');
-      this.scene.restart();
-    });
-    if (!can) b.t.setColor('#9a90a0');
   }
 }
 
@@ -794,12 +774,13 @@ class GameScene extends BaseScene {
     this.earned = 0;
     this.wound = 0;                // enemy strikes add up here; each full point costs one samurai
     this.over = false;
+    this.started = false;          // false while the level waits on its start screen
     this.fight = false;            // true while the scroll is stopped for a big fight
     this.boss = null;              // the next (or current) big fight; set in buildLevel
     this.finaleDone = false;       // true once every big fight is won
     this.targetX = W / 2;
     this.armyX = W / 2;
-    this.formY = CFG.armyY;
+    this.formY = 440;
     this.soldiers = [];
     this.enemies = [];
     this.gates = [];
@@ -813,14 +794,59 @@ class GameScene extends BaseScene {
     this.buildHud();
     this.syncArmy(true);
     this.banner('LEVEL ' + this.levelNo, this.L.name);
+    this.showStartUi();
+    this.input.on('pointerdown', p => { if (!this.started && p.worldY > 120 && p.worldY < 505) this.beginRun(); });
 
     const steer = p => {
+      if (!this.started) return;
       if (p.worldY > 636 && p.worldX > 280) return;        // special button area
       if (p.worldY < 80 && p.worldX > 345) return;         // mute button area
       this.targetX = clamp(p.worldX, CFG.steerMin, CFG.steerMax);
     };
     this.input.on('pointerdown', steer);
     this.input.on('pointermove', steer);
+  }
+
+  /* ---------- start screen ---------- */
+  // The level waits with the army standing ready and the upgrade cards along the bottom.
+  showStartUi() {
+    if (this.startUi) this.startUi.forEach(o => o.destroy());
+    const before = new Set(this.children.list);
+    this.add.rectangle(W / 2, 618, W, 204, 0x0a0610, 0.6);
+    const cards = [
+      ['fire', 'ATTACK SPEED', 0x2e7d32, (Stats.attackMs() / 1000).toFixed(2) + 's swing'],
+      ['damage', 'BLADE DAMAGE', 0x1565c0, fmt(Stats.damage()) + ' per hit'],
+      ['revenue', 'SOUL REWARD', 0x6a1b9a, fmt(Stats.soulsPerKill()) + ' per kill'],
+    ];
+    cards.forEach(([key, title, color, stat], i) => {
+      const x = 72 + i * 128, y = 616, w = 116, h = 150, cost = Stats.cost(Save[key]), can = Save.souls >= cost;
+      const g = this.add.graphics();
+      g.fillStyle(0x1c1220, 0.96).fillRoundedRect(x - w / 2, y - h / 2, w, h, 12);
+      g.fillStyle(color, 1).fillRoundedRect(x - w / 2, y - h / 2, w, 30, { tl: 12, tr: 12, bl: 0, br: 0 });
+      g.lineStyle(2, 0xffffff, 0.25).strokeRoundedRect(x - w / 2, y - h / 2, w, h, 12);
+      this.txt(x, y - h / 2 + 15, title, 11);
+      this.txt(x, y - 28, 'Lv ' + Save[key], 22);
+      this.txt(x, y - 4, stat, 11, '#cfc3d6', { fontStyle: 'normal' });
+      const b = this.button(x, y + 42, 96, 40, can ? color : 0x4a4250, cost + '', 16, () => {
+        if (Save.souls < cost) { Sound.play('deny'); return; }
+        Save.souls -= cost; Save[key]++; Save.save(); Sound.play('buy');
+        this.time.delayedCall(0, () => { if (!this.started) this.showStartUi(); });
+      });
+      if (!can) b.t.setColor('#9a90a0');
+    });
+    const hint = this.txt(W / 2, 372, 'touch the path to start', 15, '#fff', { stroke: '#000', strokeThickness: 4 });
+    this.tweens.add({ targets: hint, alpha: 0.35, duration: 600, yoyo: true, repeat: -1 });
+    this.button(54, 96, 84, 34, 0x3a3050, '‹ SAGAS', 13, () => this.scene.start('Sagas'));
+    this.startUi = this.children.list.filter(o => !before.has(o));
+    this.startUi.forEach((o, i) => o.setDepth(5400 + i));
+  }
+
+  beginRun() {
+    if (this.started) return;
+    this.started = true;
+    this.startUi.forEach(o => o.destroy());
+    this.startUi = null;
+    this.specialText.setVisible(true); this.specialHint.setVisible(true);
   }
 
   /* ---------- construction ---------- */
@@ -849,7 +875,7 @@ class GameScene extends BaseScene {
     this.L.packs.forEach(pk => {
       for (let i = 0; i < pk.n; i++) {
         const demon = this.L.demons && Math.random() > 0.45;
-        this.addEnemy(demon ? 'demon' : 'zombie', 85 + Math.random() * 230, pk.d + i * 14, Math.round(pk.hp * (demon ? 1.4 : 1)));
+        this.addEnemy(demon ? 'demon' : 'zombie', 85 + Math.random() * 230, pk.d + i * pk.gap, Math.round(pk.hp * (demon ? 1.4 : 1)));
       }
     });
     const [charmRows, charmHp, charmGrow] = this.L.charms;
@@ -868,6 +894,7 @@ class GameScene extends BaseScene {
       return Object.assign(this.addEnemy(P.key, W / 2, b.at, b.hp),
         { prof: P, r: P.r, souls: P.souls, state: 'chase', t: P.chaseMs + 500, swings: 0, power: false, air: false, trickleHp: b.trickleHp, trickleT: P.trickleMs });
     });
+    this.specialMax = Math.max(CFG.specialMax, Math.round(this.enemies.length / CFG.specialsPerLevel));
     this.boss = this.bosses[0] || null;
     this.finaleDone = !this.boss;
   }
@@ -911,8 +938,8 @@ class GameScene extends BaseScene {
     this.soulIcon = this.img(22, 56, 'soul').setScale(S * 1.2).setDepth(D);
     this.soulText = this.txt(34, 56, '', 16, '#e1bee7', { stroke: '#1a0a20', strokeThickness: 3 }).setOrigin(0, 0.5).setDepth(D);
     this.countText = this.txt(0, 0, '', 15, '#fff', { stroke: '#0d1642', strokeThickness: 4 }).setDepth(D);
-    this.specialText = this.txt(336, 676, 'SLOW', 13).setDepth(D + 1);
-    this.specialHint = this.txt(130, 662, 'SPECIAL', 10, '#b39ddb').setDepth(D);
+    this.specialText = this.txt(336, 676, 'SLOW', 13).setDepth(D + 1).setVisible(false);
+    this.specialHint = this.txt(130, 662, 'SPECIAL', 10, '#b39ddb').setDepth(D).setVisible(false);
     this.add.zone(336, 676, 84, 76).setInteractive().on('pointerdown', () => this.activateSpecial());
     this.muteButton(376, 58);
   }
@@ -920,6 +947,12 @@ class GameScene extends BaseScene {
   /* ---------- main loop ---------- */
   update(time, delta) {
     if (this.over) return;
+    if (!this.started) {                                   // start screen: the world is drawn but frozen
+      this.updateScroll(0);
+      this.updateArmy(time, Math.min(delta, 50) / 1000);
+      this.updateHud(0);
+      return;
+    }
     const dt = Math.min(delta, 50) / 1000;                 // real time: steering, samurai attacks
     const slowing = this.slowLeft > 0;
     this.timeScale += ((slowing ? CFG.slowScale : 1) - this.timeScale) * damp(10, dt);
@@ -954,6 +987,7 @@ class GameScene extends BaseScene {
       const y = CFG.armyY - (o.d - this.dist);
       o.y = y;
       if (y > H + 80) { o.obj.destroy(); o.gone = true; return; }
+      if (y < -120) { if (o.obj.visible) o.obj.setVisible(false); return; }      // far ahead: nothing to draw yet
       const p = this.persp(y);
       const bob = o.seed !== undefined && !o.r && !o.hold && o !== this.boss ? Math.sin(this.time.now * 0.02 + o.seed) * 1.5 : 0;
       o.obj.setVisible(y > -90).setPosition(o.x, y + bob).setScale((o.obj.type === 'Container' ? 1 : S) * p * (o.size || 1)).setDepth(o.flat ? y - 30 : y);
@@ -974,7 +1008,7 @@ class GameScene extends BaseScene {
 
   updateArmy(time, dt) {
     this.armyX += (this.targetX - this.armyX) * damp(12, dt);
-    const wantForm = this.fight ? this.boss.y + 92 : CFG.armyY;
+    const wantForm = !this.started ? 440 : this.fight ? this.boss.y + 92 : CFG.armyY;   // stands above the upgrade cards until the run begins
     this.formY += (wantForm - this.formY) * damp(5, dt);
     const n = this.soldiers.length, cols = Math.min(5, Math.ceil(Math.sqrt(n || 1)));
     this.soldiers.forEach((s, i) => {
@@ -1063,10 +1097,11 @@ class GameScene extends BaseScene {
   }
 
   kill(e) {
-    const gain = e.souls || Stats.soulsPerKill();
+    const raw = e.souls || Stats.soulsPerKill();
+    const gain = Math.floor(raw) + (Math.random() < raw % 1 ? 1 : 0);      // a half soul pays out every other kill
     this.earned += gain; Save.souls += gain;
     Sound.play('kill');
-    this.charge = Math.min(CFG.specialMax, this.charge + (e.r ? 3 : 1));
+    this.charge = Math.min(this.specialMax, this.charge + (e.r ? this.specialMax / 4 : 1));
     const tint = { demon: 0xab47bc, zombie: 0x9ccc65, giant: 0x9ccc65, charm: 0xffd54f, tenguBoss: 0xef5350, boss: 0xab47bc }[e.kind];
     this.burst.setParticleTint(tint);
     this.burst.explode(e.r ? 40 : 10, e.x, e.y);
@@ -1077,7 +1112,7 @@ class GameScene extends BaseScene {
     } });
     if (e.kind === 'charm') {
       this.dmgMod *= CFG.charmDamageUp;
-      this.banner('LUCKY CHARM', 'blade damage +5%'); Sound.play('buy');
+      this.banner('LUCKY CHARM', 'blade damage +10%'); Sound.play('buy');
       this.shake(180, 0.008);
       Save.save();
     }
@@ -1233,7 +1268,7 @@ class GameScene extends BaseScene {
 
   /* ---------- special ---------- */
   activateSpecial() {
-    if (this.over || this.slowLeft > 0 || this.charge < CFG.specialMax) return;
+    if (!this.started || this.over || this.slowLeft > 0 || this.charge < this.specialMax) return;
     this.charge = 0;
     this.slowLeft = CFG.slowMs;
     Sound.play('special');
@@ -1320,10 +1355,13 @@ class GameScene extends BaseScene {
       g.fillStyle(0xffffff, 0.8).fillRect(bx, 104, bw * this.bossGhost, 12);
       g.fillStyle(0xe53935, 1).fillRect(bx, 104, bw * r, 12);
     }
+    this.soulText.setText(Save.souls + (this.earned ? '  +' + this.earned : ''));
+    this.countText.setText(this.count).setPosition(this.armyX, this.formY - 30);
+    if (!this.started) return;                             // the upgrade cards cover the bottom until the run begins
     // special bar + button
     const slowing = this.slowLeft > 0;
-    const fill = slowing ? this.slowLeft / CFG.slowMs : this.charge / CFG.specialMax;
-    const ready = !slowing && this.charge >= CFG.specialMax;
+    const fill = slowing ? this.slowLeft / CFG.slowMs : this.charge / this.specialMax;
+    const ready = !slowing && this.charge >= this.specialMax;
     g.fillStyle(0x000000, 0.5).fillRoundedRect(27, 673, 206, 16, 8);
     if (fill > 0.005) g.fillStyle(slowing ? 0xb388ff : 0x7c4dff, 1).fillRoundedRect(30, 676, 200 * fill, 10, Math.min(5, 100 * fill));
     const pulse = ready ? 1 + Math.sin(this.time.now * 0.008) * 0.07 : 1;
@@ -1333,8 +1371,6 @@ class GameScene extends BaseScene {
     this.specialText.setText(slowing ? (this.slowLeft / 1000).toFixed(1) : 'SLOW').setAlpha(ready || slowing ? 1 : 0.45);
     this.specialHint.setText(ready ? 'SPECIAL READY' : slowing ? 'SLOW MOTION' : 'SPECIAL');
 
-    this.soulText.setText(Save.souls + (this.earned ? '  +' + this.earned : ''));
-    this.countText.setText(this.count).setPosition(this.armyX, this.formY - 30);
   }
 
   /* ---------- end ---------- */
@@ -1352,11 +1388,14 @@ class GameScene extends BaseScene {
     this.tweens.add({ targets: title, scale: 1, duration: 350, ease: 'Back.out' });
     this.img(W / 2 - 62, 346, 'soul').setScale(S * 1.6).setDepth(D + 1);
     this.txt(W / 2 + 6, 346, '+' + this.earned + ' souls', 24, '#e1bee7').setDepth(D + 1);
-    if (unlocked) this.txt(W / 2, 390, this.levelNo < LEVELS.length ? 'LEVEL ' + (this.levelNo + 1) + ' UNLOCKED' : 'SAGA CLEARED', 16, '#fff59d').setDepth(D + 1);
+    if (unlocked) this.txt(W / 2, 390, this.levelNo < LEVELS.length ? 'LEVEL ' + (this.levelNo + 1) + ' UNLOCKED' : 'SAGA BOSS UNLOCKED', 16, '#fff59d').setDepth(D + 1);
     const tap = this.txt(W / 2, 430, 'tap to continue', 16, '#bbb', { fontStyle: 'normal' }).setDepth(D + 1).setAlpha(0);
     this.time.delayedCall(700, () => {
       this.tweens.add({ targets: tap, alpha: 1, duration: 500, yoyo: true, repeat: -1 });
-      this.input.once('pointerdown', () => this.scene.start('Sagas'));
+      this.input.once('pointerdown', () => {
+        if (win && this.levelNo >= LEVELS.length) this.scene.start('Sagas');           // saga finished: back to the map
+        else this.scene.start('Game', { level: this.levelNo + (win ? 1 : 0) });         // on to the next level, or retry this one
+      });
     });
   }
 }
@@ -1371,7 +1410,7 @@ window.samuraiGame = new Phaser.Game({
   height: H * R,
   backgroundColor: '#120c14',
   scale: { mode: Phaser.Scale.FIT, autoCenter: Phaser.Scale.CENTER_BOTH },
-  scene: [BootScene, MenuScene, SagaScene, UpgradeScene, SettingsScene, GameScene],
+  scene: [BootScene, MenuScene, SagaScene, SettingsScene, GameScene],
 });
 </script>
 </body>
