@@ -38,7 +38,7 @@ const CFG = {
   slowScale: 0.30,         // world speed while the special is active
   slowMs: 4000,
   specialMax: 12,
-  guardDamageUp: 1.05,     // each red-gate tengu kill: +5% blade damage for the rest of the run
+  charmDamageUp: 1.05,     // each lucky charm broken: +5% blade damage for the rest of the run
   bossSlow: 0.97,          // the run slows 3% once the boss is down
   shake: 0.4,              // screen-shake strength multiplier (0 = off)
   // Regular enemies run at the army, then strike. `hit` is the share of one samurai lost per strike.
@@ -63,34 +63,37 @@ const CFG = {
     tengu: { key: 'tenguBoss', name: 'TENGU', slain: 'TENGU SLAIN', r: 46, souls: 70, speed: 40, chaseMs: 1400, windMs: 900, recoverMs: 500,
       reach: 85, cleave: 3, cleaveShare: 0.08, powerChance: 0.45, powerWindMs: 1600, powerReach: 100, powerMult: 2, powerStyle: 'fly' },
   },
-  // The small tengu standing in front of a red gate. speed: px/s toward the army; lead: how far in front of the gate.
-  guard: { swingMs: 750, reach: 55, hitReach: 40, speed: 12, lead: 70 },
+  // The glowing lucky charm that slides from side to side. Harmless; break it for the damage bonus.
+  charm: { speed: 95, lead: 110, souls: 30 },   // speed: px/s sideways; lead: how far in front of its gate row it appears
+  levelPace: 0.10,         // each level in a saga runs this much faster than the one before (the army and the enemies)
 };
 
 // Levels are generated from a short spec so every one gets steadily harder as it goes.
 //   rows     gate rows; each is followed by an enemy pack
 //   pack     [size of the first pack, growth per row]
 //   hp       [enemy health in the first pack, growth per row]
-//   guards   rows where a tengu guards the red gate
+//   charms   [rows where a lucky charm appears, its health, health growth per charm]
 //   bosses   big fights: `after` a given row, or at the 'end'
 const LEVEL_SPECS = [
   { name: 'Restless Dead', demons: false, rows: 10, seg: 370, pack: [3, 1.1], hp: [4, 1.2],
     bosses: [{ type: 'giant', after: 'end', hp: 400 }] },
-  { name: 'The Tengu', demons: true, rows: 13, seg: 370, pack: [4, 1.1], hp: [6, 1.7],
+  { name: 'The Tengu', demons: true, rows: 13, seg: 370, pack: [4, 1.1], hp: [6, 1.7], charms: [[4, 10], 30, 10],
     bosses: [{ type: 'giant', after: 6, hp: 700 }, { type: 'tengu', after: 'end', hp: 1400 }] },
-  { name: 'The Fat Demon', demons: true, rows: 18, seg: 370, pack: [5, 1.0], hp: [12, 3.2], guards: [5, 11, 15],
+  { name: 'The Fat Demon', demons: true, rows: 18, seg: 370, pack: [5, 1.0], hp: [12, 3.2], charms: [[5, 11, 15], 45, 15],
     bosses: [{ type: 'giant', after: 8, hp: 1800 }, { type: 'demon', after: 'end', hp: 3000 }] },
 ];
 const GOOD_GATES = ['+3', '+3', 'x2', '+4', '+5', '+6', 'x2', '+8', '+10', '+12', '+14', '+16', '+18', '+20', '+22', '+25', '+28', '+30'];
 // Turns a spec into positions measured in distance along the path (px).
-function layoutLevel(spec) {
-  const L = { name: spec.name, demons: spec.demons, guards: spec.guards || [], gates: [], packs: [], spikes: [], bosses: [] };
+function layoutLevel(spec, index) {
+  const L = { name: spec.name, demons: spec.demons, charms: spec.charms || [[], 0, 0], gates: [], packs: [], spikes: [], bosses: [] };
+  L.pace = 1 + CFG.levelPace * (index % 3);                 // level 1, 2, 3 of each saga
   let d = 300, hp = spec.hp[0];
   for (let i = 0; i < spec.rows; i++) {
     const good = GOOD_GATES[i];
     hp = spec.hp[0] + spec.hp[1] * i;
     L.gates.push({ d, bad: { op: '-', n: Math.round(2 + i * 1.5) }, good: { op: good[0], n: +good.slice(1) } });
-    L.packs.push({ d: d + 150, n: Math.round(spec.pack[0] + spec.pack[1] * i), hp });
+    // The first pack hangs back so a lone samurai gets through the first gate before anything reaches it.
+    L.packs.push({ d: d + (i ? 150 : 420), n: Math.round(spec.pack[0] + spec.pack[1] * i), hp });
     if (i % 2 === 1 || i > spec.rows * 0.6) L.spikes.push(d + spec.seg / 2);      // midway between gate rows; more of them late on
     d += spec.seg;
     const mid = spec.bosses.find(b => b.after === i);
@@ -421,7 +424,6 @@ const Art = {
     Art.rr(c, 40, 43, 30, 9, 3); c.fillStyle = '#2a1a12'; c.fill();
     for (let x = 42; x < 68; x += 7) Art.tri(c, [x, 43], [x + 5, 43], [x + 2.5, 48], '#fffde7');
   },
-  // Drawn in a 130x120 space: used full size for the level 2 boss and shrunk for the red-gate guards.
   tengu(c) {
     Art.shadow(c, 65, 112, 34);
     [1, -1].forEach(side => {                                                                // wings
@@ -462,6 +464,32 @@ const Art = {
       c.beginPath(); c.moveTo(1, 17); c.quadraticCurveTo(16, 12, 10, 0); c.quadraticCurveTo(9, 9, 1, 11); c.closePath(); c.fill();
       c.restore();
     });
+  },
+  charm(c) {                                                 // lucky cat
+    Art.shadow(c, 20, 41, 13);
+    Art.rr(c, 27, 8, 9, 20, 4.5); c.fillStyle = '#fafafa'; c.fill();                         // raised paw
+    Art.ell(c, 31.5, 22, 2.6, 3.2, '#212121');
+    Art.tri(c, [8, 12], [9, 2], [16, 7], '#fafafa'); Art.tri(c, [32, 12], [31, 2], [24, 7], '#fafafa');   // ears
+    Art.tri(c, [10, 10], [10.5, 5], [14, 8], '#ffccbc'); Art.tri(c, [30, 10], [29.5, 5], [26, 8], '#ffccbc');
+    Art.ell(c, 20, 30, 13, 11, '#fafafa');                                                   // body
+    Art.ell(c, 20, 15, 12.5, 11, '#ffffff');                                                 // head
+    Art.ell(c, 20, 5.4, 4, 1.6, '#212121');
+    c.strokeStyle = '#212121'; c.lineWidth = 1.1;
+    c.beginPath(); c.arc(14.5, 14.5, 2.4, Math.PI * 1.1, Math.PI * 1.9); c.stroke();
+    c.beginPath(); c.arc(25.5, 14.5, 2.4, Math.PI * 1.1, Math.PI * 1.9); c.stroke();
+    c.lineWidth = 0.6; [[9, 17, 5, 16], [9, 19, 5, 20], [31, 17, 35, 16], [31, 19, 35, 20]].forEach(([a, b, x, y]) => { c.beginPath(); c.moveTo(a, b); c.lineTo(x, y); c.stroke(); });
+    Art.tri(c, [18.8, 16.6], [21.2, 16.6], [20, 18.2], '#212121');
+    c.strokeStyle = '#e53935'; c.lineWidth = 0.8; c.beginPath(); c.moveTo(17.6, 20.6); c.lineTo(20, 19); c.lineTo(22.4, 20.6); c.stroke();
+    Art.ell(c, 11.5, 18.5, 2.2, 1.4, 'rgba(255,171,145,0.6)'); Art.ell(c, 28.5, 18.5, 2.2, 1.4, 'rgba(255,171,145,0.6)');
+    c.strokeStyle = '#e53935'; c.lineWidth = 1.6; c.beginPath(); c.moveTo(10.5, 23.5); c.quadraticCurveTo(20, 27, 29.5, 23.5); c.stroke();   // collar
+    Art.ell(c, 20, 27, 2.6, 2.6, '#ffca28'); Art.ell(c, 19.3, 26.3, 0.8, 0.8, '#fff8e1');
+    c.strokeStyle = '#212121'; c.lineWidth = 1; c.beginPath(); c.arc(20, 34.5, 3.6, 0, 7); c.stroke();
+    c.fillStyle = '#212121'; c.fillRect(18.2, 33, 3.6, 0.9); c.fillRect(19.5, 33, 1, 3.6); c.fillRect(18.2, 35.6, 3.6, 0.9);
+  },
+  glow(c) {
+    const g = c.createRadialGradient(32, 32, 2, 32, 32, 32);
+    g.addColorStop(0, 'rgba(255,241,170,0.95)'); g.addColorStop(0.4, 'rgba(255,213,79,0.45)'); g.addColorStop(1, 'rgba(255,193,7,0)');
+    Art.ell(c, 32, 32, 32, 32, g);
   },
   // Not used yet: kept for a later boss.
   oni(c) {
@@ -566,8 +594,7 @@ const Art = {
   buildAll(scene) {
     const m = (k, w, h) => Art.make(scene, k, w, h, Art[k]);
     m('samurai', 36, 50); m('katana', 12, 36); m('demon', 32, 40); m('zombie', 32, 40); m('boss', 130, 126); m('giant', 110, 130);
-    Art.make(scene, 'tenguBoss', 130, 120, Art.tengu);
-    Art.make(scene, 'tengu', 58, 54, c => { c.scale(0.44, 0.44); Art.tengu(c); });
+    Art.make(scene, 'tenguBoss', 130, 120, Art.tengu); m('charm', 40, 44); m('glow', 64, 64);
     m('spike', 36, 28); m('slash', 48, 48); m('soul', 16, 16); m('dot', 8, 8); m('petal', 8, 6);
     m('grass', 64, 64); m('path', 280, 128); m('lantern', 24, 42); m('tree', 60, 58); m('menuBg', W, H);
   },
@@ -759,7 +786,7 @@ class GameScene extends BaseScene {
     this.setupCamera();
     this.dist = 0;                 // distance travelled; drives layout and the progress bar
     this.speedMod = 1;
-    this.dmgMod = 1;               // grows with each red-gate tengu kill
+    this.dmgMod = 1;               // grows with each lucky charm broken
     this.timeScale = 1;            // 1 normally, eases to CFG.slowScale during the special
     this.slowLeft = 0;
     this.charge = 0;
@@ -825,10 +852,13 @@ class GameScene extends BaseScene {
         this.addEnemy(demon ? 'demon' : 'zombie', 85 + Math.random() * 230, pk.d + i * 14, Math.round(pk.hp * (demon ? 1.4 : 1)));
       }
     });
-    this.L.guards.forEach((row, idx) => {
-      const g = this.gates[row], red = g.left.good ? g.right : g.left, G = CFG.guard;
-      const e = this.addEnemy('tengu', red.x, g.d - G.lead, 40 + idx * 25);
-      Object.assign(e, { souls: 40 + idx * 20, r: 8, swing: G.swingMs });
+    const [charmRows, charmHp, charmGrow] = this.L.charms;
+    charmRows.forEach((row, idx) => {
+      const e = this.addEnemy('charm', 100 + Math.random() * 200, this.gates[row].d - CFG.charm.lead, charmHp + charmGrow * idx);
+      const glow = this.img(0, 0, 'glow').setBlendMode(Phaser.BlendModes.ADD);
+      e.sprite = e.obj;                                      // the cat itself, for hit flashes
+      e.obj = this.add.container(e.x, -200, [glow, e.sprite.setPosition(0, 0)]);
+      Object.assign(e, { glow, r: 8, souls: CFG.charm.souls, vx: (Math.random() < 0.5 ? -1 : 1) * CFG.charm.speed });
     });
     this.L.spikes.forEach(d => {
       this.addSpike(Math.random() < 0.5 ? 130 : 270, d);
@@ -913,7 +943,7 @@ class GameScene extends BaseScene {
 
   updateScroll(wdt) {
     if (!this.fight) {
-      const speed = CFG.baseSpeed * (1 + CFG.speedRamp * this.dist / this.L.length) * this.speedMod;
+      const speed = CFG.baseSpeed * this.L.pace * (1 + CFG.speedRamp * this.dist / this.L.length) * this.speedMod;
       const step = speed * wdt;
       this.dist += step;
       this.grass.tilePositionY -= step * R;
@@ -1019,8 +1049,9 @@ class GameScene extends BaseScene {
       .setScale(S * (e.r ? 1.1 : 0.75));
     this.tweens.add({ targets: sl, alpha: 0, scaleX: sl.scaleX * 1.5, scaleY: sl.scaleY * 1.5, duration: 140, onComplete: () => sl.destroy() });
     if (!e.prof) {                 // small enemies flash white
-      e.obj.setTintFill(0xffffff);
-      this.time.delayedCall(55, () => { if (e.obj.active) e.obj.clearTint(); });
+      const sp = e.sprite || e.obj;
+      sp.setTintFill(0xffffff);
+      this.time.delayedCall(55, () => { if (sp.active) sp.clearTint(); });
     } else if (!e.flash) {         // big ones take a short red tint now and then, so the art stays visible
       e.flash = true;
       e.obj.setTint(0xff9a9a);
@@ -1036,7 +1067,7 @@ class GameScene extends BaseScene {
     this.earned += gain; Save.souls += gain;
     Sound.play('kill');
     this.charge = Math.min(CFG.specialMax, this.charge + (e.r ? 3 : 1));
-    const tint = { demon: 0xab47bc, zombie: 0x9ccc65, giant: 0x9ccc65, tengu: 0xef5350, tenguBoss: 0xef5350, boss: 0xab47bc }[e.kind];
+    const tint = { demon: 0xab47bc, zombie: 0x9ccc65, giant: 0x9ccc65, charm: 0xffd54f, tenguBoss: 0xef5350, boss: 0xab47bc }[e.kind];
     this.burst.setParticleTint(tint);
     this.burst.explode(e.r ? 40 : 10, e.x, e.y);
     const orb = this.img(e.x, e.y, 'soul').setDepth(5001).setScale(S * (e.r ? 2 : 1.2));
@@ -1044,9 +1075,9 @@ class GameScene extends BaseScene {
       orb.destroy(); Sound.play('soul');
       this.tweens.add({ targets: this.soulIcon, scale: S * 1.8, duration: 80, yoyo: true });
     } });
-    if (e.kind === 'tengu') {
-      this.dmgMod *= CFG.guardDamageUp;
-      this.banner('TENGU SLAIN', 'blade damage +5%'); Sound.play('gong');
+    if (e.kind === 'charm') {
+      this.dmgMod *= CFG.charmDamageUp;
+      this.banner('LUCKY CHARM', 'blade damage +5%'); Sound.play('buy');
       this.shake(180, 0.008);
       Save.save();
     }
@@ -1060,7 +1091,7 @@ class GameScene extends BaseScene {
     const pack = this.enemies.filter(e => !e.r && !e.gone && e.y > -20);
     const backRow = this.soldiers.reduce((m, s) => Math.max(m, s.y), 0);
     pack.forEach(e => {
-      const k = E[e.kind], run = k.speed + (this.fight ? E.fightRush : 0);
+      const k = E[e.kind], run = k.speed * this.L.pace + (this.fight ? E.fightRush : 0);
       // Once past the back row an enemy gives up and keeps running off the bottom.
       if (e.passed || e.y > backRow + 12) { e.passed = true; e.hold = false; e.d -= run * wdt; e.obj.setRotation(0); return; }
       let near = null, L = Infinity;
@@ -1095,22 +1126,14 @@ class GameScene extends BaseScene {
   }
 
   updateHazards(wdt) {
-    // Red-gate tengu: creeps toward the army and swings on a timer.
+    // Lucky charms slide from side to side and glow.
     this.enemies.forEach(e => {
-      if (e.kind !== 'tengu' || e.gone) return;
-      let best = null, bestD = Infinity;
-      this.soldiers.forEach(s => { const d = Math.hypot(s.x - e.x, s.y - e.y); if (d < bestD) { bestD = d; best = s; } });
-      if (!best) return;
-      if (e.y > -20 && e.y < best.y && bestD > 20) {       // lumber toward the army while it is still ahead
-        const v = CFG.guard.speed * wdt / bestD;
-        e.x += (best.x - e.x) * v; e.d -= (best.y - e.y) * v;
-      }
-      e.swing -= wdt * 1000;
-      if (e.swing > 0 || bestD > CFG.guard.reach) return;
-      e.swing = CFG.guard.swingMs;
-      Sound.play('swing');
-      this.enemySlash(e.x, e.y + 14, 1.2, 0xffd54f);
-      if (bestD < CFG.guard.hitReach) this.lose(1, best);
+      if (e.kind !== 'charm' || e.gone) return;
+      e.x += e.vx * wdt;
+      if (e.x < 85 || e.x > 315) { e.x = clamp(e.x, 85, 315); e.vx = -e.vx; }
+      const pulse = Math.sin(this.time.now * 0.008 + e.seed);
+      e.glow.setScale(S * (1.5 + pulse * 0.2)).setAlpha(0.8 + pulse * 0.2);
+      e.sprite.setRotation(Math.sin(this.time.now * 0.012 + e.seed) * 0.12);
     });
     // Spikes.
     this.spikes.forEach(o => {
@@ -1245,7 +1268,11 @@ class GameScene extends BaseScene {
     this.boss = this.bosses.find(b => !b.gone) || null;
     this.finaleDone = !this.boss;
     Music.set('run'); Sound.play('gong');
-    if (this.finaleDone) this.speedMod *= CFG.bossSlow;
+    if (this.finaleDone) {                                   // nothing is left to fight on the way to the finish
+      this.speedMod *= CFG.bossSlow;
+      [...this.enemies, ...this.spikes].forEach(o => { if (!o.gone) { o.obj.destroy(); o.gone = true; } });
+      this.enemies = []; this.spikes = [];
+    }
     this.bossName.destroy();
     this.tweens.add({ targets: this.bars[0], y: -30, duration: 300 });
     this.tweens.add({ targets: this.bars[1], y: H + 30, duration: 300 });
