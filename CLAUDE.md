@@ -8,8 +8,8 @@ https://itsfrocco.github.io/First-Phone-Game/samurai-runner.html
 Always resend the game link with a fresh cache-busting number on the end, one higher than
 the last one used, so their phone downloads the new copy:
 
-    https://itsfrocco.github.io/First-Phone-Game/samurai-runner.html?v=7
+    https://itsfrocco.github.io/First-Phone-Game/samurai-runner.html?v=8
 
-Last number sent: `?v=6`. Update this line each time a new link is sent.
+Last number sent: `?v=7`. Update this line each time a new link is sent.
 
 Also say one visible thing that tells them they have the new version.
