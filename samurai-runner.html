@@ -43,8 +43,8 @@ const CFG = {
   // Regular enemies run at the army, then strike. `hit` is the share of one samurai lost per strike.
   enemy: {
     reach: 16,
-    zombie: { speed: 38, hit: 0.26, strikeMs: 1100 },
-    demon:  { speed: 55, hit: 0.40, strikeMs: 900 },
+    zombie: { speed: 38, hit: 0.40, strikeMs: 1100 },
+    demon:  { speed: 55, hit: 0.60, strikeMs: 900 },
   },
   boss: {
     hp: 520, souls: 80,
@@ -575,7 +575,7 @@ class GameScene extends BaseScene {
       this.dist += step;
       this.grass.tilePositionY -= step * R;
       this.path.tilePositionY -= step * R;
-      this.enemies.forEach(e => { if (e.hold || e.behind) e.d += step; });
+      this.enemies.forEach(e => { if (e.hold) e.d += step; });
     }
     const place = o => {
       const y = CFG.armyY - (o.d - this.dist);
@@ -701,12 +701,14 @@ class GameScene extends BaseScene {
   updateEnemies(wdt) {
     const E = CFG.enemy;
     const pack = this.enemies.filter(e => !e.r && !e.gone && e.y > -20);
+    const backRow = this.soldiers.reduce((m, s) => Math.max(m, s.y), 0);
     pack.forEach(e => {
+      const k = E[e.kind];
+      // Once past the back row an enemy gives up and keeps running off the bottom.
+      if (e.passed || e.y > backRow + 12) { e.passed = true; e.hold = false; e.d -= k.speed * wdt; e.obj.setRotation(0); return; }
       let near = null, L = Infinity;
       this.soldiers.forEach(s => { const d = Math.hypot(s.x - e.x, s.y - e.y); if (d < L) { L = d; near = s; } });
-      if (!near) { e.hold = e.behind = false; return; }
-      e.behind = e.y > near.y;           // got past the army: turn round and chase instead of scrolling away
-      const k = E[e.kind];
+      if (!near) { e.hold = false; return; }
       e.hold = L <= E.reach;
       if (!e.hold) {
         const v = k.speed * wdt / L;
