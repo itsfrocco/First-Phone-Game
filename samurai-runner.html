@@ -156,7 +156,7 @@ const SAGAS = ['Bamboo Road', 'Crimson Marsh', 'Frozen Pass', 'Ember Fortress', 
    SAVE — same localStorage keys as the prototype
    ============================================================ */
 const Save = {
-  souls: 0, fire: 1, damage: 1, revenue: 1,
+  souls: 0, fire: 1, damage: 1, revenue: 1,     // `souls` is the coin total; the name is kept so old saves carry over
   level: 1,                      // highest level unlocked (4 = saga 1 cleared)
   music: true, sfx: true, shake: true,
   armor: '', weapon: '', necklace: '',   // equipped gear ids
@@ -281,7 +281,7 @@ const Sound = {
     swing: (S) => S.noise({ f: 900, to: 250, dur: 0.2, vol: 0.4, q: 0.8 }),
     kill: (S, r) => { S.tone({ f: 190 * r, to: 60, dur: 0.14, vol: 0.4 }); S.noise({ type: 'lowpass', f: 900, dur: 0.08, vol: 0.2 }); },
     lose: (S, r) => S.tone({ type: 'sawtooth', f: 330 * r, to: 110, dur: 0.18, vol: 0.2 }),
-    soul: (S, r) => S.tone({ f: 1250 * r, to: 1900, dur: 0.08, vol: 0.12 }),
+    soul: (S, r, t) => { S.tone({ type: 'square', f: 1568 * r, dur: 0.05, vol: 0.07 }); S.tone({ type: 'square', f: 2093 * r, dur: 0.12, vol: 0.07, at: t + 0.045 }); },   // a coin landing
     gateGood: (S, r, t) => { S.tone({ type: 'triangle', f: 587, dur: 0.14, vol: 0.4 }); S.tone({ type: 'triangle', f: 880, dur: 0.24, vol: 0.4, at: t + 0.09 }); },
     gateBad: (S, r, t) => { S.tone({ type: 'square', f: 233, dur: 0.14, vol: 0.2 }); S.tone({ type: 'square', f: 156, to: 110, dur: 0.3, vol: 0.2, at: t + 0.1 }); },
     wallBreak: (S, r) => { S.noise({ type: 'lowpass', f: 1400 * r, to: 200, dur: 0.4, vol: 0.5 }); S.tone({ f: 150, to: 50, dur: 0.3, vol: 0.5 }); },
@@ -311,7 +311,7 @@ const Music = {
   tuneB: [3,-1,4,-1, 5,-1,-1,-1, 7,-1,6,5, 4,-1,-1,-1,  3,-1,2,-1, 0,-1,2,-1, 3,-1,4,3, 2,-1,-1,-1],
   bass: { 0: 73.42, 6: 73.42, 8: 110, 12: 87.31 },
   drums: { run: { kick: [0, 4, 10, 12], rim: [6, 14] }, boss: { kick: [0, 2, 4, 8, 10, 12], rim: [6, 14, 15] } },
-  bpm: { menu: 66, run: 112, boss: 134, storm: 92, stormBoss: 118 },
+  bpm: { menu: 118, run: 112, boss: 134, storm: 92, stormBoss: 118 },
   // The storm stage: low, sparse and heavy. A drone, a slow melody an octave down, and war drums.
   stormScale: [146.83, 164.81, 174.61, 220, 233.08, 293.66, 329.63, 349.23],
   stormA: [0,-1,-1,-1, -1,-1,2,-1, 1,-1,-1,-1, 0,-1,-1,-1,  4,-1,-1,3, -1,-1,2,-1, 1,-1,0,-1, -1,-1,-1,-1],
@@ -329,14 +329,27 @@ const Music = {
     if ((boss ? [0, 3, 6, 8, 11, 14] : [0, 6, 8, 14]).includes(q)) Sound.tone({ f: 90, to: 34, dur: 0.34, vol: 0.9, at: t, out });   // war drum
     if (boss && (q === 4 || q === 12)) Sound.noise({ type: 'highpass', f: 2200, dur: 0.05, vol: 0.2, at: t, out });
   },
-  // The menu has its own calm theme: a slow flute-like line over a soft drone, in a brighter scale.
-  menuScale: [293.66, 329.63, 392, 440, 493.88, 587.33, 659.25, 783.99, 880],
-  menuA: [0,-1,-1,-1, 3,-1,-1,-1, 5,-1,-1,4, 3,-1,-1,-1,  2,-1,-1,-1, 3,-1,4,-1, 2,-1,-1,-1, -1,-1,-1,-1],
-  menuB: [5,-1,-1,-1, 6,-1,5,-1, 4,-1,-1,-1, 3,-1,-1,-1,  2,-1,3,-1, 4,-1,-1,-1, 0,-1,-1,-1, -1,-1,-1,-1],
+  // The menu theme: an arcade tune on the same Japanese scale as the run. A square-wave lead with a plucked
+  // shamisen-like double, a bouncing octave bass, sparkling arpeggios and taiko drums.
+  menuA: [5,-1,5,6, 7,-1,6,5, 4,-1,3,-1, 4,5,-1,-1,  5,-1,5,6, 7,-1,8,-1, 7,6,5,-1, 6,-1,-1,-1],
+  menuB: [7,-1,7,8, 7,-1,6,5, 6,-1,5,4, 3,-1,-1,-1,  4,-1,4,5, 6,-1,5,4, 3,-1,2,3, 5,-1,-1,-1],
+  menuC: [3,-1,3,4, 5,-1,4,3, 2,-1,3,-1, 0,-1,-1,-1,  3,-1,3,4, 5,-1,6,-1, 7,-1,6,5, 5,-1,-1,-1],
+  menuRoots: [73.42, 58.27, 73.42, 55],                      // one bass root per bar: D, B flat, D, A
   menuNote(i, t) {
-    const s = i % 32, out = Sound.mus, m = (Math.floor(i / 32) % 2 ? this.menuB : this.menuA)[s];
-    if (m >= 0) Sound.tone({ f: this.menuScale[m], dur: 1.3, vol: 0.3, attack: 0.09, at: t, out });
-    if (s % 16 === 0) [146.83, s ? 196 : 220].forEach(f => Sound.tone({ f, dur: 3.6, vol: 0.11, attack: 0.7, at: t, out }));
+    const s = i % 32, q = s % 16, part = Math.floor(i / 32) % 4, out = Sound.mus;
+    const m = [this.menuA, this.menuB, this.menuC, this.menuB][part][s];
+    if (m >= 0) {
+      const f = this.scale[m];
+      Sound.tone({ type: 'square', f, dur: 0.2, vol: 0.085, at: t, out });                              // arcade lead
+      Sound.tone({ type: 'triangle', f: f * 2.02, to: f * 2, dur: 0.32, vol: 0.16, at: t, out });       // plucked double
+    }
+    const root = this.menuRoots[Math.floor(i / 16) % 4];
+    if (q % 2 === 0) Sound.tone({ type: 'triangle', f: root * (q % 4 === 2 ? 2 : 1), dur: 0.17, vol: 0.4, at: t, out });      // bouncing bass
+    if (part % 2 === 1 && q % 2 === 1) Sound.tone({ type: 'square', f: root * [8, 12, 16, 12][(q >> 1) % 4], dur: 0.07, vol: 0.03, at: t, out });   // sparkle
+    if ([0, 6, 8, 11].includes(q)) Sound.tone({ f: 120, to: 44, dur: 0.24, vol: 0.7, at: t, out });      // taiko
+    if (q === 4 || q === 12) Sound.noise({ f: 1500, dur: 0.09, vol: 0.22, q: 0.8, at: t, out });          // rim crack
+    if (q % 4 === 2) Sound.noise({ type: 'highpass', f: 5000, dur: 0.03, vol: 0.09, at: t, out });        // tick
+    if (s === 30 && part === 3) [0, 0.06].forEach(d => Sound.tone({ f: 150, to: 60, dur: 0.12, vol: 0.5, at: t + d, out }));   // roll into the repeat
   },
   set(mode) { if (mode !== this.mode) { this.mode = mode; this.step = 0; this.next = 0; } },
   tick() {
@@ -666,10 +679,11 @@ const Art = {
     c.fillStyle = Art.grad(c, 24, 4, 24, 44, [[0, 'rgba(255,255,255,0)'], [0.5, 'rgba(255,255,255,1)'], [1, 'rgba(255,255,255,0)']]);
     c.fill();
   },
+  // The currency: a gold coin with a square hole, like an old mon. (Kept under its old key, 'soul'.)
   soul(c) {
-    const g = c.createRadialGradient(8, 8, 0.5, 8, 8, 8);
-    g.addColorStop(0, '#ffffff'); g.addColorStop(0.35, '#e1bee7'); g.addColorStop(1, 'rgba(171,71,188,0)');
-    Art.ell(c, 8, 8, 8, 8, g);
+    Art.ell(c, 8, 8.6, 7.2, 7.2, '#8a5a00'); Art.ell(c, 8, 7.6, 7.2, 7.2, '#f9a825'); Art.ell(c, 8, 7.6, 5.6, 5.6, '#ffd54f');
+    c.fillStyle = '#b26a00'; c.fillRect(6, 5.6, 4, 4); c.fillStyle = '#fff8e1'; c.fillRect(6, 9, 4, 0.7);
+    c.strokeStyle = 'rgba(255,255,255,0.8)'; c.lineWidth = 1.1; c.beginPath(); c.arc(8, 7.6, 5.4, 3.5, 4.7); c.stroke();
   },
   dot(c) { Art.ell(c, 4, 4, 4, 4, '#fff'); },
   petal(c) { Art.ell(c, 4, 3, 4, 2.4, '#ffc1d9'); Art.ell(c, 3, 2.6, 1.8, 1, '#ffe3ee'); },
@@ -725,11 +739,66 @@ const Art = {
     [[30, 22, 19], [17, 29, 12], [43, 28, 12], [30, 34, 13]].forEach(([x, y, r], i) => Art.ell(c, x, y, r, r * 0.85, ['#f48fb1', '#f8bbd0', '#f06292', '#f8bbd0'][i]));
     for (let i = 0; i < 16; i++) Art.ell(c, 14 + Math.random() * 32, 10 + Math.random() * 30, 1.6, 1.2, 'rgba(255,255,255,0.6)');
   },
+  // The menu backdrop: a dirt road winding up through a forest, seen from above, with a torii and a stone lantern.
   menuBg(c, w, h) {
-    c.fillStyle = Art.grad(c, 0, 0, 0, h, [[0, '#1a1030'], [0.45, '#7b1e3a'], [0.7, '#e2603a'], [1, '#2a1420']]); c.fillRect(0, 0, w, h);
-    Art.ell(c, 200, 300, 95, 95, '#ff7043'); Art.ell(c, 200, 300, 82, 82, '#ffab91');
-    c.fillStyle = '#3a1830'; c.beginPath(); c.moveTo(0, 400); c.lineTo(70, 320); c.lineTo(140, 380); c.lineTo(230, 300); c.lineTo(320, 385); c.lineTo(400, 330); c.lineTo(400, h); c.lineTo(0, h); c.fill();
-    c.fillStyle = '#22101e'; c.beginPath(); c.moveTo(0, 470); c.quadraticCurveTo(200, 400, 400, 470); c.lineTo(400, h); c.lineTo(0, h); c.fill();
+    const rnd = (a, b) => a + Math.random() * (b - a);
+    c.fillStyle = Art.grad(c, 0, 0, 0, h, [[0, '#3f8a34'], [0.5, '#4c9a3c'], [1, '#3a7f30']]); c.fillRect(0, 0, w, h);
+    for (let i = 0; i < 46; i++) Art.ell(c, rnd(0, w), rnd(0, h), rnd(16, 44), rnd(10, 24), i % 2 ? 'rgba(98,176,72,0.28)' : 'rgba(36,96,38,0.25)');
+    for (let i = 0; i < 520; i++) {
+      const x = rnd(0, w), y = rnd(0, h);
+      c.strokeStyle = ['#63b548', '#2f6f2a', '#7cc95a'][i % 3]; c.lineWidth = 1.3;
+      c.beginPath(); c.moveTo(x, y); c.lineTo(x + rnd(-2, 2), y - rnd(3, 6)); c.stroke();
+    }
+    // the road
+    const mid = y => 200 + Math.sin(y * 0.011 + 0.6) * 20, half = y => 62 + y * 0.062;
+    const road = (grow, fill) => {
+      c.beginPath();
+      for (let y = -10; y <= h + 10; y += 10) c.lineTo(mid(y) - half(y) - grow + Math.sin(y * 0.09) * 5, y);
+      for (let y = h + 10; y >= -10; y -= 10) c.lineTo(mid(y) + half(y) + grow + Math.sin(y * 0.07 + 2) * 5, y);
+      c.closePath(); c.fillStyle = fill; c.fill();
+    };
+    road(7, '#356f2c'); road(2, '#9a7a48'); road(-5, '#c79f62'); road(-20, '#d3ad6f');
+    for (let i = 0; i < 70; i++) { const y = rnd(0, h), x = mid(y) + rnd(-1, 1) * (half(y) - 14); Art.ell(c, x, y, rnd(6, 20), rnd(3, 8), i % 2 ? 'rgba(232,200,140,0.35)' : 'rgba(150,112,62,0.22)'); }
+    for (let i = 0; i < 60; i++) { const y = rnd(0, h), x = mid(y) + rnd(-1, 1) * (half(y) - 8), r = rnd(1.5, 4); Art.ell(c, x, y + 1, r, r * 0.7, '#7d6238'); Art.ell(c, x, y, r, r * 0.7, i % 3 ? '#b9b3a6' : '#8f8a80'); }
+    const off = y => mid(y) + half(y);                       // right edge of the road at height y
+    // flowers and rocks in the grass
+    for (let i = 0; i < 70; i++) {
+      const y = rnd(0, h), side = i % 2 ? 1 : -1, x = mid(y) + side * (half(y) + rnd(14, 130));
+      if (x < 4 || x > w - 4) continue;
+      const col = ['#ffffff', '#b98be0', '#ffd54f', '#ffffff'][i % 4];
+      for (let k = 0; k < 5; k++) Art.ell(c, x + Math.cos(k * 1.257) * 2.3, y + Math.sin(k * 1.257) * 2.3, 1.7, 1.7, col);
+      Art.ell(c, x, y, 1.2, 1.2, col === '#ffd54f' ? '#f57f17' : '#ffe082');
+    }
+    const rock = (x, y, r) => { Art.ell(c, x, y + r * 0.5, r * 1.1, r * 0.4, 'rgba(0,0,0,0.3)'); Art.ell(c, x, y, r, r * 0.78, '#4d535b'); Art.ell(c, x, y - 1, r - 1.6, r * 0.78 - 1.6, '#868d96'); Art.ell(c, x - r * 0.2, y - r * 0.3, r * 0.5, r * 0.3, '#b3bac2'); };
+    [[30, 150, 13], [372, 430, 14], [22, 520, 12], [366, 610, 15], [52, 680, 10], [350, 300, 9], [60, 330, 8]].forEach(a => rock(...a));
+    // bushes and tree tops along both sides
+    const bush = (x, y, r) => {
+      Art.ell(c, x + 2, y + r * 0.55, r * 1.05, r * 0.5, 'rgba(0,0,0,0.3)');
+      [[0, 0, 1], [-0.62, 0.2, 0.7], [0.62, 0.2, 0.7], [-0.3, -0.42, 0.72], [0.34, -0.4, 0.7]].forEach(([dx, dy, k]) => Art.ell(c, x + dx * r, y + dy * r, r * k, r * k * 0.9, '#1f5a24'));
+      [[0, -0.06, 0.9], [-0.6, 0.14, 0.6], [0.6, 0.14, 0.6], [-0.3, -0.46, 0.62], [0.34, -0.44, 0.6]].forEach(([dx, dy, k]) => Art.ell(c, x + dx * r, y + dy * r, r * k, r * k * 0.88, '#3d9a3a'));
+      [[-0.2, -0.3, 0.5], [0.4, -0.5, 0.3], [-0.62, 0, 0.3], [0.5, 0.05, 0.3]].forEach(([dx, dy, k]) => Art.ell(c, x + dx * r, y + dy * r, r * k, r * k * 0.8, '#6cc84f'));
+    };
+    for (let y = -6; y < h + 30; y += 46) {
+      bush(rnd(-6, 20), y + rnd(-8, 8), rnd(24, 34)); bush(w - rnd(-6, 20), y + rnd(-8, 8) + 20, rnd(24, 34));
+      if (Math.random() < 0.5) bush(rnd(30, 52), y + 24, rnd(13, 19));
+      if (Math.random() < 0.5) bush(w - rnd(30, 52), y + 4, rnd(13, 19));
+    }
+    // torii, up the road on the right
+    const tx = 346, ty = 196;
+    Art.ell(c, tx, ty + 30, 34, 6, 'rgba(0,0,0,0.3)');
+    c.fillStyle = '#8e1b14'; c.fillRect(tx - 24, ty - 20, 7, 50); c.fillRect(tx + 17, ty - 20, 7, 50);
+    c.fillStyle = '#d6372b'; c.fillRect(tx - 22, ty - 20, 4, 50); c.fillRect(tx + 19, ty - 20, 4, 50);
+    c.fillStyle = '#b3261c'; c.fillRect(tx - 28, ty - 10, 56, 6);
+    c.fillStyle = '#3a1512'; c.beginPath(); c.moveTo(tx - 38, ty - 30); c.quadraticCurveTo(tx, ty - 22, tx + 38, ty - 30); c.lineTo(tx + 34, ty - 20); c.lineTo(tx - 34, ty - 20); c.fill();
+    c.fillStyle = '#e04a3a'; c.fillRect(tx - 33, ty - 22, 66, 5);
+    // stone lantern
+    const lx = 44, ly = 404;
+    Art.ell(c, lx, ly + 22, 15, 4, 'rgba(0,0,0,0.3)');
+    c.fillStyle = '#7f858c'; c.fillRect(lx - 4, ly, 8, 20); Art.rr(c, lx - 10, ly + 17, 20, 5, 2); c.fill();
+    Art.rr(c, lx - 9, ly - 13, 18, 14, 2); c.fillStyle = '#9aa1a9'; c.fill();
+    c.shadowColor = '#ffb300'; c.shadowBlur = 9; Art.rr(c, lx - 5, ly - 10, 10, 8, 1); c.fillStyle = '#ffd54f'; c.fill(); c.shadowBlur = 0;
+    Art.tri(c, [lx - 15, ly - 12], [lx, ly - 25], [lx + 15, ly - 12], '#5f656c');
+    c.fillStyle = Art.grad(c, 0, 0, 0, h, [[0, 'rgba(10,20,10,0.28)'], [0.25, 'rgba(0,0,0,0)'], [0.8, 'rgba(0,0,0,0)'], [1, 'rgba(10,20,10,0.35)']]); c.fillRect(0, 0, w, h);
   },
   buildAll(scene) {
     const m = (k, w, h) => Art.make(scene, k, w, h, Art[k]);
@@ -790,7 +859,7 @@ class MenuBase extends BaseScene {
       scale: S, rotate: { start: 0, end: 360 }, frequency: 450, alpha: 0.85,
     });
     if (!title) return;
-    this.add.rectangle(W / 2, H / 2, W, H, 0x0a0610, 0.45);
+    this.add.rectangle(W / 2, H / 2, W, H, 0x0a0610, 0.6);
     this.txt(W / 2 + 30, 42, title, 26, '#fff3e0', { stroke: '#2a0a14', strokeThickness: 5 });
     this.button(56, 42, 84, 38, 0x3a3050, '‹ BACK', 14, () => this.scene.start('Menu'));
   }
@@ -804,7 +873,7 @@ class MenuBase extends BaseScene {
   soulPill(y) {
     this.add.graphics().fillStyle(0x000000, 0.45).fillRoundedRect(W / 2 - 80, y - 18, 160, 36, 18);
     this.img(W / 2 - 58, y, 'soul').setScale(S * 1.5);
-    this.txt(W / 2 + 8, y, Save.souls + ' souls', 18, '#e1bee7');
+    this.txt(W / 2 + 8, y, Save.souls + ' coins', 18, '#ffe082');
   }
 }
 
@@ -820,16 +889,46 @@ class MenuScene extends MenuBase {
   constructor() { super('Menu'); }
   create() {
     this.backdrop();
-    this.txt(W / 2, 62, 'SAMURAI', 46, '#fff3e0', { stroke: '#2a0a14', strokeThickness: 6 });
-    this.txt(W / 2, 104, 'R U N N E R', 20, '#ffcc80', { stroke: '#2a0a14', strokeThickness: 4 });
-    this.soulPill(154);
-    for (let i = 0; i < 5; i++) {
-      const s = this.add.container(138 + i * 31, 276, [this.img(0, 0, 'samurai'), this.sword(9.5, 5.5).setRotation(0.45)]).setScale(1.3);
-      this.tweens.add({ targets: s, y: 272, duration: 420, yoyo: true, repeat: -1, delay: i * 90, ease: 'Sine.inOut' });
-    }
-    this.button(W / 2, 400, 250, 70, 0xc62828, 'PLAY', 30, () => this.scene.start('Sagas'));
-    this.button(W / 2, 490, 250, 56, 0x4a3f63, 'SETTINGS', 20, () => this.scene.start('Settings'));
-    this.txt(W / 2, 680, 'drag left / right to steer', 13, '#d7b9a8', { fontStyle: 'normal' });
+    // The foes wait up the road...
+    const foe = (key, x, y, scale, delay) => {
+      const o = this.img(x, y, key).setScale(S * scale);
+      this.tweens.add({ targets: o, y: y - 4, duration: 620, yoyo: true, repeat: -1, delay, ease: 'Sine.inOut' });
+    };
+    foe('giant', 78, 268, 0.62, 200); foe('tenguBoss', 322, 262, 0.62, 400);
+    foe('boss', W / 2, 236, 1.05, 0);
+    foe('demon', 128, 322, 1.25, 100); foe('zombie', 84, 344, 1.25, 500); foe('demon', 300, 334, 1.25, 300); foe('zombie', 268, 316, 1.2, 600); foe('charm', 330, 372, 0.9, 250);
+    // ...the title...
+    const swoosh = this.add.graphics();
+    swoosh.fillStyle(0x16296e, 0.9).fillEllipse(0, 6, 336, 112).fillStyle(0x2d49b0, 0.9).fillEllipse(0, 4, 318, 96).fillStyle(0x16296e, 0.55).fillEllipse(0, 2, 296, 80);
+    const crest = this.add.graphics();
+    crest.fillStyle(0x16296e, 1).fillPoints([{ x: 0, y: -74 }, { x: 22, y: -58 }, { x: 0, y: -42 }, { x: -22, y: -58 }], true);
+    crest.fillStyle(0xffc233, 1).fillPoints([{ x: 0, y: -71 }, { x: 18, y: -58 }, { x: 0, y: -45 }, { x: -18, y: -58 }], true);
+    for (let k = 0; k < 5; k++) crest.fillStyle(0xfff3e0, 1).fillCircle(Math.sin(k * 1.257) * 5, -58 - Math.cos(k * 1.257) * 5, 3.6);
+    crest.fillStyle(0xe53935, 1).fillCircle(0, -58, 2.2);
+    const shadow = { offsetX: 0, offsetY: 4, color: '#0b1440', blur: 0, stroke: true, fill: true };
+    const logo = this.add.container(W / 2, 96, [swoosh, crest,
+      this.txt(0, -20, 'SAMURAI', 48, '#fff6e0', { stroke: '#16296e', strokeThickness: 10, shadow }),
+      this.txt(0, 28, 'RUNNER', 50, '#ffb81f', { stroke: '#16296e', strokeThickness: 10, shadow }),
+    ]).setRotation(-0.05);
+    this.tweens.add({ targets: logo, scale: 1.03, duration: 1400, yoyo: true, repeat: -1, ease: 'Sine.inOut' });
+    // ...the buttons...
+    const big = (y, color, label, to) => {
+      const b = this.button(W / 2, y, 236, 60, color, label, 28, () => this.scene.start(to));
+      b.t.setStroke('#0b1440', 5).setX(W / 2 + 22);
+      this.add.graphics().lineStyle(3, 0xffffff, 0.55).strokeRoundedRect(W / 2 - 118, y - 30, 236, 60, 10);
+      return this.add.graphics().fillStyle(0xffffff, 1).fillCircle(W / 2 - 82, y, 19);
+    };
+    big(420, 0x3f9b1f, 'PLAY', 'Sagas').fillStyle(0x2c7414, 1).fillTriangle(W / 2 - 88, 409, W / 2 - 88, 431, W / 2 - 70, 420);
+    const gear = big(492, 0x1f5fc4, 'SETTINGS', 'Settings').fillStyle(0x17479a, 1);
+    for (let k = 0; k < 8; k++) gear.fillCircle(W / 2 - 82 + Math.cos(k * 0.785) * 11, 492 + Math.sin(k * 0.785) * 11, 3.6);
+    gear.fillCircle(W / 2 - 82, 492, 10).fillStyle(0xffffff, 1).fillCircle(W / 2 - 82, 492, 4.2);
+    // ...and the clan charges up from below.
+    [[92, 606, 1.5], [308, 606, 1.5], [146, 584, 1.6], [254, 584, 1.6], [200, 612, 1.95]].forEach(([x, y, k], i) => {
+      const s = this.add.container(x, y, [this.img(0, 0, 'samurai'), this.sword(9.5, 5.5).setRotation(0.45 - (i === 4 ? 0.5 : 0))]).setScale(k);
+      this.tweens.add({ targets: s, y: y - 7, duration: 300, yoyo: true, repeat: -1, delay: i * 70, ease: 'Sine.inOut' });
+    });
+    this.soulPill(676);
+    this.txt(W / 2, 704, 'drag left / right to steer', 12, '#fff', { fontStyle: 'normal', stroke: '#16401a', strokeThickness: 3 });
   }
 }
 
@@ -890,7 +989,7 @@ class SettingsScene extends MenuBase {
       Save.resetProgress();
       this.scene.restart();
     });
-    this.txt(W / 2, 476, this.confirming ? 'this erases souls, upgrades and unlocked levels' : 'souls, upgrades and unlocked levels', 12, '#d7b9a8', { fontStyle: 'normal' });
+    this.txt(W / 2, 476, this.confirming ? 'this erases coins, upgrades and unlocked levels' : 'coins, upgrades and unlocked levels', 12, '#d7b9a8', { fontStyle: 'normal' });
   }
 }
 
@@ -945,7 +1044,7 @@ class GameScene extends BaseScene {
     this.banner(this.stageName, this.L.name);
     this.showStartUi();
     this.input.on('pointerdown', p => {
-      if (this.started || this.gearOpen || p.worldY < 120 || p.worldY > 505 || (p.worldX < 124 && p.worldY < 160)) return;
+      if (this.started || this.gearOpen || p.worldY < 120 || p.worldY > 505 || (p.worldX < 124 && p.worldY < 198)) return;
       this.beginRun();
     });
 
@@ -985,7 +1084,7 @@ class GameScene extends BaseScene {
     const cards = [
       ['fire', 'ATTACK SPEED', 0x2e7d32, (Stats.attackMs() / 1000).toFixed(2) + 's swing'],
       ['damage', 'BLADE DAMAGE', 0x1565c0, fmt(Stats.damage()) + ' per hit'],
-      ['revenue', 'SOUL REWARD', 0x6a1b9a, fmt(Stats.soulsPerKill()) + ' per kill'],
+      ['revenue', 'COIN REWARD', 0x6a1b9a, fmt(Stats.soulsPerKill()) + ' per kill'],
     ];
     cards.forEach(([key, title, color, stat], i) => {
       const x = 72 + i * 128, y = 616, w = 116, h = 150, cost = Stats.cost(Save[key]), can = Save.souls >= cost;
@@ -1008,9 +1107,32 @@ class GameScene extends BaseScene {
     this.button(54, 96, 84, 34, 0x3a3050, '‹ SAGAS', 13, () => this.scene.start('Sagas'));
     const reopen = kind => this.time.delayedCall(0, () => { if (!this.started) { this.gearOpen = kind; this.showStartUi(); } });
     this.button(64, 138, 104, 32, 0x4a3f63, 'EQUIPMENT', 12, () => reopen('weapon'));
-    if (this.gearOpen) this.showEquipment(reopen);
+    this.button(64, 176, 104, 32, 0xb26a00, 'STORE', 12, () => reopen('store'));
+    if (this.gearOpen === 'store') this.showStore(reopen);
+    else if (this.gearOpen) this.showEquipment(reopen);
     this.startUi = this.children.list.filter(o => !before.has(o));
     this.startUi.forEach((o, i) => o.setDepth(5400 + i));
+  }
+
+  // The store: nothing for sale yet.
+  showStore(reopen) {
+    this.add.rectangle(W / 2, H / 2, W, H, 0x05020c, 0.6);
+    const g = this.add.graphics();
+    g.fillStyle(0x1c1220, 0.97).fillRoundedRect(20, 92, 360, 436, 14);
+    g.lineStyle(2, 0xffffff, 0.25).strokeRoundedRect(20, 92, 360, 436, 14);
+    this.txt(W / 2, 114, 'STORE', 19, '#ffd54f');
+    g.fillStyle(0x000000, 0.45).fillRoundedRect(W / 2 - 80, 140, 160, 36, 18);
+    this.img(W / 2 - 58, 158, 'soul').setScale(S * 1.5);
+    this.txt(W / 2 + 8, 158, Save.souls + ' coins', 18, '#ffe082');
+    for (let i = 0; i < 3; i++) {                            // empty shelves
+      const x = 86 + i * 114, y = 250;
+      g.fillStyle(0x120b18, 1).fillRoundedRect(x - 52, y - 50, 104, 100, 10);
+      g.lineStyle(2, 0xffffff, 0.2).strokeRoundedRect(x - 52, y - 50, 104, 100, 10);
+      this.txt(x, y, '?', 40, '#4a4250');
+    }
+    this.txt(W / 2, 350, 'COMING SOON', 26, '#fff3e0', { stroke: '#2a0a14', strokeThickness: 5 });
+    this.txt(W / 2, 384, 'The merchant is still on the road.\nSave your coins!', 13, '#cfc3d6', { fontStyle: 'normal', align: 'center' });
+    this.button(W / 2, 490, 150, 44, 0x4a3f63, 'CLOSE', 16, () => reopen(null));
   }
 
   // The equipment menu: three slots across the top, and the items for the chosen slot below.
@@ -1158,7 +1280,7 @@ class GameScene extends BaseScene {
     return e;
   }
 
-  wallLabel(e) { e.label.setText('♥ ' + Math.max(1, Math.ceil(e.hp))); }
+  wallLabel(e) { e.label.setText('♥\uFE0E ' + Math.max(1, Math.ceil(e.hp))); }
 
   addSpike(x, d) { this.spikes.push({ x, d, hit: false, obj: this.img(x, -200, 'spike'), flat: true }); }
 
@@ -1184,7 +1306,7 @@ class GameScene extends BaseScene {
     const D = 5000;
     this.hud = this.add.graphics().setDepth(D);
     this.soulIcon = this.img(22, 56, 'soul').setScale(S * 1.2).setDepth(D);
-    this.soulText = this.txt(34, 56, '', 16, '#e1bee7', { stroke: '#1a0a20', strokeThickness: 3 }).setOrigin(0, 0.5).setDepth(D);
+    this.soulText = this.txt(34, 56, '', 16, '#ffe082', { stroke: '#1a0a20', strokeThickness: 3 }).setOrigin(0, 0.5).setDepth(D);
     this.countText = this.txt(0, 0, '', 15, '#fff', { stroke: '#0d1642', strokeThickness: 4 }).setDepth(D);
     this.specialText = this.txt(336, 676, 'SLOW', 13).setDepth(D + 1).setVisible(false);
     this.specialHint = this.txt(130, 662, 'SPECIAL', 10, '#b39ddb').setDepth(D).setVisible(false);
@@ -1356,7 +1478,7 @@ class GameScene extends BaseScene {
 
   kill(e) {
     const raw = e.souls || Stats.soulsPerKill();
-    const gain = Math.floor(raw) + (Math.random() < raw % 1 ? 1 : 0);      // a half soul pays out every other kill
+    const gain = Math.floor(raw) + (Math.random() < raw % 1 ? 1 : 0);      // a half coin pays out every other kill
     this.earned += gain; Save.souls += gain;
     Sound.play('kill');
     this.charge = Math.min(this.specialMax, this.charge + (e.r && e.kind !== 'wall' ? this.specialMax / 4 : 1));
@@ -1757,7 +1879,7 @@ class GameScene extends BaseScene {
     this.tweens.add({ targets: this.bars[1], y: H + 30, duration: 300 });
     this.shake(350, 0.014);
     this.cameras.main.flash(250, 255, 240, 200);
-    this.banner(P.slain, '+' + P.souls + ' souls');
+    this.banner(P.slain, '+' + P.souls + ' coins');
     Save.save();
   }
 
@@ -1839,7 +1961,7 @@ class GameScene extends BaseScene {
     const title = this.txt(W / 2, 280, win ? this.stageName + (this.levelNo > SAGA_LEVELS ? ' SLAIN' : ' CLEARED') : this.crushed ? 'CLAN CRUSHED' : 'CLAN WIPED', 38, win ? '#ffd54f' : '#ff5252', { stroke: '#000', strokeThickness: 6 }).setDepth(D + 1).setScale(0.3);
     this.tweens.add({ targets: title, scale: 1, duration: 350, ease: 'Back.out' });
     this.img(W / 2 - 62, 346, 'soul').setScale(S * 1.6).setDepth(D + 1);
-    this.txt(W / 2 + 6, 346, '+' + this.earned + ' souls', 24, '#e1bee7').setDepth(D + 1);
+    this.txt(W / 2 + 6, 346, '+' + this.earned + ' coins', 24, '#ffe082').setDepth(D + 1);
     if (unlocked) this.txt(W / 2, 390, this.levelNo < SAGA_LEVELS ? 'LEVEL ' + (this.levelNo + 1) + ' UNLOCKED' : this.levelNo === SAGA_LEVELS ? 'SAGA BOSS UNLOCKED' : 'SAGA CLEARED', 16, '#fff59d').setDepth(D + 1);
     if (gearWon) this.txt(W / 2, 418, 'WON: THUNDER ARMOR  ·  FUTSU-NO-MITAMA', 13, '#d1c4e9').setDepth(D + 1);
     const tap = this.txt(W / 2, 452, 'tap to continue', 16, '#bbb', { fontStyle: 'normal' }).setDepth(D + 1).setAlpha(0);

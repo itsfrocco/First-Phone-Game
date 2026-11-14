@@ -36,12 +36,12 @@ Also say one visible thing that tells them they have the new version.
 | `CFG` | Every tuning number: enemies, boss profiles (`CFG.bosses`), storm waves, lucky charm, stone wall, sword |
 | `LEVEL_SPECS`, `layoutLevel` | Levels are generated from a short spec (rows, pack size and growth, crowding, health, charms, walls, bosses). Stage 4 is the saga boss |
 | `GEAR`, `ELEMENT` | Equipment items (weapon, armor, necklace slots) and which enemy kinds are flying, armoured and so on |
-| `Save`, `Stats` | localStorage keys (`samurai_*`) and upgrade formulas |
-| `Sound`, `Music` | Web Audio synth. Music modes: menu, run, boss, storm, stormBoss |
+| `Save`, `Stats` | localStorage keys (`samurai_*`) and upgrade formulas. The currency is shown as coins but is still called `souls` in the code and the save, so old saves carry over |
+| `Sound`, `Music` | Web Audio synth. Music modes: menu (arcade theme), run, boss, storm, stormBoss |
 | `Art` | Every texture, drawn with Canvas 2D at device resolution. No image files |
 | Scenes | `MenuScene`, `SagaScene`, `SettingsScene`, `GameScene` |
 
-Inside `GameScene`: the level start screen (upgrade cards, Equipment menu), then per frame
+Inside `GameScene`: the level start screen (upgrade cards, Equipment menu, Store), then per frame
 `updateEnemies`, `updateScroll`, `updateArmy`, `updateGates`, `updateCombat`, `updateHazards`
 (lucky charms, stone walls, spikes, then `updateBoss`), `updateStorm`, `drawBolts`, `updateHud`.
 
@@ -71,6 +71,8 @@ level 1 wins with no upgrades; level 2 needs about 2; level 3 about 3; the saga 
   game's style.
 
 ## Open ideas
+
+- The Store (button on the level start screen, `showStore`) is an empty "coming soon" panel. What it sells is undecided.
 
 - A necklace for the empty equipment slot (name, effect and how it is earned are undecided).
 - Sagas 2 to 5 are shown locked. Each should have three levels and a saga boss, with the same
