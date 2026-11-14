@@ -1,6 +1,6 @@
 # Notes for Claude
 
-The game is a single file, `samurai-runner.html`, served by GitHub Pages from `main` at
+The game is a single file, `samurai-runner.html`, plus one picture, `menu.jpg` (the owner's own main menu art), served by GitHub Pages from `main` at
 https://itsfrocco.github.io/First-Phone-Game/samurai-runner.html
 
 ## Shipping a change
@@ -8,7 +8,7 @@ https://itsfrocco.github.io/First-Phone-Game/samurai-runner.html
 The owner opens and merges pull requests themselves, to save usage. When a change is finished,
 tested and pushed to the working branch, summarise it and give them:
 
-- the compare link: https://github.com/itsfrocco/First-Phone-Game/compare/main...claude/samurai-game-remaster-oaaaom?expand=1
+- the compare link: https://github.com/itsfrocco/First-Phone-Game/compare/main...claude/brave-turing-klqvrh?expand=1 (swap in the current session's branch name)
 - the next game link (below), with a reminder to wait a minute or two after merging before opening it.
 
 Only open or merge a pull request yourself if they ask for it in that message.
@@ -33,21 +33,26 @@ Also say one visible thing that tells them they have the new version.
 
 | Section | What is there |
 |---|---|
-| `CFG` | Every tuning number: enemies, boss profiles (`CFG.bosses`), storm waves, lucky charm, sword |
-| `LEVEL_SPECS`, `layoutLevel` | Levels are generated from a short spec (rows, pack size and growth, crowding, health, charms, bosses). Stage 4 is the saga boss |
+| `CFG` | Every tuning number: enemies, boss profiles (`CFG.bosses`), storm waves, lucky charm, stone wall, sword |
+| `LEVEL_SPECS`, `layoutLevel` | Levels are generated from a short spec (rows, pack size and growth, crowding, health, charms, walls, bosses). Stage 4 is the saga boss |
 | `GEAR`, `ELEMENT` | Equipment items (weapon, armor, necklace slots) and which enemy kinds are flying, armoured and so on |
-| `Save`, `Stats` | localStorage keys (`samurai_*`) and upgrade formulas |
-| `Sound`, `Music` | Web Audio synth. Music modes: menu, run, boss, storm, stormBoss |
-| `Art` | Every texture, drawn with Canvas 2D at device resolution. No image files |
+| `Save`, `Stats` | localStorage keys (`samurai_*`) and upgrade formulas. The currency is shown as coins but is still called `souls` in the code and the save, so old saves carry over |
+| `Sound`, `Music` | Web Audio synth. Music modes: menu (arcade theme), run, boss, storm, stormBoss |
+| `Art` | Every texture, drawn with Canvas 2D at device resolution. The only image file is `menu.jpg`, loaded in `BootScene`; its PLAY and SETTINGS buttons are painted in, with invisible touch areas over them in `MenuScene`. `Art.menuBg` and plain buttons are the fallback if it does not load (always the case from `file://`) |
 | Scenes | `MenuScene`, `SagaScene`, `SettingsScene`, `GameScene` |
 
-Inside `GameScene`: the level start screen (upgrade cards, Equipment menu), then per frame
+Inside `GameScene`: the level start screen (upgrade cards, Equipment menu, Store), then per frame
 `updateEnemies`, `updateScroll`, `updateArmy`, `updateGates`, `updateCombat`, `updateHazards`
-(lucky charms, spikes, then `updateBoss`), `updateStorm`, `drawBolts`, `updateHud`.
+(lucky charms, stone walls, spikes, then `updateBoss`), `updateStorm`, `drawBolts`, `updateHud`.
 
 All big fights (giant zombie, tengu, fat demon, Takemikazuchi) share one cycle in `updateBoss`:
 chase, wind-up with a warning zone, strike, recover. A profile in `CFG.bosses` sets speeds,
 damage, combos, power attacks (`jump`, `fly`, `bolt`, `dash`) and an optional second phase.
+
+Stone walls (`kind: 'wall'`, an entry in `enemies`) stand in front of a few blue gates. Samurai with no
+enemy in reach cut at a wall from `CFG.wall.range` away; one still standing when the army reaches it in
+that lane ends the run ("CLAN CRUSHED"). Steering to the red gate avoids it. Late in a level the army is
+too busy with packs to dent a wall, so walls sit in early and middle rows with modest health.
 
 ## Testing
 
@@ -66,6 +71,8 @@ level 1 wins with no upgrades; level 2 needs about 2; level 3 about 3; the saga 
   game's style.
 
 ## Open ideas
+
+- The Store (button on the level start screen, `showStore`) is an empty "coming soon" panel. What it sells is undecided.
 
 - A necklace for the empty equipment slot (name, effect and how it is earned are undecided).
 - Sagas 2 to 5 are shown locked. Each should have three levels and a saga boss, with the same

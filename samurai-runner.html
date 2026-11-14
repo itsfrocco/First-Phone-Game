@@ -76,6 +76,8 @@ const CFG = {
   },
   // The glowing lucky charm that slides from side to side. Harmless; break it for the damage bonus.
   charm: { speed: 70, lead: 110, souls: 15 },   // speed: px/s sideways; lead: how far in front of its gate row it appears
+  // A stone wall stands in front of some blue gates. The army cuts at it from `range` away; if it still stands when they reach it, it crushes them all.
+  wall: { lead: 64, range: 200, half: 66, souls: 5 },      // lead: how far in front of its gate it stands; half: half its width
   // The saga boss stage's storm: every `everyMs` a wave of lightning sweeps down the lane the army stands in.
   storm: { everyMs: [4000, 5000], warnMs: 1100, sweepMs: 380, half: 52, cleave: 2, cleaveShare: 0.08 },
   // Futsu-no-mitama: its lightning adds to hits on some kinds of foe and is shrugged off by others. Everything else takes normal damage.
@@ -89,16 +91,17 @@ const CFG = {
 //   crowd    how much tighter each pack is bunched than the one before, so later packs arrive faster
 //   hp       zombie health (demons have more, see CFG.enemy.demonHp); difficulty comes from numbers, not tougher enemies
 //   charms   [rows where a lucky charm appears, its health, health growth per charm]
+//   walls    [rows whose blue gate is behind a stone wall, its health, health growth per wall]
 //   bosses   big fights: `after` a given row, or at the 'end'
 const LEVEL_SPECS = [
-  { name: 'Restless Dead', demons: false, rows: 10, seg: 370, pack: [3, 1.2, 0.20], crowd: 0.05, hp: 3,
+  { name: 'Restless Dead', demons: false, rows: 10, seg: 370, pack: [3, 1.2, 0.20], crowd: 0.05, hp: 3, walls: [[6], 14, 0],
     bosses: [{ type: 'giant', after: 'end', hp: 400 }] },
-  { name: 'The Tengu', demons: true, rows: 13, seg: 370, pack: [5, 2.4, 0.27], crowd: 0.16, hp: 5, charms: [[4, 10], 8, 3],
+  { name: 'The Tengu', demons: true, rows: 13, seg: 370, pack: [5, 2.4, 0.27], crowd: 0.16, hp: 5, charms: [[4, 10], 8, 3], walls: [[3, 8, 11], 24, 10],
     bosses: [{ type: 'giant', after: 6, hp: 700 }, { type: 'tengu', after: 'end', hp: 1400 }] },
-  { name: 'The Fat Demon', demons: true, rows: 18, seg: 370, pack: [6, 2.4, 0.16], crowd: 0.14, hp: 8, charms: [[5, 11, 15], 11, 4],
+  { name: 'The Fat Demon', demons: true, rows: 18, seg: 370, pack: [6, 2.4, 0.16], crowd: 0.14, hp: 8, charms: [[5, 11, 15], 11, 4], walls: [[3, 7, 10], 30, 15],
     bosses: [{ type: 'giant', after: 8, hp: 1800 }, { type: 'demon', after: 'end', hp: 3000 }] },
   // The saga boss stage: a short run to build an army, then the fight.
-  { name: 'Takemikazuchi', demons: true, storm: true, rows: 8, seg: 370, pack: [5, 2.4, 0.30], crowd: 0.15, hp: 8, pace: 1.2, charms: [[4], 11, 0],
+  { name: 'Takemikazuchi', demons: true, storm: true, rows: 8, seg: 370, pack: [5, 2.4, 0.30], crowd: 0.15, hp: 8, pace: 1.2, charms: [[4], 11, 0], walls: [[3, 6], 24, 12],
     bosses: [{ type: 'thunder', after: 'end', hp: 2600 }] },
 ];
 // Equipment, chosen on a level's start screen: one weapon, one armor, one necklace. `boss: true` items are won by beating the saga boss.
@@ -125,7 +128,7 @@ const SAGA_LEVELS = 3;                                        // ordinary levels
 const GOOD_GATES = ['+3', '+3', 'x2', '+4', '+5', '+6', 'x2', '+8', '+10', '+12', '+14', '+16', '+18', '+20', '+22', '+25', '+28', '+30'];
 // Turns a spec into positions measured in distance along the path (px).
 function layoutLevel(spec, index) {
-  const L = { name: spec.name, demons: spec.demons, charms: spec.charms || [[], 0, 0], gates: [], packs: [], spikes: [], bosses: [] };
+  const L = { name: spec.name, demons: spec.demons, charms: spec.charms || [[], 0, 0], walls: spec.walls || [[], 0, 0], gates: [], packs: [], spikes: [], bosses: [] };
   L.storm = !!spec.storm;                                    // dark sky, broken ground and lightning waves
   L.pace = spec.pace || 1 + CFG.levelPace * (index % 3);                 // level 1, 2, 3 of each saga
   let d = 300;
@@ -153,7 +156,7 @@ const SAGAS = ['Bamboo Road', 'Crimson Marsh', 'Frozen Pass', 'Ember Fortress', 
    SAVE — same localStorage keys as the prototype
    ============================================================ */
 const Save = {
-  souls: 0, fire: 1, damage: 1, revenue: 1,
+  souls: 0, fire: 1, damage: 1, revenue: 1,     // `souls` is the coin total; the name is kept so old saves carry over
   level: 1,                      // highest level unlocked (4 = saga 1 cleared)
   music: true, sfx: true, shake: true,
   armor: '', weapon: '', necklace: '',   // equipped gear ids
@@ -278,9 +281,10 @@ const Sound = {
     swing: (S) => S.noise({ f: 900, to: 250, dur: 0.2, vol: 0.4, q: 0.8 }),
     kill: (S, r) => { S.tone({ f: 190 * r, to: 60, dur: 0.14, vol: 0.4 }); S.noise({ type: 'lowpass', f: 900, dur: 0.08, vol: 0.2 }); },
     lose: (S, r) => S.tone({ type: 'sawtooth', f: 330 * r, to: 110, dur: 0.18, vol: 0.2 }),
-    soul: (S, r) => S.tone({ f: 1250 * r, to: 1900, dur: 0.08, vol: 0.12 }),
+    soul: (S, r, t) => { S.tone({ type: 'square', f: 1568 * r, dur: 0.05, vol: 0.07 }); S.tone({ type: 'square', f: 2093 * r, dur: 0.12, vol: 0.07, at: t + 0.045 }); },   // a coin landing
     gateGood: (S, r, t) => { S.tone({ type: 'triangle', f: 587, dur: 0.14, vol: 0.4 }); S.tone({ type: 'triangle', f: 880, dur: 0.24, vol: 0.4, at: t + 0.09 }); },
     gateBad: (S, r, t) => { S.tone({ type: 'square', f: 233, dur: 0.14, vol: 0.2 }); S.tone({ type: 'square', f: 156, to: 110, dur: 0.3, vol: 0.2, at: t + 0.1 }); },
+    wallBreak: (S, r) => { S.noise({ type: 'lowpass', f: 1400 * r, to: 200, dur: 0.4, vol: 0.5 }); S.tone({ f: 150, to: 50, dur: 0.3, vol: 0.5 }); },
     spike: (S) => { S.tone({ type: 'square', f: 1100, to: 300, dur: 0.1, vol: 0.16 }); S.noise({ type: 'highpass', f: 3000, dur: 0.1, vol: 0.2 }); },
     special: (S) => { S.tone({ f: 900, to: 90, dur: 0.7, vol: 0.4 }); S.noise({ f: 2500, to: 200, dur: 0.7, vol: 0.2, q: 0.6 }); },
     gong: (S) => [[98, 0.5], [147, 0.3], [233, 0.2], [311, 0.12]].forEach(([f, v]) => S.tone({ f, dur: 1.8, vol: v, attack: 0.01 })),
@@ -307,7 +311,7 @@ const Music = {
   tuneB: [3,-1,4,-1, 5,-1,-1,-1, 7,-1,6,5, 4,-1,-1,-1,  3,-1,2,-1, 0,-1,2,-1, 3,-1,4,3, 2,-1,-1,-1],
   bass: { 0: 73.42, 6: 73.42, 8: 110, 12: 87.31 },
   drums: { run: { kick: [0, 4, 10, 12], rim: [6, 14] }, boss: { kick: [0, 2, 4, 8, 10, 12], rim: [6, 14, 15] } },
-  bpm: { menu: 66, run: 112, boss: 134, storm: 92, stormBoss: 118 },
+  bpm: { menu: 118, run: 112, boss: 134, storm: 92, stormBoss: 118 },
   // The storm stage: low, sparse and heavy. A drone, a slow melody an octave down, and war drums.
   stormScale: [146.83, 164.81, 174.61, 220, 233.08, 293.66, 329.63, 349.23],
   stormA: [0,-1,-1,-1, -1,-1,2,-1, 1,-1,-1,-1, 0,-1,-1,-1,  4,-1,-1,3, -1,-1,2,-1, 1,-1,0,-1, -1,-1,-1,-1],
@@ -325,14 +329,27 @@ const Music = {
     if ((boss ? [0, 3, 6, 8, 11, 14] : [0, 6, 8, 14]).includes(q)) Sound.tone({ f: 90, to: 34, dur: 0.34, vol: 0.9, at: t, out });   // war drum
     if (boss && (q === 4 || q === 12)) Sound.noise({ type: 'highpass', f: 2200, dur: 0.05, vol: 0.2, at: t, out });
   },
-  // The menu has its own calm theme: a slow flute-like line over a soft drone, in a brighter scale.
-  menuScale: [293.66, 329.63, 392, 440, 493.88, 587.33, 659.25, 783.99, 880],
-  menuA: [0,-1,-1,-1, 3,-1,-1,-1, 5,-1,-1,4, 3,-1,-1,-1,  2,-1,-1,-1, 3,-1,4,-1, 2,-1,-1,-1, -1,-1,-1,-1],
-  menuB: [5,-1,-1,-1, 6,-1,5,-1, 4,-1,-1,-1, 3,-1,-1,-1,  2,-1,3,-1, 4,-1,-1,-1, 0,-1,-1,-1, -1,-1,-1,-1],
+  // The menu theme: an arcade tune on the same Japanese scale as the run. A square-wave lead with a plucked
+  // shamisen-like double, a bouncing octave bass, sparkling arpeggios and taiko drums.
+  menuA: [5,-1,5,6, 7,-1,6,5, 4,-1,3,-1, 4,5,-1,-1,  5,-1,5,6, 7,-1,8,-1, 7,6,5,-1, 6,-1,-1,-1],
+  menuB: [7,-1,7,8, 7,-1,6,5, 6,-1,5,4, 3,-1,-1,-1,  4,-1,4,5, 6,-1,5,4, 3,-1,2,3, 5,-1,-1,-1],
+  menuC: [3,-1,3,4, 5,-1,4,3, 2,-1,3,-1, 0,-1,-1,-1,  3,-1,3,4, 5,-1,6,-1, 7,-1,6,5, 5,-1,-1,-1],
+  menuRoots: [73.42, 58.27, 73.42, 55],                      // one bass root per bar: D, B flat, D, A
   menuNote(i, t) {
-    const s = i % 32, out = Sound.mus, m = (Math.floor(i / 32) % 2 ? this.menuB : this.menuA)[s];
-    if (m >= 0) Sound.tone({ f: this.menuScale[m], dur: 1.3, vol: 0.3, attack: 0.09, at: t, out });
-    if (s % 16 === 0) [146.83, s ? 196 : 220].forEach(f => Sound.tone({ f, dur: 3.6, vol: 0.11, attack: 0.7, at: t, out }));
+    const s = i % 32, q = s % 16, part = Math.floor(i / 32) % 4, out = Sound.mus;
+    const m = [this.menuA, this.menuB, this.menuC, this.menuB][part][s];
+    if (m >= 0) {
+      const f = this.scale[m];
+      Sound.tone({ type: 'square', f, dur: 0.2, vol: 0.085, at: t, out });                              // arcade lead
+      Sound.tone({ type: 'triangle', f: f * 2.02, to: f * 2, dur: 0.32, vol: 0.16, at: t, out });       // plucked double
+    }
+    const root = this.menuRoots[Math.floor(i / 16) % 4];
+    if (q % 2 === 0) Sound.tone({ type: 'triangle', f: root * (q % 4 === 2 ? 2 : 1), dur: 0.17, vol: 0.4, at: t, out });      // bouncing bass
+    if (part % 2 === 1 && q % 2 === 1) Sound.tone({ type: 'square', f: root * [8, 12, 16, 12][(q >> 1) % 4], dur: 0.07, vol: 0.03, at: t, out });   // sparkle
+    if ([0, 6, 8, 11].includes(q)) Sound.tone({ f: 120, to: 44, dur: 0.24, vol: 0.7, at: t, out });      // taiko
+    if (q === 4 || q === 12) Sound.noise({ f: 1500, dur: 0.09, vol: 0.22, q: 0.8, at: t, out });          // rim crack
+    if (q % 4 === 2) Sound.noise({ type: 'highpass', f: 5000, dur: 0.03, vol: 0.09, at: t, out });        // tick
+    if (s === 30 && part === 3) [0, 0.06].forEach(d => Sound.tone({ f: 150, to: 60, dur: 0.12, vol: 0.5, at: t + d, out }));   // roll into the repeat
   },
   set(mode) { if (mode !== this.mode) { this.mode = mode; this.step = 0; this.next = 0; } },
   tick() {
@@ -642,15 +659,31 @@ const Art = {
       Art.tri(c, [x - 1, y - h + 3.5], [x, y - h], [x + 1, y - h + 3.5], '#ef5350');
     });
   },
+  // A dry-stone wall: three courses of rounded boulders.
+  wall(c) {
+    Art.ell(c, 66, 52, 64, 7, 'rgba(0,0,0,0.38)');
+    const stone = (x, y, rx, ry, shade) => {
+      Art.ell(c, x, y, rx, ry, '#2e3238');
+      Art.ell(c, x, y - 0.6, rx - 1.6, ry - 1.6, ['#6f767f', '#7d848d', '#666c75'][shade]);
+      Art.ell(c, x - rx * 0.15, y - ry * 0.3, rx * 0.62, ry * 0.45, ['#9aa1a9', '#a9b0b8', '#8f969e'][shade]);
+      Art.ell(c, x - rx * 0.3, y - ry * 0.5, rx * 0.25, ry * 0.16, 'rgba(255,255,255,0.35)');
+    };
+    [[14, 43, 13, 10], [37, 44, 13, 10], [60, 43, 13, 10.5], [83, 44, 13, 10], [106, 44, 13, 10], [121, 45, 9, 8.5]].forEach(([x, y, rx, ry], i) => stone(x, y, rx, ry, i % 3));
+    [[25, 29, 13, 9.5], [48, 30, 12.5, 9.5], [71, 29, 13, 10], [94, 30, 12.5, 9.5], [113, 31, 10, 9]].forEach(([x, y, rx, ry], i) => stone(x, y, rx, ry, (i + 1) % 3));
+    [[36, 16, 12, 9], [58, 15, 12, 9.5], [80, 16, 12, 9], [100, 18, 10, 8]].forEach(([x, y, rx, ry], i) => stone(x, y, rx, ry, (i + 2) % 3));
+    c.fillStyle = '#4c8a3a'; [[8, 52], [30, 53], [52, 53], [96, 53], [118, 52]].forEach(([x, y]) => { Art.tri(c, [x - 3, y], [x - 1, y - 6], [x, y], '#4c8a3a'); Art.tri(c, [x, y], [x + 2, y - 5], [x + 3, y], '#5fa348'); });
+  },
+  rock(c) { Art.ell(c, 6, 6, 6, 5, '#2e3238'); Art.ell(c, 6, 5.6, 4.6, 3.8, '#7d848d'); Art.ell(c, 5, 4.4, 2.6, 1.6, '#a9b0b8'); },
   slash(c) {
     c.beginPath(); c.arc(24, 24, 20, -1.2, 1.2); c.arc(15, 24, 21, 1.0, -1.0, true); c.closePath();
     c.fillStyle = Art.grad(c, 24, 4, 24, 44, [[0, 'rgba(255,255,255,0)'], [0.5, 'rgba(255,255,255,1)'], [1, 'rgba(255,255,255,0)']]);
     c.fill();
   },
+  // The currency: a gold coin with a square hole, like an old mon. (Kept under its old key, 'soul'.)
   soul(c) {
-    const g = c.createRadialGradient(8, 8, 0.5, 8, 8, 8);
-    g.addColorStop(0, '#ffffff'); g.addColorStop(0.35, '#e1bee7'); g.addColorStop(1, 'rgba(171,71,188,0)');
-    Art.ell(c, 8, 8, 8, 8, g);
+    Art.ell(c, 8, 8.6, 7.2, 7.2, '#8a5a00'); Art.ell(c, 8, 7.6, 7.2, 7.2, '#f9a825'); Art.ell(c, 8, 7.6, 5.6, 5.6, '#ffd54f');
+    c.fillStyle = '#b26a00'; c.fillRect(6, 5.6, 4, 4); c.fillStyle = '#fff8e1'; c.fillRect(6, 9, 4, 0.7);
+    c.strokeStyle = 'rgba(255,255,255,0.8)'; c.lineWidth = 1.1; c.beginPath(); c.arc(8, 7.6, 5.4, 3.5, 4.7); c.stroke();
   },
   dot(c) { Art.ell(c, 4, 4, 4, 4, '#fff'); },
   petal(c) { Art.ell(c, 4, 3, 4, 2.4, '#ffc1d9'); Art.ell(c, 3, 2.6, 1.8, 1, '#ffe3ee'); },
@@ -706,17 +739,72 @@ const Art = {
     [[30, 22, 19], [17, 29, 12], [43, 28, 12], [30, 34, 13]].forEach(([x, y, r], i) => Art.ell(c, x, y, r, r * 0.85, ['#f48fb1', '#f8bbd0', '#f06292', '#f8bbd0'][i]));
     for (let i = 0; i < 16; i++) Art.ell(c, 14 + Math.random() * 32, 10 + Math.random() * 30, 1.6, 1.2, 'rgba(255,255,255,0.6)');
   },
+  // The menu backdrop: a dirt road winding up through a forest, seen from above, with a torii and a stone lantern.
   menuBg(c, w, h) {
-    c.fillStyle = Art.grad(c, 0, 0, 0, h, [[0, '#1a1030'], [0.45, '#7b1e3a'], [0.7, '#e2603a'], [1, '#2a1420']]); c.fillRect(0, 0, w, h);
-    Art.ell(c, 200, 300, 95, 95, '#ff7043'); Art.ell(c, 200, 300, 82, 82, '#ffab91');
-    c.fillStyle = '#3a1830'; c.beginPath(); c.moveTo(0, 400); c.lineTo(70, 320); c.lineTo(140, 380); c.lineTo(230, 300); c.lineTo(320, 385); c.lineTo(400, 330); c.lineTo(400, h); c.lineTo(0, h); c.fill();
-    c.fillStyle = '#22101e'; c.beginPath(); c.moveTo(0, 470); c.quadraticCurveTo(200, 400, 400, 470); c.lineTo(400, h); c.lineTo(0, h); c.fill();
+    const rnd = (a, b) => a + Math.random() * (b - a);
+    c.fillStyle = Art.grad(c, 0, 0, 0, h, [[0, '#3f8a34'], [0.5, '#4c9a3c'], [1, '#3a7f30']]); c.fillRect(0, 0, w, h);
+    for (let i = 0; i < 46; i++) Art.ell(c, rnd(0, w), rnd(0, h), rnd(16, 44), rnd(10, 24), i % 2 ? 'rgba(98,176,72,0.28)' : 'rgba(36,96,38,0.25)');
+    for (let i = 0; i < 520; i++) {
+      const x = rnd(0, w), y = rnd(0, h);
+      c.strokeStyle = ['#63b548', '#2f6f2a', '#7cc95a'][i % 3]; c.lineWidth = 1.3;
+      c.beginPath(); c.moveTo(x, y); c.lineTo(x + rnd(-2, 2), y - rnd(3, 6)); c.stroke();
+    }
+    // the road
+    const mid = y => 200 + Math.sin(y * 0.011 + 0.6) * 20, half = y => 62 + y * 0.062;
+    const road = (grow, fill) => {
+      c.beginPath();
+      for (let y = -10; y <= h + 10; y += 10) c.lineTo(mid(y) - half(y) - grow + Math.sin(y * 0.09) * 5, y);
+      for (let y = h + 10; y >= -10; y -= 10) c.lineTo(mid(y) + half(y) + grow + Math.sin(y * 0.07 + 2) * 5, y);
+      c.closePath(); c.fillStyle = fill; c.fill();
+    };
+    road(7, '#356f2c'); road(2, '#9a7a48'); road(-5, '#c79f62'); road(-20, '#d3ad6f');
+    for (let i = 0; i < 70; i++) { const y = rnd(0, h), x = mid(y) + rnd(-1, 1) * (half(y) - 14); Art.ell(c, x, y, rnd(6, 20), rnd(3, 8), i % 2 ? 'rgba(232,200,140,0.35)' : 'rgba(150,112,62,0.22)'); }
+    for (let i = 0; i < 60; i++) { const y = rnd(0, h), x = mid(y) + rnd(-1, 1) * (half(y) - 8), r = rnd(1.5, 4); Art.ell(c, x, y + 1, r, r * 0.7, '#7d6238'); Art.ell(c, x, y, r, r * 0.7, i % 3 ? '#b9b3a6' : '#8f8a80'); }
+    const off = y => mid(y) + half(y);                       // right edge of the road at height y
+    // flowers and rocks in the grass
+    for (let i = 0; i < 70; i++) {
+      const y = rnd(0, h), side = i % 2 ? 1 : -1, x = mid(y) + side * (half(y) + rnd(14, 130));
+      if (x < 4 || x > w - 4) continue;
+      const col = ['#ffffff', '#b98be0', '#ffd54f', '#ffffff'][i % 4];
+      for (let k = 0; k < 5; k++) Art.ell(c, x + Math.cos(k * 1.257) * 2.3, y + Math.sin(k * 1.257) * 2.3, 1.7, 1.7, col);
+      Art.ell(c, x, y, 1.2, 1.2, col === '#ffd54f' ? '#f57f17' : '#ffe082');
+    }
+    const rock = (x, y, r) => { Art.ell(c, x, y + r * 0.5, r * 1.1, r * 0.4, 'rgba(0,0,0,0.3)'); Art.ell(c, x, y, r, r * 0.78, '#4d535b'); Art.ell(c, x, y - 1, r - 1.6, r * 0.78 - 1.6, '#868d96'); Art.ell(c, x - r * 0.2, y - r * 0.3, r * 0.5, r * 0.3, '#b3bac2'); };
+    [[30, 150, 13], [372, 430, 14], [22, 520, 12], [366, 610, 15], [52, 680, 10], [350, 300, 9], [60, 330, 8]].forEach(a => rock(...a));
+    // bushes and tree tops along both sides
+    const bush = (x, y, r) => {
+      Art.ell(c, x + 2, y + r * 0.55, r * 1.05, r * 0.5, 'rgba(0,0,0,0.3)');
+      [[0, 0, 1], [-0.62, 0.2, 0.7], [0.62, 0.2, 0.7], [-0.3, -0.42, 0.72], [0.34, -0.4, 0.7]].forEach(([dx, dy, k]) => Art.ell(c, x + dx * r, y + dy * r, r * k, r * k * 0.9, '#1f5a24'));
+      [[0, -0.06, 0.9], [-0.6, 0.14, 0.6], [0.6, 0.14, 0.6], [-0.3, -0.46, 0.62], [0.34, -0.44, 0.6]].forEach(([dx, dy, k]) => Art.ell(c, x + dx * r, y + dy * r, r * k, r * k * 0.88, '#3d9a3a'));
+      [[-0.2, -0.3, 0.5], [0.4, -0.5, 0.3], [-0.62, 0, 0.3], [0.5, 0.05, 0.3]].forEach(([dx, dy, k]) => Art.ell(c, x + dx * r, y + dy * r, r * k, r * k * 0.8, '#6cc84f'));
+    };
+    for (let y = -6; y < h + 30; y += 46) {
+      bush(rnd(-6, 20), y + rnd(-8, 8), rnd(24, 34)); bush(w - rnd(-6, 20), y + rnd(-8, 8) + 20, rnd(24, 34));
+      if (Math.random() < 0.5) bush(rnd(30, 52), y + 24, rnd(13, 19));
+      if (Math.random() < 0.5) bush(w - rnd(30, 52), y + 4, rnd(13, 19));
+    }
+    // torii, up the road on the right
+    const tx = 346, ty = 196;
+    Art.ell(c, tx, ty + 30, 34, 6, 'rgba(0,0,0,0.3)');
+    c.fillStyle = '#8e1b14'; c.fillRect(tx - 24, ty - 20, 7, 50); c.fillRect(tx + 17, ty - 20, 7, 50);
+    c.fillStyle = '#d6372b'; c.fillRect(tx - 22, ty - 20, 4, 50); c.fillRect(tx + 19, ty - 20, 4, 50);
+    c.fillStyle = '#b3261c'; c.fillRect(tx - 28, ty - 10, 56, 6);
+    c.fillStyle = '#3a1512'; c.beginPath(); c.moveTo(tx - 38, ty - 30); c.quadraticCurveTo(tx, ty - 22, tx + 38, ty - 30); c.lineTo(tx + 34, ty - 20); c.lineTo(tx - 34, ty - 20); c.fill();
+    c.fillStyle = '#e04a3a'; c.fillRect(tx - 33, ty - 22, 66, 5);
+    // stone lantern
+    const lx = 44, ly = 404;
+    Art.ell(c, lx, ly + 22, 15, 4, 'rgba(0,0,0,0.3)');
+    c.fillStyle = '#7f858c'; c.fillRect(lx - 4, ly, 8, 20); Art.rr(c, lx - 10, ly + 17, 20, 5, 2); c.fill();
+    Art.rr(c, lx - 9, ly - 13, 18, 14, 2); c.fillStyle = '#9aa1a9'; c.fill();
+    c.shadowColor = '#ffb300'; c.shadowBlur = 9; Art.rr(c, lx - 5, ly - 10, 10, 8, 1); c.fillStyle = '#ffd54f'; c.fill(); c.shadowBlur = 0;
+    Art.tri(c, [lx - 15, ly - 12], [lx, ly - 25], [lx + 15, ly - 12], '#5f656c');
+    c.fillStyle = Art.grad(c, 0, 0, 0, h, [[0, 'rgba(10,20,10,0.28)'], [0.25, 'rgba(0,0,0,0)'], [0.8, 'rgba(0,0,0,0)'], [1, 'rgba(10,20,10,0.35)']]); c.fillRect(0, 0, w, h);
   },
   buildAll(scene) {
     const m = (k, w, h) => Art.make(scene, k, w, h, Art[k]);
     m('samurai', 36, 50); m('katana', 12, 36); m('demon', 32, 40); m('zombie', 32, 40); m('boss', 130, 126); m('giant', 110, 130); m('thunder', 130, 134);
     Art.make(scene, 'tenguBoss', 130, 120, Art.tengu); m('charm', 40, 44); m('glow', 64, 64);
-    m('spike', 36, 28); m('slash', 48, 48); m('soul', 16, 16); m('dot', 8, 8); m('petal', 8, 6);
+    m('spike', 36, 28); m('wall', 132, 60); m('rock', 12, 12); m('slash', 48, 48); m('soul', 16, 16); m('dot', 8, 8); m('petal', 8, 6);
     m('grass', 64, 64); m('path', 280, 128); m('lantern', 24, 42); m('deadTree', 60, 58); m('rubble', 30, 24); m('crack', 60, 40); m('tree', 60, 58); m('menuBg', W, H);
   },
 };
@@ -765,13 +853,15 @@ class MenuBase extends BaseScene {
   backdrop(title) {
     this.setupCamera();
     Music.set('menu');
-    this.img(W / 2, H / 2, 'menuBg');
+    this.hasArt = this.textures.exists('menuArt');
+    if (this.hasArt) this.add.image(W / 2, H / 2, 'menuArt').setDisplaySize(H * 784 / 1168, H);     // fills the height; a sliver is cropped off each side
+    else this.img(W / 2, H / 2, 'menuBg');
     this.add.particles(0, 0, 'petal', {
       x: { min: 0, max: W }, y: -10, lifespan: 9000, speedY: { min: 30, max: 70 }, speedX: { min: -25, max: 10 },
       scale: S, rotate: { start: 0, end: 360 }, frequency: 450, alpha: 0.85,
     });
     if (!title) return;
-    this.add.rectangle(W / 2, H / 2, W, H, 0x0a0610, 0.45);
+    this.add.rectangle(W / 2, H / 2, W, H, 0x0a0610, this.hasArt ? 0.88 : 0.6);
     this.txt(W / 2 + 30, 42, title, 26, '#fff3e0', { stroke: '#2a0a14', strokeThickness: 5 });
     this.button(56, 42, 84, 38, 0x3a3050, '‹ BACK', 14, () => this.scene.start('Menu'));
   }
@@ -782,16 +872,20 @@ class MenuBase extends BaseScene {
     g.lineStyle(2, 0xffffff, 0.22).strokeRoundedRect(x - w / 2, y - h / 2, w, h, 12);
     return g;
   }
-  soulPill(y) {
-    this.add.graphics().fillStyle(0x000000, 0.45).fillRoundedRect(W / 2 - 80, y - 18, 160, 36, 18);
-    this.img(W / 2 - 58, y, 'soul').setScale(S * 1.5);
-    this.txt(W / 2 + 8, y, Save.souls + ' souls', 18, '#e1bee7');
-  }
 }
 
 class BootScene extends BaseScene {
   constructor() { super('Boot'); }
-  create() { Art.buildAll(this); this.scene.start('Menu'); }
+  // The menu picture is the one image file (menu.jpg, beside this page). If it cannot be loaded the drawn backdrop is used.
+  create() {
+    Art.buildAll(this);
+    const go = () => { if (!this.left) { this.left = true; this.scene.start('Menu'); } };
+    const pic = new Image();
+    pic.onload = () => { if (!this.left) this.textures.addImage('menuArt', pic); go(); };
+    pic.onerror = go;
+    if (location.protocol === 'file:') go(); else pic.src = 'menu.jpg';     // opened straight from disk (the bot test), the browser will not let the game use it
+    this.time.delayedCall(4000, go);
+  }
 }
 
 /* ============================================================
@@ -801,16 +895,20 @@ class MenuScene extends MenuBase {
   constructor() { super('Menu'); }
   create() {
     this.backdrop();
-    this.txt(W / 2, 62, 'SAMURAI', 46, '#fff3e0', { stroke: '#2a0a14', strokeThickness: 6 });
-    this.txt(W / 2, 104, 'R U N N E R', 20, '#ffcc80', { stroke: '#2a0a14', strokeThickness: 4 });
-    this.soulPill(154);
-    for (let i = 0; i < 5; i++) {
-      const s = this.add.container(138 + i * 31, 276, [this.img(0, 0, 'samurai'), this.sword(9.5, 5.5).setRotation(0.45)]).setScale(1.3);
-      this.tweens.add({ targets: s, y: 272, duration: 420, yoyo: true, repeat: -1, delay: i * 90, ease: 'Sine.inOut' });
+    if (!this.hasArt) {                                     // the picture did not load: plain title and buttons
+      this.txt(W / 2, 150, 'SAMURAI RUNNER', 36, '#fff6e0', { stroke: '#16296e', strokeThickness: 8 });
+      this.button(W / 2, 386, 212, 60, 0x3f9b1f, 'PLAY', 28, () => this.scene.start('Sagas'));
+      this.button(W / 2, 456, 212, 58, 0x1f5fc4, 'SETTINGS', 24, () => this.scene.start('Settings'));
+      return;
     }
-    this.button(W / 2, 400, 250, 70, 0xc62828, 'PLAY', 30, () => this.scene.start('Sagas'));
-    this.button(W / 2, 490, 250, 56, 0x4a3f63, 'SETTINGS', 20, () => this.scene.start('Settings'));
-    this.txt(W / 2, 680, 'drag left / right to steer', 13, '#d7b9a8', { fontStyle: 'normal' });
+    // PLAY and SETTINGS are painted into the picture; these are the touch areas over them.
+    [[386, 'Sagas'], [456, 'Settings']].forEach(([y, to]) => {
+      const glow = this.add.graphics().fillStyle(0xffffff, 0.3).fillRoundedRect(W / 2 - 106, y - 30, 212, 60, 28).setVisible(false);
+      const z = this.add.zone(W / 2, y, 220, 64).setInteractive({ useHandCursor: true });
+      z.on('pointerdown', () => glow.setVisible(true));
+      z.on('pointerout', () => glow.setVisible(false));
+      z.on('pointerup', () => { if (!glow.visible) return; glow.setVisible(false); Sound.play('click'); this.scene.start(to); });
+    });
   }
 }
 
@@ -871,7 +969,7 @@ class SettingsScene extends MenuBase {
       Save.resetProgress();
       this.scene.restart();
     });
-    this.txt(W / 2, 476, this.confirming ? 'this erases souls, upgrades and unlocked levels' : 'souls, upgrades and unlocked levels', 12, '#d7b9a8', { fontStyle: 'normal' });
+    this.txt(W / 2, 476, this.confirming ? 'this erases coins, upgrades and unlocked levels' : 'coins, upgrades and unlocked levels', 12, '#d7b9a8', { fontStyle: 'normal' });
   }
 }
 
@@ -901,6 +999,8 @@ class GameScene extends BaseScene {
     this.bolts = [];               // lightning streaks being drawn
     this.hazards = [];             // lightning left on the ground
     this.started = false;          // false while the level waits on its start screen
+    this.crushed = false;          // true if a stone wall ended the run
+    this.wallSeen = false;         // the first wall of a run gets a warning banner
     this.fight = false;            // true while the scroll is stopped for a big fight
     this.boss = null;              // the next (or current) big fight; set in buildLevel
     this.finaleDone = false;       // true once every big fight is won
@@ -924,7 +1024,7 @@ class GameScene extends BaseScene {
     this.banner(this.stageName, this.L.name);
     this.showStartUi();
     this.input.on('pointerdown', p => {
-      if (this.started || this.gearOpen || p.worldY < 120 || p.worldY > 505 || (p.worldX < 124 && p.worldY < 160)) return;
+      if (this.started || this.gearOpen || p.worldY < 120 || p.worldY > 505 || (p.worldX < 124 && p.worldY < 198)) return;
       this.beginRun();
     });
 
@@ -964,7 +1064,7 @@ class GameScene extends BaseScene {
     const cards = [
       ['fire', 'ATTACK SPEED', 0x2e7d32, (Stats.attackMs() / 1000).toFixed(2) + 's swing'],
       ['damage', 'BLADE DAMAGE', 0x1565c0, fmt(Stats.damage()) + ' per hit'],
-      ['revenue', 'SOUL REWARD', 0x6a1b9a, fmt(Stats.soulsPerKill()) + ' per kill'],
+      ['revenue', 'COIN REWARD', 0x6a1b9a, fmt(Stats.soulsPerKill()) + ' per kill'],
     ];
     cards.forEach(([key, title, color, stat], i) => {
       const x = 72 + i * 128, y = 616, w = 116, h = 150, cost = Stats.cost(Save[key]), can = Save.souls >= cost;
@@ -987,9 +1087,32 @@ class GameScene extends BaseScene {
     this.button(54, 96, 84, 34, 0x3a3050, '‹ SAGAS', 13, () => this.scene.start('Sagas'));
     const reopen = kind => this.time.delayedCall(0, () => { if (!this.started) { this.gearOpen = kind; this.showStartUi(); } });
     this.button(64, 138, 104, 32, 0x4a3f63, 'EQUIPMENT', 12, () => reopen('weapon'));
-    if (this.gearOpen) this.showEquipment(reopen);
+    this.button(64, 176, 104, 32, 0xb26a00, 'STORE', 12, () => reopen('store'));
+    if (this.gearOpen === 'store') this.showStore(reopen);
+    else if (this.gearOpen) this.showEquipment(reopen);
     this.startUi = this.children.list.filter(o => !before.has(o));
     this.startUi.forEach((o, i) => o.setDepth(5400 + i));
+  }
+
+  // The store: nothing for sale yet.
+  showStore(reopen) {
+    this.add.rectangle(W / 2, H / 2, W, H, 0x05020c, 0.6);
+    const g = this.add.graphics();
+    g.fillStyle(0x1c1220, 0.97).fillRoundedRect(20, 92, 360, 436, 14);
+    g.lineStyle(2, 0xffffff, 0.25).strokeRoundedRect(20, 92, 360, 436, 14);
+    this.txt(W / 2, 114, 'STORE', 19, '#ffd54f');
+    g.fillStyle(0x000000, 0.45).fillRoundedRect(W / 2 - 80, 140, 160, 36, 18);
+    this.img(W / 2 - 58, 158, 'soul').setScale(S * 1.5);
+    this.txt(W / 2 + 8, 158, Save.souls + ' coins', 18, '#ffe082');
+    for (let i = 0; i < 3; i++) {                            // empty shelves
+      const x = 86 + i * 114, y = 250;
+      g.fillStyle(0x120b18, 1).fillRoundedRect(x - 52, y - 50, 104, 100, 10);
+      g.lineStyle(2, 0xffffff, 0.2).strokeRoundedRect(x - 52, y - 50, 104, 100, 10);
+      this.txt(x, y, '?', 40, '#4a4250');
+    }
+    this.txt(W / 2, 350, 'COMING SOON', 26, '#fff3e0', { stroke: '#2a0a14', strokeThickness: 5 });
+    this.txt(W / 2, 384, 'The merchant is still on the road.\nSave your coins!', 13, '#cfc3d6', { fontStyle: 'normal', align: 'center' });
+    this.button(W / 2, 490, 150, 44, 0x4a3f63, 'CLOSE', 16, () => reopen(null));
   }
 
   // The equipment menu: three slots across the top, and the items for the chosen slot below.
@@ -1095,6 +1218,16 @@ class GameScene extends BaseScene {
       e.obj = this.add.container(e.x, -200, [glow, e.sprite.setPosition(0, 0)]);
       Object.assign(e, { glow, r: 8, souls: CFG.charm.souls, vx: (Math.random() < 0.5 ? -1 : 1) * CFG.charm.speed });
     });
+    const [wallRows, wallHp, wallGrow] = this.L.walls;
+    wallRows.forEach((row, idx) => {
+      const gate = this.gates[row], side = gate.left.good ? gate.left : gate.right;
+      const e = this.addEnemy('wall', side.x, gate.d - CFG.wall.lead, wallHp + wallGrow * idx);
+      e.sprite = e.obj.setOrigin(0.5, 0.62);
+      e.label = this.txt(0, -34, '', 17, '#fff', { stroke: '#3a0d14', strokeThickness: 5 });
+      e.obj = this.add.container(e.x, -200, [e.sprite.setPosition(0, 0), e.label]);
+      Object.assign(e, { r: 20, souls: CFG.wall.souls });
+      this.wallLabel(e);
+    });
     this.L.spikes.forEach(d => {
       this.addSpike(Math.random() < 0.5 ? 130 : 270, d);
     });
@@ -1127,6 +1260,8 @@ class GameScene extends BaseScene {
     return e;
   }
 
+  wallLabel(e) { e.label.setText('♥\uFE0E ' + Math.max(1, Math.ceil(e.hp))); }
+
   addSpike(x, d) { this.spikes.push({ x, d, hit: false, obj: this.img(x, -200, 'spike'), flat: true }); }
 
   buildFx() {
@@ -1151,7 +1286,7 @@ class GameScene extends BaseScene {
     const D = 5000;
     this.hud = this.add.graphics().setDepth(D);
     this.soulIcon = this.img(22, 56, 'soul').setScale(S * 1.2).setDepth(D);
-    this.soulText = this.txt(34, 56, '', 16, '#e1bee7', { stroke: '#1a0a20', strokeThickness: 3 }).setOrigin(0, 0.5).setDepth(D);
+    this.soulText = this.txt(34, 56, '', 16, '#ffe082', { stroke: '#1a0a20', strokeThickness: 3 }).setOrigin(0, 0.5).setDepth(D);
     this.countText = this.txt(0, 0, '', 15, '#fff', { stroke: '#0d1642', strokeThickness: 4 }).setDepth(D);
     this.specialText = this.txt(336, 676, 'SLOW', 13).setDepth(D + 1).setVisible(false);
     this.specialHint = this.txt(130, 662, 'SPECIAL', 10, '#b39ddb').setDepth(D).setVisible(false);
@@ -1277,12 +1412,17 @@ class GameScene extends BaseScene {
       let best = null, bestD = CFG.attackRange;
       near.forEach(e => {
         if (e.hp <= 0) return;
+        if (e.kind === 'wall') {       // cut at from a distance, but anything in reach comes first
+          if (bestD >= CFG.attackRange && e.y > this.formY - CFG.wall.range && e.y < this.formY && Math.abs(this.armyX - e.x) < CFG.wall.half) best = e;
+          return;
+        }
         const d = e === this.boss && this.fight ? (Math.abs(s.x - e.x) < e.prof.reach + 10 ? 0 : Infinity) : Math.hypot(e.x - s.x, e.y - s.y) - e.r;
         if (d < bestD) { bestD = d; best = e; }
       });
       if (!best) return;
       s.cd = cd * (0.9 + Math.random() * 0.2);
       s.lunge = 7; s.swing = 1;
+      if (best.kind === 'wall') this.airSlash(s, best);
       this.strike(best, dmg + this.lightningBonus(best, dmg), s);
       if (this.thunderBlade && Math.random() < 0.6) this.zap(s.x + 9, s.y - 12, best.x, best.y, 90);   // Futsu-no-mitama's trail
     });
@@ -1312,16 +1452,17 @@ class GameScene extends BaseScene {
       this.time.delayedCall(260, () => { e.flash = false; });
     }
     if (e.r || Math.random() < 0.5) this.float(hx, hy - 12, fmt(dmg), this.thunderBlade && ELEMENT[e.kind] ? '#d9a8ff' : '#ffeb3b', 13);
+    if (e.label) this.wallLabel(e);
     if (e.hp <= 0) this.kill(e);
   }
 
   kill(e) {
     const raw = e.souls || Stats.soulsPerKill();
-    const gain = Math.floor(raw) + (Math.random() < raw % 1 ? 1 : 0);      // a half soul pays out every other kill
+    const gain = Math.floor(raw) + (Math.random() < raw % 1 ? 1 : 0);      // a half coin pays out every other kill
     this.earned += gain; Save.souls += gain;
     Sound.play('kill');
-    this.charge = Math.min(this.specialMax, this.charge + (e.r ? this.specialMax / 4 : 1));
-    const tint = { demon: 0xab47bc, zombie: 0x9ccc65, giant: 0x9ccc65, thunder: 0xb388ff, charm: 0xffd54f, tenguBoss: 0xef5350, boss: 0xab47bc }[e.kind];
+    this.charge = Math.min(this.specialMax, this.charge + (e.r && e.kind !== 'wall' ? this.specialMax / 4 : 1));
+    const tint = { demon: 0xab47bc, zombie: 0x9ccc65, giant: 0x9ccc65, thunder: 0xb388ff, charm: 0xffd54f, wall: 0x9aa1a9, tenguBoss: 0xef5350, boss: 0xab47bc }[e.kind];
     this.burst.setParticleTint(tint);
     this.burst.explode(e.r ? 40 : 10, e.x, e.y);
     const orb = this.img(e.x, e.y, 'soul').setDepth(5001).setScale(S * (e.r ? 2 : 1.2));
@@ -1329,6 +1470,13 @@ class GameScene extends BaseScene {
       orb.destroy(); Sound.play('soul');
       this.tweens.add({ targets: this.soulIcon, scale: S * 1.8, duration: 80, yoyo: true });
     } });
+    if (e.kind === 'wall') {
+      Sound.play('wallBreak'); this.shake(200, 0.01);
+      for (let i = 0; i < 9; i++) {                          // the stones tumble apart
+        const rk = this.img(e.x + (Math.random() - 0.5) * 100, e.y - Math.random() * 24, 'rock').setDepth(2900).setScale(S * (0.8 + Math.random() * 0.9));
+        this.tweens.add({ targets: rk, x: rk.x + (Math.random() - 0.5) * 120, y: rk.y + 30 + Math.random() * 50, rotation: (Math.random() - 0.5) * 8, alpha: 0, duration: 520, ease: 'Cubic.out', onComplete: () => rk.destroy() });
+      }
+    }
     if (e.kind === 'charm') {
       this.dmgMod *= CFG.charmDamageUp;
       this.banner('LUCKY CHARM', 'blade damage +10%'); Sound.play('buy');
@@ -1388,6 +1536,20 @@ class GameScene extends BaseScene {
       const pulse = Math.sin(this.time.now * 0.008 + e.seed);
       e.glow.setScale(S * (1.5 + pulse * 0.2)).setAlpha(0.8 + pulse * 0.2);
       e.sprite.setRotation(Math.sin(this.time.now * 0.012 + e.seed) * 0.12);
+    });
+    // Stone walls: a warning as one comes into view, a red pulse as it closes in, and the crush.
+    this.enemies.forEach(e => {
+      if (e.kind !== 'wall' || e.gone || e.hp <= 0 || e.passed) return;
+      if (!this.wallSeen && e.y > 120) { this.wallSeen = true; this.banner('STONE WALL', 'break it or go around'); }
+      const close = e.y > this.formY - 110;
+      e.label.setColor(close && Math.sin(this.time.now * 0.025) > 0 ? '#ff5252' : '#fff');
+      if (e.y < this.formY - 26) return;
+      e.passed = true;
+      if (Math.abs(this.armyX - e.x) >= CFG.wall.half) return;                 // went around it
+      this.crushed = true;
+      Sound.play('slam'); this.shake(450, 0.02);
+      this.float(this.armyX, this.formY - 50, 'CRUSHED', '#ff5252', 30);
+      this.count = 0; this.syncArmy();
     });
     // Spikes.
     this.spikes.forEach(o => {
@@ -1697,7 +1859,7 @@ class GameScene extends BaseScene {
     this.tweens.add({ targets: this.bars[1], y: H + 30, duration: 300 });
     this.shake(350, 0.014);
     this.cameras.main.flash(250, 255, 240, 200);
-    this.banner(P.slain, '+' + P.souls + ' souls');
+    this.banner(P.slain, '+' + P.souls + ' coins');
     Save.save();
   }
 
@@ -1707,6 +1869,12 @@ class GameScene extends BaseScene {
   enemySlash(x, y, scale, tint) {
     const sl = this.img(x, y, 'slash').setDepth(2950).setRotation(Math.PI / 2 - 0.8).setScale(S * scale).setTint(tint);
     this.tweens.add({ targets: sl, rotation: Math.PI / 2 + 0.8, alpha: 0, duration: 200, onComplete: () => sl.destroy() });
+  }
+
+  // A blade of wind from a samurai to a wall ahead.
+  airSlash(s, e) {
+    const tx = e.x + clamp(s.x - e.x, -50, 50), sl = this.img(s.x, s.y - 14, 'slash').setDepth(2900).setRotation(-Math.PI / 2).setScale(S * 0.6).setAlpha(0.85).setTint(this.bladeTint);
+    this.tweens.add({ targets: sl, x: tx, y: e.y, duration: 110, onComplete: () => sl.destroy() });
   }
 
   float(x, y, str, color, size) {
@@ -1770,10 +1938,10 @@ class GameScene extends BaseScene {
     const D = 6000;
     const shade = this.add.rectangle(W / 2, H / 2, W, H, 0x0a0610, 1).setAlpha(0).setDepth(D);
     this.tweens.add({ targets: shade, alpha: 0.78, duration: 350 });
-    const title = this.txt(W / 2, 280, win ? this.stageName + (this.levelNo > SAGA_LEVELS ? ' SLAIN' : ' CLEARED') : 'CLAN WIPED', 38, win ? '#ffd54f' : '#ff5252', { stroke: '#000', strokeThickness: 6 }).setDepth(D + 1).setScale(0.3);
+    const title = this.txt(W / 2, 280, win ? this.stageName + (this.levelNo > SAGA_LEVELS ? ' SLAIN' : ' CLEARED') : this.crushed ? 'CLAN CRUSHED' : 'CLAN WIPED', 38, win ? '#ffd54f' : '#ff5252', { stroke: '#000', strokeThickness: 6 }).setDepth(D + 1).setScale(0.3);
     this.tweens.add({ targets: title, scale: 1, duration: 350, ease: 'Back.out' });
     this.img(W / 2 - 62, 346, 'soul').setScale(S * 1.6).setDepth(D + 1);
-    this.txt(W / 2 + 6, 346, '+' + this.earned + ' souls', 24, '#e1bee7').setDepth(D + 1);
+    this.txt(W / 2 + 6, 346, '+' + this.earned + ' coins', 24, '#ffe082').setDepth(D + 1);
     if (unlocked) this.txt(W / 2, 390, this.levelNo < SAGA_LEVELS ? 'LEVEL ' + (this.levelNo + 1) + ' UNLOCKED' : this.levelNo === SAGA_LEVELS ? 'SAGA BOSS UNLOCKED' : 'SAGA CLEARED', 16, '#fff59d').setDepth(D + 1);
     if (gearWon) this.txt(W / 2, 418, 'WON: THUNDER ARMOR  ·  FUTSU-NO-MITAMA', 13, '#d1c4e9').setDepth(D + 1);
     const tap = this.txt(W / 2, 452, 'tap to continue', 16, '#bbb', { fontStyle: 'normal' }).setDepth(D + 1).setAlpha(0);
