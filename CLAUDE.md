@@ -1,6 +1,6 @@
 # Notes for Claude
 
-The game is a single file, `samurai-runner.html`, served by GitHub Pages from `main` at
+The game is a single file, `samurai-runner.html`, plus one picture, `menu.jpg` (the owner's own main menu art), served by GitHub Pages from `main` at
 https://itsfrocco.github.io/First-Phone-Game/samurai-runner.html
 
 ## Shipping a change
@@ -38,7 +38,7 @@ Also say one visible thing that tells them they have the new version.
 | `GEAR`, `ELEMENT` | Equipment items (weapon, armor, necklace slots) and which enemy kinds are flying, armoured and so on |
 | `Save`, `Stats` | localStorage keys (`samurai_*`) and upgrade formulas. The currency is shown as coins but is still called `souls` in the code and the save, so old saves carry over |
 | `Sound`, `Music` | Web Audio synth. Music modes: menu (arcade theme), run, boss, storm, stormBoss |
-| `Art` | Every texture, drawn with Canvas 2D at device resolution. No image files |
+| `Art` | Every texture, drawn with Canvas 2D at device resolution. The only image file is `menu.jpg`, loaded in `BootScene`; its PLAY and SETTINGS buttons are painted in, with invisible touch areas over them in `MenuScene`. `Art.menuBg` and plain buttons are the fallback if it does not load (always the case from `file://`) |
 | Scenes | `MenuScene`, `SagaScene`, `SettingsScene`, `GameScene` |
 
 Inside `GameScene`: the level start screen (upgrade cards, Equipment menu, Store), then per frame
