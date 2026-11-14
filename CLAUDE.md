@@ -41,7 +41,8 @@ Also say one visible thing that tells them they have the new version.
 | `Art` | Every texture, drawn with Canvas 2D at device resolution. The only image file is `menu.jpg`, loaded in `BootScene`; its PLAY and SETTINGS buttons are painted in, with invisible touch areas over them in `MenuScene`. `Art.menuBg` and plain buttons are the fallback if it does not load (always the case from `file://`) |
 | Scenes | `MenuScene`, `SagaScene`, `SettingsScene`, `GameScene` |
 
-Inside `GameScene`: the level start screen (upgrade cards, Equipment menu, Store), then per frame
+Inside `GameScene`: the pause menu (`setPaused`; music, sound effects and screen shake switches, resume, quit),
+the level start screen (upgrade cards, Equipment menu, Store), then per frame
 `updateEnemies`, `updateScroll`, `updateArmy`, `updateGates`, `updateCombat`, `updateHazards`
 (lucky charms, stone walls, spikes, then `updateBoss`), `updateStorm`, `drawBolts`, `updateHud`.
 

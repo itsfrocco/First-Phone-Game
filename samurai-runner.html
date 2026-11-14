@@ -94,14 +94,14 @@ const CFG = {
 //   walls    [rows whose blue gate is behind a stone wall, its health, health growth per wall]
 //   bosses   big fights: `after` a given row, or at the 'end'
 const LEVEL_SPECS = [
-  { name: 'Restless Dead', demons: false, rows: 10, seg: 370, pack: [3, 1.2, 0.20], crowd: 0.05, hp: 3, walls: [[6], 14, 0],
+  { name: 'Restless Dead', demons: false, rows: 10, seg: 370, pack: [3, 1.2, 0.20], crowd: 0.05, hp: 3, walls: [[6], 22, 0],
     bosses: [{ type: 'giant', after: 'end', hp: 400 }] },
-  { name: 'The Tengu', demons: true, rows: 13, seg: 370, pack: [5, 2.4, 0.27], crowd: 0.16, hp: 5, charms: [[4, 10], 8, 3], walls: [[3, 8, 11], 24, 10],
+  { name: 'The Tengu', demons: true, rows: 13, seg: 370, pack: [5, 2.4, 0.27], crowd: 0.16, hp: 5, charms: [[4, 10], 8, 3], walls: [[3, 8, 11], 38, 16],
     bosses: [{ type: 'giant', after: 6, hp: 700 }, { type: 'tengu', after: 'end', hp: 1400 }] },
-  { name: 'The Fat Demon', demons: true, rows: 18, seg: 370, pack: [6, 2.4, 0.16], crowd: 0.14, hp: 8, charms: [[5, 11, 15], 11, 4], walls: [[3, 7, 10], 30, 15],
+  { name: 'The Fat Demon', demons: true, rows: 18, seg: 370, pack: [6, 2.4, 0.16], crowd: 0.14, hp: 8, charms: [[5, 11, 15], 11, 4], walls: [[3, 7, 10], 48, 24],
     bosses: [{ type: 'giant', after: 8, hp: 1800 }, { type: 'demon', after: 'end', hp: 3000 }] },
   // The saga boss stage: a short run to build an army, then the fight.
-  { name: 'Takemikazuchi', demons: true, storm: true, rows: 8, seg: 370, pack: [5, 2.4, 0.30], crowd: 0.15, hp: 8, pace: 1.2, charms: [[4], 11, 0], walls: [[3, 6], 24, 12],
+  { name: 'Takemikazuchi', demons: true, storm: true, rows: 8, seg: 370, pack: [5, 2.4, 0.30], crowd: 0.15, hp: 8, pace: 1.2, charms: [[4], 11, 0], walls: [[3, 6], 38, 20],
     bosses: [{ type: 'thunder', after: 'end', hp: 2600 }] },
 ];
 // Equipment, chosen on a level's start screen: one weapon, one armor, one necklace. `boss: true` items are won by beating the saga boss.
@@ -202,6 +202,8 @@ const Stats = {
   damage: () => 1 + (Save.damage - 1) * 0.5,
   soulsPerKill: () => 1.5 * Save.revenue,
 };
+// Coin totals: 28,408 reads 28.4K (rounded down, so it never shows more than you have).
+const coins = n => n >= 1e6 ? (Math.floor(n / 1e5) / 10) + 'M' : n >= 1000 ? (Math.floor(n / 100) / 10) + 'K' : String(n);
 const fmt = n => Number.isInteger(n) ? String(n) : n.toFixed(2).replace(/0$/, '');
 const clamp = (v, a, b) => Math.max(a, Math.min(b, v));
 const damp = (rate, dt) => 1 - Math.exp(-rate * dt);   // frame-rate independent lerp factor
@@ -281,7 +283,7 @@ const Sound = {
     swing: (S) => S.noise({ f: 900, to: 250, dur: 0.2, vol: 0.4, q: 0.8 }),
     kill: (S, r) => { S.tone({ f: 190 * r, to: 60, dur: 0.14, vol: 0.4 }); S.noise({ type: 'lowpass', f: 900, dur: 0.08, vol: 0.2 }); },
     lose: (S, r) => S.tone({ type: 'sawtooth', f: 330 * r, to: 110, dur: 0.18, vol: 0.2 }),
-    soul: (S, r, t) => { S.tone({ type: 'square', f: 1568 * r, dur: 0.05, vol: 0.07 }); S.tone({ type: 'square', f: 2093 * r, dur: 0.12, vol: 0.07, at: t + 0.045 }); },   // a coin landing
+    soul: (S, r, t) => { S.tone({ type: 'square', f: 1568 * r, dur: 0.05, vol: 0.03 }); S.tone({ type: 'square', f: 2093 * r, dur: 0.12, vol: 0.03, at: t + 0.045 }); },   // a coin landing
     gateGood: (S, r, t) => { S.tone({ type: 'triangle', f: 587, dur: 0.14, vol: 0.4 }); S.tone({ type: 'triangle', f: 880, dur: 0.24, vol: 0.4, at: t + 0.09 }); },
     gateBad: (S, r, t) => { S.tone({ type: 'square', f: 233, dur: 0.14, vol: 0.2 }); S.tone({ type: 'square', f: 156, to: 110, dur: 0.3, vol: 0.2, at: t + 0.1 }); },
     wallBreak: (S, r) => { S.noise({ type: 'lowpass', f: 1400 * r, to: 200, dur: 0.4, vol: 0.5 }); S.tone({ f: 150, to: 50, dur: 0.3, vol: 0.5 }); },
@@ -297,6 +299,7 @@ const Sound = {
     defeat: (S, r, t) => [440, 349, 294, 233, 147].forEach((f, i) => S.tone({ type: 'triangle', f, dur: 0.6, vol: 0.3, at: t + i * 0.2 })),
   },
 };
+if (Sound.muted) { Save.music = Save.sfx = false; Save.save(); Sound.setMuted(false); }     // the old in-game mute button is now the two switches in the pause menu
 ['pointerdown', 'touchend', 'keydown'].forEach(ev => window.addEventListener(ev, () => Sound.unlock(), true));
 document.addEventListener('visibilitychange', () => {
   if (!Sound.ctx) return;
@@ -821,13 +824,6 @@ class BaseScene extends Phaser.Scene {
       fontFamily: FONT, fontSize: size + 'px', color, fontStyle: 'bold', resolution: R,
     }, extra)).setOrigin(0.5);
   }
-  muteButton(x, y) {
-    const t = this.txt(x, y, '♪', 22, '#fff', { stroke: '#000', strokeThickness: 4 }).setDepth(5100);
-    const show = () => t.setAlpha(Sound.muted ? 0.3 : 1);
-    show();
-    this.add.zone(x, y, 44, 44).setDepth(5100).setInteractive({ useHandCursor: true })
-      .on('pointerdown', () => { Sound.unlock(); Sound.setMuted(!Sound.muted); show(); });
-  }
   button(x, y, w, h, color, label, size, onTap) {
     const g = this.add.graphics();
     const draw = (pressed) => {
@@ -999,6 +995,8 @@ class GameScene extends BaseScene {
     this.bolts = [];               // lightning streaks being drawn
     this.hazards = [];             // lightning left on the ground
     this.started = false;          // false while the level waits on its start screen
+    this.paused = false;           // true while the pause menu is open
+    this.time.paused = false;
     this.crushed = false;          // true if a stone wall ended the run
     this.wallSeen = false;         // the first wall of a run gets a warning banner
     this.fight = false;            // true while the scroll is stopped for a big fight
@@ -1024,14 +1022,14 @@ class GameScene extends BaseScene {
     this.banner(this.stageName, this.L.name);
     this.showStartUi();
     this.input.on('pointerdown', p => {
-      if (this.started || this.gearOpen || p.worldY < 120 || p.worldY > 505 || (p.worldX < 124 && p.worldY < 198)) return;
+      if (this.started || this.paused || this.gearOpen || p.worldY < 120 || p.worldY > 505 || (p.worldX < 124 && p.worldY < 198)) return;
       this.beginRun();
     });
 
     const steer = p => {
       if (!this.started) return;
       if (p.worldY > 636 && p.worldX > 280) return;        // special button area
-      if (p.worldY < 80 && p.worldX > 345) return;         // mute button area
+      if (this.paused || (p.worldY < 84 && p.worldX > 345)) return;         // pause button area
       this.targetX = clamp(p.worldX, CFG.steerMin, CFG.steerMax);
     };
     this.input.on('pointerdown', steer);
@@ -1075,7 +1073,7 @@ class GameScene extends BaseScene {
       this.txt(x, y - h / 2 + 15, title, 11);
       this.txt(x, y - 28, 'Lv ' + Save[key], 22);
       this.txt(x, y - 4, stat, 11, '#cfc3d6', { fontStyle: 'normal' });
-      const b = this.button(x, y + 42, 96, 40, can ? color : 0x4a4250, cost + '', 16, () => {
+      const b = this.button(x, y + 42, 96, 40, can ? color : 0x4a4250, coins(cost), 16, () => {
         if (Save.souls < cost) { Sound.play('deny'); return; }
         Save.souls -= cost; Save[key]++; Save.save(); Sound.play('buy');
         this.time.delayedCall(0, () => { if (!this.started) this.showStartUi(); });
@@ -1103,7 +1101,7 @@ class GameScene extends BaseScene {
     this.txt(W / 2, 114, 'STORE', 19, '#ffd54f');
     g.fillStyle(0x000000, 0.45).fillRoundedRect(W / 2 - 80, 140, 160, 36, 18);
     this.img(W / 2 - 58, 158, 'soul').setScale(S * 1.5);
-    this.txt(W / 2 + 8, 158, Save.souls + ' coins', 18, '#ffe082');
+    this.txt(W / 2 + 8, 158, coins(Save.souls) + ' coins', 18, '#ffe082');
     for (let i = 0; i < 3; i++) {                            // empty shelves
       const x = 86 + i * 114, y = 250;
       g.fillStyle(0x120b18, 1).fillRoundedRect(x - 52, y - 50, 104, 100, 10);
@@ -1223,7 +1221,7 @@ class GameScene extends BaseScene {
       const gate = this.gates[row], side = gate.left.good ? gate.left : gate.right;
       const e = this.addEnemy('wall', side.x, gate.d - CFG.wall.lead, wallHp + wallGrow * idx);
       e.sprite = e.obj.setOrigin(0.5, 0.62);
-      e.label = this.txt(0, -34, '', 17, '#fff', { stroke: '#3a0d14', strokeThickness: 5 });
+      e.label = this.txt(0, -40, '', 26, '#fff', { stroke: '#3a0d14', strokeThickness: 6 });
       e.obj = this.add.container(e.x, -200, [e.sprite.setPosition(0, 0), e.label]);
       Object.assign(e, { r: 20, souls: CFG.wall.souls });
       this.wallLabel(e);
@@ -1291,12 +1289,16 @@ class GameScene extends BaseScene {
     this.specialText = this.txt(336, 676, 'SLOW', 13).setDepth(D + 1).setVisible(false);
     this.specialHint = this.txt(130, 662, 'SPECIAL', 10, '#b39ddb').setDepth(D).setVisible(false);
     this.add.zone(336, 676, 84, 76).setInteractive().on('pointerdown', () => this.activateSpecial());
-    this.muteButton(376, 58);
+    this.earnedText = this.txt(0, 57, '', 11, '#ffe082', { stroke: '#1a0a20', strokeThickness: 3 }).setOrigin(0, 0.5).setDepth(D).setAlpha(0.9);
+    // pause button
+    const pg = this.add.graphics().setDepth(5100);
+    pg.fillStyle(0x000000, 0.45).fillCircle(372, 58, 17).fillStyle(0xffffff, 1).fillRoundedRect(365, 50, 5, 16, 1.5).fillRoundedRect(374, 50, 5, 16, 1.5);
+    this.add.zone(372, 58, 48, 48).setDepth(5100).setInteractive({ useHandCursor: true }).on('pointerdown', () => { Sound.unlock(); this.setPaused(true); });
   }
 
   /* ---------- main loop ---------- */
   update(time, delta) {
-    if (this.over) return;
+    if (this.over || this.paused) return;
     if (!this.started) {                                   // start screen: the world is drawn but frozen
       this.updateScroll(0);
       this.updateArmy(time, Math.min(delta, 50) / 1000);
@@ -1811,9 +1813,39 @@ class GameScene extends BaseScene {
     this.syncArmy();
   }
 
+  /* ---------- pause ---------- */
+  // Freezes the run and shows the pause menu: sound switches, resume, quit.
+  setPaused(on) {
+    if (this.over || (on && this.paused)) return;
+    this.paused = on;
+    this.time.paused = on;
+    if (on) this.tweens.pauseAll(); else this.tweens.resumeAll();
+    if (this.pauseUi) this.pauseUi.forEach(o => o.destroy());
+    this.pauseUi = null;
+    if (!on) return;
+    const before = new Set(this.children.list);
+    this.add.rectangle(W / 2, H / 2, W, H, 0x05020c, 0.7).setInteractive();        // also swallows touches meant for the game
+    const g = this.add.graphics();
+    g.fillStyle(0x1c1220, 0.97).fillRoundedRect(30, 130, 340, 440, 14);
+    g.lineStyle(2, 0xffffff, 0.25).strokeRoundedRect(30, 130, 340, 440, 14);
+    this.txt(W / 2, 162, 'PAUSED', 24, '#ffd54f');
+    [['Music', 'music'], ['Sound effects', 'sfx'], ['Screen shake', 'shake']].forEach(([label, key], i) => {
+      const y = 222 + i * 64;
+      this.txt(56, y, label, 18).setOrigin(0, 0.5);
+      this.button(296, y, 92, 44, Save[key] ? 0x2e7d32 : 0x4a4250, Save[key] ? 'ON' : 'OFF', 17, () => {
+        Save[key] = !Save[key]; Save.save(); Sound.applyOptions();
+        this.paused = false; this.setPaused(true);           // redraw
+      });
+    });
+    this.button(W / 2, 434, 260, 58, 0x3f9b1f, 'RESUME', 24, () => this.setPaused(false));
+    this.button(W / 2, 510, 260, 46, 0x4a3f63, 'QUIT TO SAGAS', 15, () => { Save.save(); this.time.paused = false; this.scene.start('Sagas'); });
+    this.pauseUi = this.children.list.filter(o => !before.has(o));
+    this.pauseUi.forEach((o, i) => o.setDepth(7000 + i));
+  }
+
   /* ---------- special ---------- */
   activateSpecial() {
-    if (!this.started || this.over || this.slowLeft > 0 || this.charge < this.specialMax) return;
+    if (!this.started || this.over || this.paused || this.slowLeft > 0 || this.charge < this.specialMax) return;
     this.charge = 0;
     this.slowLeft = CFG.slowMs;
     Sound.play('special');
@@ -1907,7 +1939,8 @@ class GameScene extends BaseScene {
       g.fillStyle(0xffffff, 0.8).fillRect(bx, 104, bw * this.bossGhost, 12);
       g.fillStyle(0xe53935, 1).fillRect(bx, 104, bw * r, 12);
     }
-    this.soulText.setText(Save.souls + (this.earned ? '  +' + this.earned : ''));
+    this.soulText.setText(coins(Save.souls));
+    this.earnedText.setText(this.earned ? '+' + coins(this.earned) : '').setX(this.soulText.x + this.soulText.width + 6);
     this.countText.setText(this.count).setPosition(this.armyX, this.formY - 30);
     if (!this.started) return;                             // the upgrade cards cover the bottom until the run begins
     // special bar + button
@@ -1941,7 +1974,7 @@ class GameScene extends BaseScene {
     const title = this.txt(W / 2, 280, win ? this.stageName + (this.levelNo > SAGA_LEVELS ? ' SLAIN' : ' CLEARED') : this.crushed ? 'CLAN CRUSHED' : 'CLAN WIPED', 38, win ? '#ffd54f' : '#ff5252', { stroke: '#000', strokeThickness: 6 }).setDepth(D + 1).setScale(0.3);
     this.tweens.add({ targets: title, scale: 1, duration: 350, ease: 'Back.out' });
     this.img(W / 2 - 62, 346, 'soul').setScale(S * 1.6).setDepth(D + 1);
-    this.txt(W / 2 + 6, 346, '+' + this.earned + ' coins', 24, '#ffe082').setDepth(D + 1);
+    this.txt(W / 2 + 6, 346, '+' + coins(this.earned) + ' coins', 24, '#ffe082').setDepth(D + 1);
     if (unlocked) this.txt(W / 2, 390, this.levelNo < SAGA_LEVELS ? 'LEVEL ' + (this.levelNo + 1) + ' UNLOCKED' : this.levelNo === SAGA_LEVELS ? 'SAGA BOSS UNLOCKED' : 'SAGA CLEARED', 16, '#fff59d').setDepth(D + 1);
     if (gearWon) this.txt(W / 2, 418, 'WON: THUNDER ARMOR  ·  FUTSU-NO-MITAMA', 13, '#d1c4e9').setDepth(D + 1);
     const tap = this.txt(W / 2, 452, 'tap to continue', 16, '#bbb', { fontStyle: 'normal' }).setDepth(D + 1).setAlpha(0);
