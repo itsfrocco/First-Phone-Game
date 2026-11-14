@@ -34,7 +34,7 @@ Also say one visible thing that tells them they have the new version.
 | Section | What is there |
 |---|---|
 | `CFG` | Every tuning number: enemies, boss profiles (`CFG.bosses`), storm waves, lucky charm, stone wall, sword |
-| `LEVEL_SPECS`, `layoutLevel` | Levels are generated from a short spec (rows, pack size and growth, crowding, health, charms, walls, bosses). Stage 4 is the saga boss |
+| `LEVEL_SPECS`, `layoutLevel` | Levels are generated from a short spec (rows, pack size and growth, crowding, health, charms, walls, bosses). Stages run in saga order, four per saga (three levels, then the saga boss): stages 1-4 are saga 1, stage 5 is saga 2 level 1. A spec's `theme` picks the scenery (`'mountain'`) and `foe` the common enemy (`'rockOni'`) |
 | `GEAR`, `ELEMENT` | Equipment items (weapon, armor, necklace slots) and which enemy kinds are flying, armoured and so on |
 | `Save`, `Stats` | localStorage keys (`samurai_*`) and upgrade formulas. The currency is shown as coins but is still called `souls` in the code and the save, so old saves carry over |
 | `Sound`, `Music` | Web Audio synth. Music modes: menu (arcade theme), run, boss, storm, stormBoss |
@@ -46,7 +46,7 @@ the level start screen (upgrade cards, Equipment menu, Store), then per frame
 `updateEnemies`, `updateScroll`, `updateArmy`, `updateGates`, `updateCombat`, `updateHazards`
 (lucky charms, stone walls, spikes, then `updateBoss`), `updateStorm`, `drawBolts`, `updateHud`.
 
-All big fights (giant zombie, tengu, fat demon, Takemikazuchi) share one cycle in `updateBoss`:
+All big fights (giant zombie, tengu, fat demon, Takemikazuchi, rock oni) share one cycle in `updateBoss`:
 chase, wind-up with a warning zone, strike, recover. A profile in `CFG.bosses` sets speeds,
 damage, combos, power attacks (`jump`, `fly`, `bolt`, `dash`) and an optional second phase.
 
@@ -63,6 +63,7 @@ are preinstalled in cloud sessions. Audio cannot be heard there; say so when rep
 
 Balance as last tuned (attack speed and blade damage both at the stated level, dodging bot):
 level 1 wins with no upgrades; level 2 needs about 2; level 3 about 3; the saga boss about 5.
+Saga 2 level 1 (stage 5) is tuned for about 5: the dodging bot wins from 3 up, the bot that never dodges loses at 5.
 
 ## Working with the owner
 
@@ -76,8 +77,10 @@ level 1 wins with no upgrades; level 2 needs about 2; level 3 about 3; the saga 
 - The Store (button on the level start screen, `showStore`) is an empty "coming soon" panel. What it sells is undecided.
 
 - A necklace for the empty equipment slot (name, effect and how it is earned are undecided).
-- Sagas 2 to 5 are shown locked. Each should have three levels and a saga boss, with the same
-  10% per-level speed step.
+- Saga 2 (Mountain Pass) has its first level; levels 2 and 3 and its saga boss are not designed yet. Sagas 3 to 5
+  are shown locked. Each saga should have three levels and a saga boss, with the same 10% per-level speed step.
+  Common enemies should keep scaling up from where the previous saga ended.
 - Oni art (`Art.oni`) is kept unused for a later boss.
 - Future enemies with elements (water, metal, earth, fire) for the sword's bonuses. The sword
-  still does 15% less to earth, fire and thunder foes even though the menu no longer says so.
+  still does 15% less to earth, fire and thunder foes even though the menu no longer says so. The rock oni
+  are deliberately not marked as earth (the owner was asked and did not answer).

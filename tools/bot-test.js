@@ -5,7 +5,7 @@ const { chromium } = require('playwright');
 //   PHASER=/path/to/node_modules/phaser/dist/phaser.min.js \
 //     node tools/bot-test.js '[[1,1,"dodge"],[2,3,"dodge"],[4,5,"stand"]]'
 //
-// Each case is [stage, upgradeLevel, mode]. Stages 1-3 are levels, 4 is the saga boss.
+// Each case is [stage, upgradeLevel, mode]. Stages 1-3 are levels, 4 is the saga boss, 5 is saga 2 level 1.
 // upgradeLevel sets attack speed and blade damage. "dodge" reacts to boss attacks and storm
 // waves after 0.3s; "stand" never dodges. The bot is sharper than a person, so treat a
 // narrow bot win as "hard" for a real player.
