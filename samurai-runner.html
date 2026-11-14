@@ -76,6 +76,8 @@ const CFG = {
   },
   // The glowing lucky charm that slides from side to side. Harmless; break it for the damage bonus.
   charm: { speed: 70, lead: 110, souls: 15 },   // speed: px/s sideways; lead: how far in front of its gate row it appears
+  // A stone wall stands in front of some blue gates. The army cuts at it from `range` away; if it still stands when they reach it, it crushes them all.
+  wall: { lead: 64, range: 200, half: 66, souls: 5 },      // lead: how far in front of its gate it stands; half: half its width
   // The saga boss stage's storm: every `everyMs` a wave of lightning sweeps down the lane the army stands in.
   storm: { everyMs: [4000, 5000], warnMs: 1100, sweepMs: 380, half: 52, cleave: 2, cleaveShare: 0.08 },
   // Futsu-no-mitama: its lightning adds to hits on some kinds of foe and is shrugged off by others. Everything else takes normal damage.
@@ -89,16 +91,17 @@ const CFG = {
 //   crowd    how much tighter each pack is bunched than the one before, so later packs arrive faster
 //   hp       zombie health (demons have more, see CFG.enemy.demonHp); difficulty comes from numbers, not tougher enemies
 //   charms   [rows where a lucky charm appears, its health, health growth per charm]
+//   walls    [rows whose blue gate is behind a stone wall, its health, health growth per wall]
 //   bosses   big fights: `after` a given row, or at the 'end'
 const LEVEL_SPECS = [
-  { name: 'Restless Dead', demons: false, rows: 10, seg: 370, pack: [3, 1.2, 0.20], crowd: 0.05, hp: 3,
+  { name: 'Restless Dead', demons: false, rows: 10, seg: 370, pack: [3, 1.2, 0.20], crowd: 0.05, hp: 3, walls: [[6], 14, 0],
     bosses: [{ type: 'giant', after: 'end', hp: 400 }] },
-  { name: 'The Tengu', demons: true, rows: 13, seg: 370, pack: [5, 2.4, 0.27], crowd: 0.16, hp: 5, charms: [[4, 10], 8, 3],
+  { name: 'The Tengu', demons: true, rows: 13, seg: 370, pack: [5, 2.4, 0.27], crowd: 0.16, hp: 5, charms: [[4, 10], 8, 3], walls: [[3, 8, 11], 24, 10],
     bosses: [{ type: 'giant', after: 6, hp: 700 }, { type: 'tengu', after: 'end', hp: 1400 }] },
-  { name: 'The Fat Demon', demons: true, rows: 18, seg: 370, pack: [6, 2.4, 0.16], crowd: 0.14, hp: 8, charms: [[5, 11, 15], 11, 4],
+  { name: 'The Fat Demon', demons: true, rows: 18, seg: 370, pack: [6, 2.4, 0.16], crowd: 0.14, hp: 8, charms: [[5, 11, 15], 11, 4], walls: [[3, 7, 10], 30, 15],
     bosses: [{ type: 'giant', after: 8, hp: 1800 }, { type: 'demon', after: 'end', hp: 3000 }] },
   // The saga boss stage: a short run to build an army, then the fight.
-  { name: 'Takemikazuchi', demons: true, storm: true, rows: 8, seg: 370, pack: [5, 2.4, 0.30], crowd: 0.15, hp: 8, pace: 1.2, charms: [[4], 11, 0],
+  { name: 'Takemikazuchi', demons: true, storm: true, rows: 8, seg: 370, pack: [5, 2.4, 0.30], crowd: 0.15, hp: 8, pace: 1.2, charms: [[4], 11, 0], walls: [[3, 6], 24, 12],
     bosses: [{ type: 'thunder', after: 'end', hp: 2600 }] },
 ];
 // Equipment, chosen on a level's start screen: one weapon, one armor, one necklace. `boss: true` items are won by beating the saga boss.
@@ -125,7 +128,7 @@ const SAGA_LEVELS = 3;                                        // ordinary levels
 const GOOD_GATES = ['+3', '+3', 'x2', '+4', '+5', '+6', 'x2', '+8', '+10', '+12', '+14', '+16', '+18', '+20', '+22', '+25', '+28', '+30'];
 // Turns a spec into positions measured in distance along the path (px).
 function layoutLevel(spec, index) {
-  const L = { name: spec.name, demons: spec.demons, charms: spec.charms || [[], 0, 0], gates: [], packs: [], spikes: [], bosses: [] };
+  const L = { name: spec.name, demons: spec.demons, charms: spec.charms || [[], 0, 0], walls: spec.walls || [[], 0, 0], gates: [], packs: [], spikes: [], bosses: [] };
   L.storm = !!spec.storm;                                    // dark sky, broken ground and lightning waves
   L.pace = spec.pace || 1 + CFG.levelPace * (index % 3);                 // level 1, 2, 3 of each saga
   let d = 300;
@@ -281,6 +284,7 @@ const Sound = {
     soul: (S, r) => S.tone({ f: 1250 * r, to: 1900, dur: 0.08, vol: 0.12 }),
     gateGood: (S, r, t) => { S.tone({ type: 'triangle', f: 587, dur: 0.14, vol: 0.4 }); S.tone({ type: 'triangle', f: 880, dur: 0.24, vol: 0.4, at: t + 0.09 }); },
     gateBad: (S, r, t) => { S.tone({ type: 'square', f: 233, dur: 0.14, vol: 0.2 }); S.tone({ type: 'square', f: 156, to: 110, dur: 0.3, vol: 0.2, at: t + 0.1 }); },
+    wallBreak: (S, r) => { S.noise({ type: 'lowpass', f: 1400 * r, to: 200, dur: 0.4, vol: 0.5 }); S.tone({ f: 150, to: 50, dur: 0.3, vol: 0.5 }); },
     spike: (S) => { S.tone({ type: 'square', f: 1100, to: 300, dur: 0.1, vol: 0.16 }); S.noise({ type: 'highpass', f: 3000, dur: 0.1, vol: 0.2 }); },
     special: (S) => { S.tone({ f: 900, to: 90, dur: 0.7, vol: 0.4 }); S.noise({ f: 2500, to: 200, dur: 0.7, vol: 0.2, q: 0.6 }); },
     gong: (S) => [[98, 0.5], [147, 0.3], [233, 0.2], [311, 0.12]].forEach(([f, v]) => S.tone({ f, dur: 1.8, vol: v, attack: 0.01 })),
@@ -642,6 +646,21 @@ const Art = {
       Art.tri(c, [x - 1, y - h + 3.5], [x, y - h], [x + 1, y - h + 3.5], '#ef5350');
     });
   },
+  // A dry-stone wall: three courses of rounded boulders.
+  wall(c) {
+    Art.ell(c, 66, 52, 64, 7, 'rgba(0,0,0,0.38)');
+    const stone = (x, y, rx, ry, shade) => {
+      Art.ell(c, x, y, rx, ry, '#2e3238');
+      Art.ell(c, x, y - 0.6, rx - 1.6, ry - 1.6, ['#6f767f', '#7d848d', '#666c75'][shade]);
+      Art.ell(c, x - rx * 0.15, y - ry * 0.3, rx * 0.62, ry * 0.45, ['#9aa1a9', '#a9b0b8', '#8f969e'][shade]);
+      Art.ell(c, x - rx * 0.3, y - ry * 0.5, rx * 0.25, ry * 0.16, 'rgba(255,255,255,0.35)');
+    };
+    [[14, 43, 13, 10], [37, 44, 13, 10], [60, 43, 13, 10.5], [83, 44, 13, 10], [106, 44, 13, 10], [121, 45, 9, 8.5]].forEach(([x, y, rx, ry], i) => stone(x, y, rx, ry, i % 3));
+    [[25, 29, 13, 9.5], [48, 30, 12.5, 9.5], [71, 29, 13, 10], [94, 30, 12.5, 9.5], [113, 31, 10, 9]].forEach(([x, y, rx, ry], i) => stone(x, y, rx, ry, (i + 1) % 3));
+    [[36, 16, 12, 9], [58, 15, 12, 9.5], [80, 16, 12, 9], [100, 18, 10, 8]].forEach(([x, y, rx, ry], i) => stone(x, y, rx, ry, (i + 2) % 3));
+    c.fillStyle = '#4c8a3a'; [[8, 52], [30, 53], [52, 53], [96, 53], [118, 52]].forEach(([x, y]) => { Art.tri(c, [x - 3, y], [x - 1, y - 6], [x, y], '#4c8a3a'); Art.tri(c, [x, y], [x + 2, y - 5], [x + 3, y], '#5fa348'); });
+  },
+  rock(c) { Art.ell(c, 6, 6, 6, 5, '#2e3238'); Art.ell(c, 6, 5.6, 4.6, 3.8, '#7d848d'); Art.ell(c, 5, 4.4, 2.6, 1.6, '#a9b0b8'); },
   slash(c) {
     c.beginPath(); c.arc(24, 24, 20, -1.2, 1.2); c.arc(15, 24, 21, 1.0, -1.0, true); c.closePath();
     c.fillStyle = Art.grad(c, 24, 4, 24, 44, [[0, 'rgba(255,255,255,0)'], [0.5, 'rgba(255,255,255,1)'], [1, 'rgba(255,255,255,0)']]);
@@ -716,7 +735,7 @@ const Art = {
     const m = (k, w, h) => Art.make(scene, k, w, h, Art[k]);
     m('samurai', 36, 50); m('katana', 12, 36); m('demon', 32, 40); m('zombie', 32, 40); m('boss', 130, 126); m('giant', 110, 130); m('thunder', 130, 134);
     Art.make(scene, 'tenguBoss', 130, 120, Art.tengu); m('charm', 40, 44); m('glow', 64, 64);
-    m('spike', 36, 28); m('slash', 48, 48); m('soul', 16, 16); m('dot', 8, 8); m('petal', 8, 6);
+    m('spike', 36, 28); m('wall', 132, 60); m('rock', 12, 12); m('slash', 48, 48); m('soul', 16, 16); m('dot', 8, 8); m('petal', 8, 6);
     m('grass', 64, 64); m('path', 280, 128); m('lantern', 24, 42); m('deadTree', 60, 58); m('rubble', 30, 24); m('crack', 60, 40); m('tree', 60, 58); m('menuBg', W, H);
   },
 };
@@ -901,6 +920,8 @@ class GameScene extends BaseScene {
     this.bolts = [];               // lightning streaks being drawn
     this.hazards = [];             // lightning left on the ground
     this.started = false;          // false while the level waits on its start screen
+    this.crushed = false;          // true if a stone wall ended the run
+    this.wallSeen = false;         // the first wall of a run gets a warning banner
     this.fight = false;            // true while the scroll is stopped for a big fight
     this.boss = null;              // the next (or current) big fight; set in buildLevel
     this.finaleDone = false;       // true once every big fight is won
@@ -1095,6 +1116,16 @@ class GameScene extends BaseScene {
       e.obj = this.add.container(e.x, -200, [glow, e.sprite.setPosition(0, 0)]);
       Object.assign(e, { glow, r: 8, souls: CFG.charm.souls, vx: (Math.random() < 0.5 ? -1 : 1) * CFG.charm.speed });
     });
+    const [wallRows, wallHp, wallGrow] = this.L.walls;
+    wallRows.forEach((row, idx) => {
+      const gate = this.gates[row], side = gate.left.good ? gate.left : gate.right;
+      const e = this.addEnemy('wall', side.x, gate.d - CFG.wall.lead, wallHp + wallGrow * idx);
+      e.sprite = e.obj.setOrigin(0.5, 0.62);
+      e.label = this.txt(0, -34, '', 17, '#fff', { stroke: '#3a0d14', strokeThickness: 5 });
+      e.obj = this.add.container(e.x, -200, [e.sprite.setPosition(0, 0), e.label]);
+      Object.assign(e, { r: 20, souls: CFG.wall.souls });
+      this.wallLabel(e);
+    });
     this.L.spikes.forEach(d => {
       this.addSpike(Math.random() < 0.5 ? 130 : 270, d);
     });
@@ -1126,6 +1157,8 @@ class GameScene extends BaseScene {
     this.enemies.push(e);
     return e;
   }
+
+  wallLabel(e) { e.label.setText('♥ ' + Math.max(1, Math.ceil(e.hp))); }
 
   addSpike(x, d) { this.spikes.push({ x, d, hit: false, obj: this.img(x, -200, 'spike'), flat: true }); }
 
@@ -1277,12 +1310,17 @@ class GameScene extends BaseScene {
       let best = null, bestD = CFG.attackRange;
       near.forEach(e => {
         if (e.hp <= 0) return;
+        if (e.kind === 'wall') {       // cut at from a distance, but anything in reach comes first
+          if (bestD >= CFG.attackRange && e.y > this.formY - CFG.wall.range && e.y < this.formY && Math.abs(this.armyX - e.x) < CFG.wall.half) best = e;
+          return;
+        }
         const d = e === this.boss && this.fight ? (Math.abs(s.x - e.x) < e.prof.reach + 10 ? 0 : Infinity) : Math.hypot(e.x - s.x, e.y - s.y) - e.r;
         if (d < bestD) { bestD = d; best = e; }
       });
       if (!best) return;
       s.cd = cd * (0.9 + Math.random() * 0.2);
       s.lunge = 7; s.swing = 1;
+      if (best.kind === 'wall') this.airSlash(s, best);
       this.strike(best, dmg + this.lightningBonus(best, dmg), s);
       if (this.thunderBlade && Math.random() < 0.6) this.zap(s.x + 9, s.y - 12, best.x, best.y, 90);   // Futsu-no-mitama's trail
     });
@@ -1312,6 +1350,7 @@ class GameScene extends BaseScene {
       this.time.delayedCall(260, () => { e.flash = false; });
     }
     if (e.r || Math.random() < 0.5) this.float(hx, hy - 12, fmt(dmg), this.thunderBlade && ELEMENT[e.kind] ? '#d9a8ff' : '#ffeb3b', 13);
+    if (e.label) this.wallLabel(e);
     if (e.hp <= 0) this.kill(e);
   }
 
@@ -1320,8 +1359,8 @@ class GameScene extends BaseScene {
     const gain = Math.floor(raw) + (Math.random() < raw % 1 ? 1 : 0);      // a half soul pays out every other kill
     this.earned += gain; Save.souls += gain;
     Sound.play('kill');
-    this.charge = Math.min(this.specialMax, this.charge + (e.r ? this.specialMax / 4 : 1));
-    const tint = { demon: 0xab47bc, zombie: 0x9ccc65, giant: 0x9ccc65, thunder: 0xb388ff, charm: 0xffd54f, tenguBoss: 0xef5350, boss: 0xab47bc }[e.kind];
+    this.charge = Math.min(this.specialMax, this.charge + (e.r && e.kind !== 'wall' ? this.specialMax / 4 : 1));
+    const tint = { demon: 0xab47bc, zombie: 0x9ccc65, giant: 0x9ccc65, thunder: 0xb388ff, charm: 0xffd54f, wall: 0x9aa1a9, tenguBoss: 0xef5350, boss: 0xab47bc }[e.kind];
     this.burst.setParticleTint(tint);
     this.burst.explode(e.r ? 40 : 10, e.x, e.y);
     const orb = this.img(e.x, e.y, 'soul').setDepth(5001).setScale(S * (e.r ? 2 : 1.2));
@@ -1329,6 +1368,13 @@ class GameScene extends BaseScene {
       orb.destroy(); Sound.play('soul');
       this.tweens.add({ targets: this.soulIcon, scale: S * 1.8, duration: 80, yoyo: true });
     } });
+    if (e.kind === 'wall') {
+      Sound.play('wallBreak'); this.shake(200, 0.01);
+      for (let i = 0; i < 9; i++) {                          // the stones tumble apart
+        const rk = this.img(e.x + (Math.random() - 0.5) * 100, e.y - Math.random() * 24, 'rock').setDepth(2900).setScale(S * (0.8 + Math.random() * 0.9));
+        this.tweens.add({ targets: rk, x: rk.x + (Math.random() - 0.5) * 120, y: rk.y + 30 + Math.random() * 50, rotation: (Math.random() - 0.5) * 8, alpha: 0, duration: 520, ease: 'Cubic.out', onComplete: () => rk.destroy() });
+      }
+    }
     if (e.kind === 'charm') {
       this.dmgMod *= CFG.charmDamageUp;
       this.banner('LUCKY CHARM', 'blade damage +10%'); Sound.play('buy');
@@ -1388,6 +1434,20 @@ class GameScene extends BaseScene {
       const pulse = Math.sin(this.time.now * 0.008 + e.seed);
       e.glow.setScale(S * (1.5 + pulse * 0.2)).setAlpha(0.8 + pulse * 0.2);
       e.sprite.setRotation(Math.sin(this.time.now * 0.012 + e.seed) * 0.12);
+    });
+    // Stone walls: a warning as one comes into view, a red pulse as it closes in, and the crush.
+    this.enemies.forEach(e => {
+      if (e.kind !== 'wall' || e.gone || e.hp <= 0 || e.passed) return;
+      if (!this.wallSeen && e.y > 120) { this.wallSeen = true; this.banner('STONE WALL', 'break it or go around'); }
+      const close = e.y > this.formY - 110;
+      e.label.setColor(close && Math.sin(this.time.now * 0.025) > 0 ? '#ff5252' : '#fff');
+      if (e.y < this.formY - 26) return;
+      e.passed = true;
+      if (Math.abs(this.armyX - e.x) >= CFG.wall.half) return;                 // went around it
+      this.crushed = true;
+      Sound.play('slam'); this.shake(450, 0.02);
+      this.float(this.armyX, this.formY - 50, 'CRUSHED', '#ff5252', 30);
+      this.count = 0; this.syncArmy();
     });
     // Spikes.
     this.spikes.forEach(o => {
@@ -1709,6 +1769,12 @@ class GameScene extends BaseScene {
     this.tweens.add({ targets: sl, rotation: Math.PI / 2 + 0.8, alpha: 0, duration: 200, onComplete: () => sl.destroy() });
   }
 
+  // A blade of wind from a samurai to a wall ahead.
+  airSlash(s, e) {
+    const tx = e.x + clamp(s.x - e.x, -50, 50), sl = this.img(s.x, s.y - 14, 'slash').setDepth(2900).setRotation(-Math.PI / 2).setScale(S * 0.6).setAlpha(0.85).setTint(this.bladeTint);
+    this.tweens.add({ targets: sl, x: tx, y: e.y, duration: 110, onComplete: () => sl.destroy() });
+  }
+
   float(x, y, str, color, size) {
     const t = this.txt(x, y, str, size, color, { stroke: '#000', strokeThickness: 3 }).setDepth(4000);
     this.tweens.add({ targets: t, y: y - 30, alpha: 0, duration: 550, ease: 'Cubic.out', onComplete: () => t.destroy() });
@@ -1770,7 +1836,7 @@ class GameScene extends BaseScene {
     const D = 6000;
     const shade = this.add.rectangle(W / 2, H / 2, W, H, 0x0a0610, 1).setAlpha(0).setDepth(D);
     this.tweens.add({ targets: shade, alpha: 0.78, duration: 350 });
-    const title = this.txt(W / 2, 280, win ? this.stageName + (this.levelNo > SAGA_LEVELS ? ' SLAIN' : ' CLEARED') : 'CLAN WIPED', 38, win ? '#ffd54f' : '#ff5252', { stroke: '#000', strokeThickness: 6 }).setDepth(D + 1).setScale(0.3);
+    const title = this.txt(W / 2, 280, win ? this.stageName + (this.levelNo > SAGA_LEVELS ? ' SLAIN' : ' CLEARED') : this.crushed ? 'CLAN CRUSHED' : 'CLAN WIPED', 38, win ? '#ffd54f' : '#ff5252', { stroke: '#000', strokeThickness: 6 }).setDepth(D + 1).setScale(0.3);
     this.tweens.add({ targets: title, scale: 1, duration: 350, ease: 'Back.out' });
     this.img(W / 2 - 62, 346, 'soul').setScale(S * 1.6).setDepth(D + 1);
     this.txt(W / 2 + 6, 346, '+' + this.earned + ' souls', 24, '#e1bee7').setDepth(D + 1);
