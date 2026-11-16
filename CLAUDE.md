@@ -41,10 +41,10 @@ Also say one visible thing that tells them they have the new version.
 | `Art` | Every texture, drawn with Canvas 2D at device resolution. The only image file is `menu.jpg`, loaded in `BootScene`; its PLAY and SETTINGS buttons are painted in, with invisible touch areas over them in `MenuScene`. `Art.menuBg` and plain buttons are the fallback if it does not load (always the case from `file://`) |
 | Scenes | `MenuScene`, `SagaScene`, `SettingsScene`, `TutorialScene`, `GameScene` |
 
-Tutorial: `TutorialScene.PAGES` are nine picture pages (steer, gates, fight, red/orange circles, safe lanes, SLOW,
-lucky charm, upgrade cards, gear and store) with SKIP on every page. Tapping level 1 opens them while
+Tutorial: `TutorialScene.PAGES` are ten picture pages (steer, gates, fight, red/orange circles, safe lanes, SLOW,
+the ultimate, lucky charm, upgrade cards, gear and store) with SKIP on every page. Tapping level 1 opens them while
 `Save.tutorial` (`samurai_tutorial`) is false; finishing or skipping sets it and starts level 1 with `tips: true`,
-which pauses that run once for each live hint (`updateTips`/`tip`: gate, enemies, SLOW ready, boss red circle,
+which pauses that run once for each live hint (`updateTips`/`tip`: gate, enemies, ultimate ready, SLOW ready, boss red circle,
 orange circle). Saga 1 levels also show "DON'T FORGET TO UPGRADE!" (`remindUpgrade`) once per visit when the player
 taps to start without buying anything but could afford a card. HOW TO PLAY above saga 1 on the sagas screen replays the pages (owner wanted it there, not in Settings).
 
@@ -104,6 +104,15 @@ army is held to its side while beside the fence (`splitSide`, `steerClamp`), the
 past if the army took the logs, and blades do not reach across. The next gate row is `extra` further on so either gate
 can still be reached. Bot mode "split" takes the log side. Both sides win at the usual upgrade levels.
 
+The ultimate, Dragon Slash (`CFG.ult`, `activateUlt`, `updateUlt`): the owner asked for a flick-up ultimate with its own bar
+beside the SPECIAL bar and left the design to us. A gold ULTIMATE bar sits just above the SPECIAL bar and fills with kills
+(`ultMax` is the level's enemy count / `perLevel` 2.3, a boss kill gives a fifth; its own kills do not refill it). When full, a quick upward flick
+anywhere (`flickPx` in `flickMs`, mostly vertical) sends a golden crescent wave up the whole screen from the army: every
+ordinary enemy on screen dies, walls, logs and lucky charms break, a boss loses `bossShare` (12%) of full health (nothing if he is
+in the air or powering up). It sits alongside SLOW, not instead of it. Gates are not touched. In testing the bot ("ult" in the mode)
+used it once a run with the bar a third to half full again by the end, and it was worth about one upgrade level (level 2 wins at 1
+instead of 2). Cloud test browsers are too slow for a real flick to register in time; raise `CFG.ult.flickMs` in the test or call `activateUlt`.
+
 ## Testing
 
 There is no test suite. Use `tools/bot-test.js` (instructions at the top of that file) to play
@@ -162,11 +171,10 @@ Still waiting on the owner: what the shop should sell.
 - Rewards for civilians saved (100, 200, 300 and so on): the owner will design them later. The total is already kept
   (`Save.civilians`, `samurai_civilians`) and shown on the sagas screen.
 
-- Controls discussed with the owner, not built yet: flick up for an ultimate (a meter filled by kills; a full-width
-  wind wave that breaks walls, cuts the front enemies, flips a gate it hits higher, hurts bosses) and later flick
-  down for a guard stance (crossed blades or planted wooden *tate* shields; blocks boss hits, lightning, spikes,
-  on a recharge). The game already has a SLOW special button with its own kill-filled bar; decide with the owner
-  whether the ultimate replaces it.
+- More ultimates: the owner called Dragon Slash "the first ultimate", so expect others to choose between later.
+  An idea not built: the wave flipping a red gate it passes.
+- Control discussed with the owner, not built yet: flick down for a guard stance (crossed blades or planted wooden
+  *tate* shields; blocks boss hits, lightning, spikes, on a recharge).
 
 - The Store (button on the level start screen, `showStore`) is an empty "coming soon" panel. What it sells is undecided.
 

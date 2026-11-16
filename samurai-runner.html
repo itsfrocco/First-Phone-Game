@@ -43,6 +43,9 @@ const CFG = {
   slowMs: 4000,
   specialMax: 36,          // fewest kills that fill the special bar
   specialsPerLevel: 2.7,   // the bar is sized so a level's regular enemies fill it about this many times
+  // The ultimate (flick up): a wave of wind that sweeps up the whole screen. It cuts down every ordinary enemy it passes,
+  // breaks walls and logs, and takes `bossShare` of a boss's full health. Its bar fills with kills, about `perLevel` times a level.
+  ult: { perLevel: 2.3, min: 40, bossShare: 0.12, speed: 950, flickPx: 70, flickMs: 350 },
   charmDamageUp: 1.10,     // each lucky charm broken: +10% blade damage for the rest of the run
   bossSlow: 0.97,          // the run slows 3% once the boss is down
   shake: 0.4,              // screen-shake strength multiplier (0 = off)
@@ -349,6 +352,9 @@ const Sound = {
     wallBreak: (S, r) => { S.noise({ type: 'lowpass', f: 1400 * r, to: 200, dur: 0.4, vol: 0.5 }); S.tone({ f: 150, to: 50, dur: 0.3, vol: 0.5 }); },
     spike: (S) => { S.tone({ type: 'square', f: 1100, to: 300, dur: 0.1, vol: 0.16 }); S.noise({ type: 'highpass', f: 3000, dur: 0.1, vol: 0.2 }); },
     special: (S) => { S.tone({ f: 900, to: 90, dur: 0.7, vol: 0.4 }); S.noise({ f: 2500, to: 200, dur: 0.7, vol: 0.2, q: 0.6 }); },
+    ultimate: (S, r, t) => { S.noise({ f: 300, to: 5200, dur: 0.75, vol: 0.5, q: 0.7 }); S.tone({ type: 'sawtooth', f: 110, to: 660, dur: 0.6, vol: 0.25, attack: 0.05 });
+      [392, 587, 784].forEach((f, i) => S.tone({ type: 'triangle', f, dur: 0.5, vol: 0.3, at: t + 0.12 + i * 0.07 })); },
+    ultReady: (S, r, t) => [659, 880, 1319].forEach((f, i) => S.tone({ type: 'triangle', f, dur: 0.18, vol: 0.3, at: t + i * 0.08 })),
     gong: (S) => [[98, 0.5], [147, 0.3], [233, 0.2], [311, 0.12]].forEach(([f, v]) => S.tone({ f, dur: 1.8, vol: v, attack: 0.01 })),
     warn: (S) => S.tone({ type: 'square', f: 220, to: 440, dur: 0.3, vol: 0.14 }),
     warnPower: (S) => S.tone({ type: 'sawtooth', f: 130, to: 620, dur: 0.7, vol: 0.18, attack: 0.3 }),
@@ -1309,6 +1315,25 @@ TutorialScene.PAGES = [
       sc.tweens.add({ targets: b, scale: 1.12, duration: 500, yoyo: true, repeat: -1 });
       sc.finger(c, 310, 300, 0);
     } },
+  { title: 'ULTIMATE: DRAGON SLASH', text: 'Kills also fill the gold ULTIMATE bar.\nWhen it is full, FLICK UP to send a wave that\ncuts down every enemy on the screen.',
+    draw(sc, c) {
+      const g = sc.add.graphics(); c.add(g);
+      g.fillStyle(0x000000, 0.5).fillRoundedRect(100, 372, 200, 16, 8).fillStyle(0xffb300, 1).fillRoundedRect(102, 374, 196, 12, 6);
+      c.add(sc.txt(200, 358, 'ULTIMATE READY', 12, '#ffe082'));
+      [[110, 150], [200, 130], [290, 150], [155, 175], [245, 175]].forEach(([x, y]) => sc.pic(c, x, y, 'zombie', 1));
+      sc.army(c, 200, 310, 5);
+      const w = sc.add.graphics(); c.add(w);
+      for (const [wd, col, a] of [[20, 0xffb300, 0.35], [9, 0xffe082, 0.9], [3, 0xffffff, 1]]) {
+        w.lineStyle(wd, col, a).beginPath();
+        for (let x = -150; x <= 150; x += 10) { const y = x * x / 900; if (x === -150) w.moveTo(x, y); else w.lineTo(x, y); }
+        w.strokePath();
+      }
+      w.setPosition(200, 290);
+      sc.tweens.add({ targets: w, y: 110, alpha: 0.2, duration: 800, repeat: -1, repeatDelay: 700, ease: 'Cubic.out' });
+      const f = sc.add.circle(330, 330, 13, 0xffffff, 0.75).setStrokeStyle(3, 0xffd54f); c.add(f);
+      sc.tweens.add({ targets: f, y: 230, alpha: 0.15, duration: 450, repeat: -1, repeatDelay: 1050, ease: 'Cubic.out' });
+      c.add(sc.txt(330, 350, 'flick up', 12, '#ffe082'));
+    } },
   { title: 'LUCKY CHARMS', text: 'A glowing lucky cat slides across some levels.\nBreak it for +10% blade damage this run.',
     draw(sc, c) {
       const gl = sc.pic(c, 120, 220, 'glow', 2), ch = sc.pic(c, 120, 220, 'charm', 1.6);
@@ -1350,6 +1375,9 @@ class GameScene extends BaseScene {
     this.timeScale = 1;            // 1 normally, eases to CFG.slowScale during the special
     this.slowLeft = 0;
     this.charge = 0;
+    this.ultCharge = 0;            // the ultimate's bar
+    this.ultWave = null;           // the wave while it is sweeping up the screen
+    this.ultUsed = 0;
     this.count = CFG.startArmy;
     this.earned = 0;
     this.wound = 0;                // enemy strikes add up here; each full point costs one samurai
@@ -1400,6 +1428,17 @@ class GameScene extends BaseScene {
       this.beginRun();
     });
 
+    // A quick upward flick anywhere looses the ultimate.
+    let trail = [];
+    const flick = p => {
+      const now = performance.now();
+      trail.push({ x: p.worldX, y: p.worldY, t: now });
+      while (now - trail[0].t > CFG.ult.flickMs) trail.shift();
+      const up = trail[0].y - p.worldY;
+      if (up >= CFG.ult.flickPx && Math.abs(p.worldX - trail[0].x) < up * 0.6) { trail = []; this.activateUlt(); }
+    };
+    this.input.on('pointerdown', () => { trail = []; });
+    this.input.on('pointermove', p => { if (this.started && !this.paused && p.isDown) flick(p); });
     const steer = p => {
       if (!this.started) return;
       if (p.worldY > 636 && p.worldX > 280) return;        // special button area
@@ -1561,7 +1600,7 @@ class GameScene extends BaseScene {
     this.started = true;
     this.startUi.forEach(o => o.destroy());
     this.startUi = null;
-    this.specialText.setVisible(true); this.specialHint.setVisible(true);
+    this.specialText.setVisible(true); this.specialHint.setVisible(true); this.ultHint.setVisible(true);
   }
 
   /* ---------- construction ---------- */
@@ -1647,6 +1686,7 @@ class GameScene extends BaseScene {
         { prof: P, r: P.r, souls: P.souls, state: 'chase', t: P.chaseMs + 500, swings: 0, power: false, air: false, trickleHp: b.trickleHp, trickleT: P.trickleMs });
     });
     this.specialMax = Math.max(CFG.specialMax, Math.round(this.enemies.length / CFG.specialsPerLevel));
+    this.ultMax = Math.max(CFG.ult.min, Math.round(this.enemies.length / CFG.ult.perLevel));
     this.boss = this.bosses[0] || null;
     this.finaleDone = !this.boss;
   }
@@ -1715,6 +1755,7 @@ class GameScene extends BaseScene {
     this.boltG = this.add.graphics().setDepth(2960);        // lightning
     this.shade = this.add.rectangle(W / 2, H / 2, W, H, 0x05020c, 1).setAlpha(0).setDepth(-5);   // darkens the ground during a power-up
     this.slowTint = this.add.rectangle(W / 2, H / 2, W, H, 0x5e35b1, 1).setAlpha(0).setDepth(3600);
+    this.ultG = this.add.graphics().setDepth(2970).setBlendMode(Phaser.BlendModes.ADD);       // the ultimate's wave
   }
 
   buildHud() {
@@ -1725,6 +1766,7 @@ class GameScene extends BaseScene {
     this.countText = this.txt(0, 0, '', 15, '#fff', { stroke: '#0d1642', strokeThickness: 4 }).setDepth(D);
     this.specialText = this.txt(336, 676, 'SLOW', 13).setDepth(D + 1).setVisible(false);
     this.specialHint = this.txt(130, 662, 'SPECIAL', 10, '#b39ddb').setDepth(D).setVisible(false);
+    this.ultHint = this.txt(130, 634, 'ULTIMATE', 10, '#ffe082').setDepth(D).setVisible(false);
     this.add.zone(336, 676, 84, 76).setInteractive().on('pointerdown', () => this.activateSpecial());
     this.earnedText = this.txt(0, 57, '', 11, '#ffe082', { stroke: '#1a0a20', strokeThickness: 3 }).setOrigin(0, 0.5).setDepth(D).setAlpha(0.9);
     // pause button
@@ -1756,6 +1798,7 @@ class GameScene extends BaseScene {
     this.updateArmy(time, dt);
     this.updateGates();
     this.updateCombat(dt);
+    this.updateUlt(dt);
     this.updateHazards(wdt);
     if (this.L.storm) this.updateStorm(wdt);
     this.drawBolts(wdt);
@@ -1919,6 +1962,11 @@ class GameScene extends BaseScene {
     this.earned += gain; Save.souls += gain;
     Sound.play('kill');
     this.charge = Math.min(this.specialMax, this.charge + (e.r && e.kind !== 'wall' ? this.specialMax / 4 : 1));
+    if (!this.ultWave) {           // its own kills do not refill it
+      const was = this.ultCharge;
+      this.ultCharge = Math.min(this.ultMax, was + (e.prof ? this.ultMax / 5 : 1));
+      if (was < this.ultMax && this.ultCharge >= this.ultMax) { Sound.play('ultReady'); this.float(130, 628, 'ULTIMATE READY!', '#ffe082', 15); }
+    }
     const tint = { demon: 0xab47bc, zombie: 0x9ccc65, giant: 0x9ccc65, thunder: 0xb388ff, charm: 0xffd54f, wall: 0x9aa1a9, rockOni: 0x9aa1a9, rockBoss: 0x9aa1a9, tenguBoss: 0xef5350, boss: 0xab47bc }[e.kind];
     this.burst.setParticleTint(e.mat === 'log' ? 0x8d6e63 : tint);
     this.burst.explode(e.r ? 40 : 10, e.x, e.y);
@@ -2459,6 +2507,7 @@ class GameScene extends BaseScene {
     const gate = this.gates.find(g => !g.used && g.y > 200);
     if (gate) return this.tip('gate', 'Slide your finger to steer.\nGo through the BLUE gate to add samurai!', true);
     if (this.enemies.some(e => !e.r && e.kind !== 'wall' && e.y > 330)) this.tip('fight', 'Enemies! Your samurai fight on their own.\nThe bigger your army, the stronger it is.', true);
+    if (this.ultCharge >= this.ultMax && !this.ultWave) this.tip('ult', 'Your ULTIMATE is ready!\nFLICK your finger UP to unleash the Dragon Slash.', true);
     if (this.charge >= this.specialMax && this.slowLeft <= 0) this.tip('slow', 'Your SLOW power is ready!\nTap the SLOW button (bottom right) to slow time.', true);
     if (this.fight && b && b.state === 'wind' && b.t < b.windFull * 0.5) {      // once the circle has lit up
       if (!b.style) this.tip('swing', 'RED circle: the boss will strike right there.\nSlide out of it before it lands!');
@@ -2520,6 +2569,48 @@ class GameScene extends BaseScene {
     Sound.play('special');
     this.cameras.main.flash(180, 150, 110, 255);
     this.banner('SLOW MOTION', '');
+  }
+
+  /* ---------- ultimate ---------- */
+  // Dragon Slash: the clan swings as one and a wave of golden wind sweeps up the whole road.
+  activateUlt() {
+    if (!this.started || this.over || this.paused || this.ultWave || this.ultCharge < this.ultMax) return;
+    this.ultCharge = 0; this.ultUsed++;
+    this.ultWave = { y: this.formY - 10, hit: new Set(), tail: 0 };
+    Sound.play('ultimate');
+    this.cameras.main.flash(260, 255, 214, 110);
+    this.shake(450, 0.012);
+    this.banner('DRAGON SLASH', '');
+    this.soldiers.forEach(s => {                             // every blade goes up with it
+      const sl = this.img(s.x, s.y - 14, 'slash').setDepth(2960).setRotation(-Math.PI / 2).setScale(S * 1.2).setTint(0xffe082).setBlendMode(Phaser.BlendModes.ADD);
+      this.tweens.add({ targets: sl, y: s.y - 150, alpha: 0, scaleX: S * 2.2, duration: 320, ease: 'Cubic.out', onComplete: () => sl.destroy() });
+    });
+  }
+
+  updateUlt(dt) {
+    const w = this.ultWave, g = this.ultG;
+    if (!w) return;
+    g.clear();
+    w.y -= CFG.ult.speed * dt; w.tail += dt;
+    for (const e of [...this.enemies]) {
+      if (e.gone || e.hp <= 0 || w.hit.has(e) || e.y < w.y || e.y < -20 || e.y > H + 20) continue;
+      w.hit.add(e);
+      this.strike(e, e.prof ? e.maxHp * CFG.ult.bossShare : e.hp, { x: e.x, y: e.y + 40 });
+      if (e.prof && !e.air && !e.powering) { this.float(e.x, e.y - 50, 'DRAGON SLASH!', '#ffe082', 18); this.shake(250, 0.014); }
+    }
+    if (w.y < -140) { this.ultWave = null; return; }
+    // The wave: a wide crescent, its middle leading, with a fading wake behind it.
+    const bow = x => w.y + (x - W / 2) * (x - W / 2) / 700;
+    for (let i = 1; i <= 5; i++) g.fillStyle(0xffb300, 0.05).fillRect(0, w.y, W, i * 34);
+    for (const [wd, col, a, off] of [[30, 0xff8f00, 0.3, 10], [16, 0xffc107, 0.6, 4], [7, 0xffecb3, 0.95, 0], [3, 0xffffff, 1, -2]]) {
+      g.lineStyle(wd, col, a).beginPath().moveTo(-10, bow(-10) + off);
+      for (let x = 10; x <= W + 10; x += 20) g.lineTo(x, bow(x) + off + Math.sin(x * 0.07 + w.tail * 40) * 3);
+      g.strokePath();
+    }
+    for (let i = 0; i < 2; i++) {                            // sparks thrown off the edge
+      const x = Math.random() * W, sp = this.img(x, bow(x), 'dot').setDepth(2971).setScale(S * (0.6 + Math.random())).setTint(0xffe082).setBlendMode(Phaser.BlendModes.ADD);
+      this.tweens.add({ targets: sp, y: sp.y + 60 + Math.random() * 60, alpha: 0, duration: 380, onComplete: () => sp.destroy() });
+    }
   }
 
   /* ---------- boss ---------- */
@@ -2637,6 +2728,12 @@ class GameScene extends BaseScene {
     g.lineStyle(3, ready ? 0xffffff : 0x8c80a8, ready ? 1 : 0.5).strokeCircle(336, 676, 32 * pulse);
     this.specialText.setText(slowing ? (this.slowLeft / 1000).toFixed(1) : 'SLOW').setAlpha(ready || slowing ? 1 : 0.45);
     this.specialHint.setText(ready ? 'SPECIAL READY' : slowing ? 'SLOW MOTION' : 'SPECIAL');
+    // ultimate bar, just above it
+    const uf = this.ultCharge / this.ultMax, uReady = uf >= 1, glow = 0.5 + Math.sin(this.time.now * 0.01) * 0.5;
+    g.fillStyle(0x000000, 0.5).fillRoundedRect(27, 643, 206, 16, 8);
+    if (uReady) g.lineStyle(2, 0xffffff, 0.4 + glow * 0.6).strokeRoundedRect(27, 643, 206, 16, 8);
+    if (uf > 0.005) g.fillStyle(uReady ? (glow > 0.5 ? 0xffd54f : 0xffb300) : 0xc77800, 1).fillRoundedRect(30, 646, 200 * uf, 10, Math.min(5, 100 * uf));
+    this.ultHint.setText(uReady ? 'ULTIMATE READY  ▲ FLICK UP' : 'ULTIMATE').setAlpha(uReady ? 0.7 + glow * 0.3 : 0.8);
 
   }
 
