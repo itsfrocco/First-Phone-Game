@@ -37,7 +37,7 @@ const GAME = 'file://' + path.resolve(__dirname, '..', 'samurai-runner.html');
         const gate = sc.gates.find(x => !x.used);
         let tx = gate && gate.y > 250 ? (gate.left.good ? 130 : 270) : sc.targetX;
         // A stone wall still standing this close: give up on the blue gate and go around.
-        const wall = sc.enemies.find(e => e.kind === 'wall' && !e.gone && e.hp > 0 && !e.passed && e.y < sc.formY);
+        const wall = sc.enemies.find(e => e.kind === 'wall' && !e.gone && e.hp > 0 && !e.passed && e.y < sc.formY + 40);   // still in front of or beside the army
         if (wall && !wall.seenAt && wall.y > sc.formY - 200) wall.seenAt = sc.count;
         if (wall && wall.y > sc.formY - 70 && !mode.includes('wall')) { tx = wall.x < 200 ? 270 : 130; if (!wall.bailed) { wall.bailed = true; walls.push('AROUND(' + wall.seenAt + ' men, ' + Math.ceil(wall.hp) + '/' + wall.maxHp + ' left)'); } }
         sc.enemies.forEach(e => { if (e.kind === 'wall' && !e.logged && e.y > sc.formY - 200) { e.logged = true; wallsUp.push(e); } });

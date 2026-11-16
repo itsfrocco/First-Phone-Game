@@ -32,7 +32,7 @@ const CFG = {
   armyY: 560,              // front row of the army
   pathLeft: 60, pathRight: 340,
   steerMin: 78, steerMax: 322,
-  baseSpeed: 90,           // px/s at the start of a level
+  baseSpeed: 81,           // px/s at the start of a level
   speedRamp: 0.30,         // +30% by the end
   attackRange: 38,        // melee reach; the Range upgrade adds to it
   rangeStep: 9,            // extra reach per Range level (shown as 1m a level)
@@ -113,13 +113,13 @@ const CFG = {
 const LEVEL_SPECS = [
   { name: 'Restless Dead', demons: false, rows: 10, seg: 370, pack: [3, 1.2, 0.20], crowd: 0.05, hp: 3, 
     bosses: [{ type: 'giant', after: 'end', hp: 750 }] },
-  { name: 'The Tengu', demons: true, rows: 13, seg: 370, pack: [5, 2.4, 0.27], crowd: 0.16, hp: 5, charms: [[4, 10], 8, 3],
+  { name: 'The Tengu', demons: true, rows: 13, seg: 370, pack: [4, 1.9, 0.22], crowd: 0.16, hp: 5, charms: [[4, 10], 8, 3],
     bosses: [{ type: 'giant', after: 6, hp: 900 }, { type: 'tengu', after: 'end', hp: 1800 }] },
-  { name: 'The Fat Demon', demons: true, rows: 18, seg: 370, pack: [6, 2.4, 0.16], crowd: 0.14, hp: 8, charms: [[5, 11, 15], 11, 4],
+  { name: 'The Fat Demon', demons: true, rows: 18, seg: 370, pack: [4.8, 1.9, 0.13], crowd: 0.14, hp: 8, charms: [[5, 11, 15], 11, 4],
     bosses: [{ type: 'giant', after: 8, hp: 2300 }, { type: 'demon', after: 'end', hp: 3800 }] },
   // The saga boss stage: a short run to build an army, then the fight.
   { name: 'Takemikazuchi', demons: true, storm: true, rows: 8, seg: 370, pack: [5, 2.4, 0.30], crowd: 0.15, hp: 8, pace: 1.2, charms: [[4], 11, 0],
-    bosses: [{ type: 'thunder', after: 'end', hp: 3300 }] },
+    bosses: [{ type: 'thunder', after: 'end', hp: 4300 }] },
   // Saga 2, Mountain Pass. `theme` picks the scenery, `foe` the common enemy.
   { name: 'The Rock Oni', theme: 'mountain', foe: 'rockOni', demons: false, rows: 14, seg: 370, pack: [7, 3.0, 0.26], crowd: 0.15, hp: 13, charms: [[5, 10], 14, 4], walls: [[4], 80, 0],
     bosses: [{ type: 'rock', after: 'end', hp: 6000 }] },
@@ -225,7 +225,7 @@ const Stats = {
   damage: () => 1 + (Save.damage - 1) * 0.5,
   reach: () => Math.min(CFG.rangeMax, CFG.attackRange + (Save.range - 1) * CFG.rangeStep),
   rangeMaxed: () => CFG.attackRange + (Save.range - 1) * CFG.rangeStep >= CFG.rangeMax,
-  soulsPerKill: () => 1.5 * Save.revenue,
+  soulsPerKill: () => 1.25 + 0.75 * (Save.revenue - 1),
 };
 // Coin totals: 28,408 reads 28.4K (rounded down, so it never shows more than you have).
 const coins = n => n >= 1e6 ? (Math.floor(n / 1e5) / 10) + 'M' : n >= 1000 ? (Math.floor(n / 100) / 10) + 'K' : String(n);
