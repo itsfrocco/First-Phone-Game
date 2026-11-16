@@ -35,8 +35,9 @@ const CFG = {
   baseSpeed: 90,           // px/s at the start of a level
   speedRamp: 0.30,         // +30% by the end
   attackRange: 38,        // melee reach; the Range upgrade adds to it
-  rangeStep: 18,           // extra reach per Range level
+  rangeStep: 9,            // extra reach per Range level (shown as 1m a level)
   rangeMax: 250,           // furthest a samurai can ever strike (about a third of the screen)
+  rangedSwing: 1.5,          // a wind slash at a foe beyond melee reach takes this many times a normal swing
   slashSpeed: 900,         // px/s of the wind slash a samurai sends at a foe beyond melee reach
   slowScale: 0.30,         // world speed while the special is active
   slowMs: 4000,
@@ -210,7 +211,7 @@ window.addEventListener('pagehide', () => Save.save());
 document.addEventListener('visibilitychange', () => { if (document.hidden) Save.save(); });
 
 const Stats = {
-  cost: lvl => Math.floor(40 * Math.pow(1.55, lvl - 1)),
+  cost: (lvl, key) => key === 'range' ? Math.floor(25 * Math.pow(1.3, lvl - 1)) : Math.floor(40 * Math.pow(1.55, lvl - 1)),   // Range grows slowly, so it costs less
   attackMs: () => Math.max(180, 400 - Save.fire * 25),
   damage: () => 1 + (Save.damage - 1) * 0.5,
   reach: () => Math.min(CFG.rangeMax, CFG.attackRange + (Save.range - 1) * CFG.rangeStep),
@@ -1203,11 +1204,11 @@ class GameScene extends BaseScene {
     const cards = [
       ['fire', 'ATTACK\nSPEED', 0x2e7d32, (Stats.attackMs() / 1000).toFixed(2) + 's swing'],
       ['damage', 'BLADE\nDAMAGE', 0x1565c0, fmt(Stats.damage()) + ' per hit'],
-      ['range', 'RANGE', 0xc62828, Save.range === 1 ? 'up close' : (Stats.reach() / 10).toFixed(1) + 'm reach', Stats.rangeMaxed()],
+      ['range', 'RANGE', 0xc62828, Save.range === 1 ? 'up close' : Math.min(Save.range, 1 + (CFG.rangeMax - CFG.attackRange) / CFG.rangeStep).toFixed(1) + 'm reach', Stats.rangeMaxed()],
       ['revenue', 'COIN\nREWARD', 0x6a1b9a, fmt(Stats.soulsPerKill()) + ' per kill'],
     ];
     cards.forEach(([key, title, color, stat, maxed], i) => {
-      const x = 52 + i * 98.7, y = 616, w = 92, h = 150, cost = Stats.cost(Save[key]), can = !maxed && Save.souls >= cost;
+      const x = 52 + i * 98.7, y = 616, w = 92, h = 150, cost = Stats.cost(Save[key], key), can = !maxed && Save.souls >= cost;
       const g = this.add.graphics();
       g.fillStyle(0x1c1220, 0.96).fillRoundedRect(x - w / 2, y - h / 2, w, h, 12);
       g.fillStyle(color, 1).fillRoundedRect(x - w / 2, y - h / 2, w, 34, { tl: 12, tr: 12, bl: 0, br: 0 });
@@ -1582,6 +1583,7 @@ class GameScene extends BaseScene {
       if (best.kind === 'wall') this.airSlash(s, best);
       else if (best !== this.boss && bestD > CFG.attackRange) {     // out of sword reach: a wind slash flies to it
         this.windSlash(s, best, dmg);
+        s.cd *= CFG.rangedSwing;
         return;
       }
       this.strike(best, dmg + this.lightningBonus(best, dmg), s);
