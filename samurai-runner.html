@@ -34,7 +34,10 @@ const CFG = {
   steerMin: 78, steerMax: 322,
   baseSpeed: 90,           // px/s at the start of a level
   speedRamp: 0.30,         // +30% by the end
-  attackRange: 38,
+  attackRange: 38,        // melee reach; the Range upgrade adds to it
+  rangeStep: 18,           // extra reach per Range level
+  rangeMax: 250,           // furthest a samurai can ever strike (about a third of the screen)
+  slashSpeed: 900,         // px/s of the wind slash a samurai sends at a foe beyond melee reach
   slowScale: 0.30,         // world speed while the special is active
   slowMs: 4000,
   specialMax: 36,          // fewest kills that fill the special bar
@@ -164,7 +167,7 @@ const SAGAS = ['Bamboo Road', 'Mountain Pass', 'Frozen Pass', 'Ember Fortress', 
    SAVE — same localStorage keys as the prototype
    ============================================================ */
 const Save = {
-  souls: 0, fire: 1, damage: 1, revenue: 1,     // `souls` is the coin total; the name is kept so old saves carry over
+  souls: 0, fire: 1, damage: 1, range: 1, revenue: 1,     // `souls` is the coin total; the name is kept so old saves carry over
   level: 1,                      // highest level unlocked (4 = saga 1 cleared)
   music: true, sfx: true, shake: true,
   armor: '', weapon: '', necklace: '',   // equipped gear ids
@@ -176,6 +179,7 @@ const Save = {
     this.souls = num('samurai_souls', 0);
     this.fire = num('samurai_fire', 1);
     this.damage = num('samurai_damage', 1);
+    this.range = num('samurai_range', 1);
     this.revenue = num('samurai_revenue', 1);
     this.level = num('samurai_level', 1);
     this.music = num('samurai_music', 1) === 1;
@@ -188,6 +192,7 @@ const Save = {
       localStorage.setItem('samurai_souls', this.souls);
       localStorage.setItem('samurai_fire', this.fire);
       localStorage.setItem('samurai_damage', this.damage);
+      localStorage.setItem('samurai_range', this.range);
       localStorage.setItem('samurai_revenue', this.revenue);
       localStorage.setItem('samurai_level', this.level);
       localStorage.setItem('samurai_music', this.music ? 1 : 0);
@@ -198,7 +203,7 @@ const Save = {
       localStorage.setItem('samurai_necklace', this.necklace);
     } catch (e) {}
   },
-  resetProgress() { this.souls = 0; this.fire = this.damage = this.revenue = this.level = 1; this.armor = this.weapon = this.necklace = ''; this.save(); },
+  resetProgress() { this.souls = 0; this.fire = this.damage = this.range = this.revenue = this.level = 1; this.armor = this.weapon = this.necklace = ''; this.save(); },
 };
 Save.load();
 window.addEventListener('pagehide', () => Save.save());
@@ -208,6 +213,8 @@ const Stats = {
   cost: lvl => Math.floor(40 * Math.pow(1.55, lvl - 1)),
   attackMs: () => Math.max(180, 400 - Save.fire * 25),
   damage: () => 1 + (Save.damage - 1) * 0.5,
+  reach: () => Math.min(CFG.rangeMax, CFG.attackRange + (Save.range - 1) * CFG.rangeStep),
+  rangeMaxed: () => CFG.attackRange + (Save.range - 1) * CFG.rangeStep >= CFG.rangeMax,
   soulsPerKill: () => 1.5 * Save.revenue,
 };
 // Coin totals: 28,408 reads 28.4K (rounded down, so it never shows more than you have).
@@ -1194,21 +1201,22 @@ class GameScene extends BaseScene {
     const before = new Set(this.children.list);
     this.add.rectangle(W / 2, 618, W, 204, 0x0a0610, 0.6);
     const cards = [
-      ['fire', 'ATTACK SPEED', 0x2e7d32, (Stats.attackMs() / 1000).toFixed(2) + 's swing'],
-      ['damage', 'BLADE DAMAGE', 0x1565c0, fmt(Stats.damage()) + ' per hit'],
-      ['revenue', 'COIN REWARD', 0x6a1b9a, fmt(Stats.soulsPerKill()) + ' per kill'],
+      ['fire', 'ATTACK\nSPEED', 0x2e7d32, (Stats.attackMs() / 1000).toFixed(2) + 's swing'],
+      ['damage', 'BLADE\nDAMAGE', 0x1565c0, fmt(Stats.damage()) + ' per hit'],
+      ['range', 'RANGE', 0xc62828, Save.range === 1 ? 'up close' : (Stats.reach() / 10).toFixed(1) + 'm reach', Stats.rangeMaxed()],
+      ['revenue', 'COIN\nREWARD', 0x6a1b9a, fmt(Stats.soulsPerKill()) + ' per kill'],
     ];
-    cards.forEach(([key, title, color, stat], i) => {
-      const x = 72 + i * 128, y = 616, w = 116, h = 150, cost = Stats.cost(Save[key]), can = Save.souls >= cost;
+    cards.forEach(([key, title, color, stat, maxed], i) => {
+      const x = 52 + i * 98.7, y = 616, w = 92, h = 150, cost = Stats.cost(Save[key]), can = !maxed && Save.souls >= cost;
       const g = this.add.graphics();
       g.fillStyle(0x1c1220, 0.96).fillRoundedRect(x - w / 2, y - h / 2, w, h, 12);
-      g.fillStyle(color, 1).fillRoundedRect(x - w / 2, y - h / 2, w, 30, { tl: 12, tr: 12, bl: 0, br: 0 });
+      g.fillStyle(color, 1).fillRoundedRect(x - w / 2, y - h / 2, w, 34, { tl: 12, tr: 12, bl: 0, br: 0 });
       g.lineStyle(2, 0xffffff, 0.25).strokeRoundedRect(x - w / 2, y - h / 2, w, h, 12);
-      this.txt(x, y - h / 2 + 15, title, 11);
-      this.txt(x, y - 28, 'Lv ' + Save[key], 22);
-      this.txt(x, y - 4, stat, 11, '#cfc3d6', { fontStyle: 'normal' });
-      const b = this.button(x, y + 42, 96, 40, can ? color : 0x4a4250, coins(cost), 16, () => {
-        if (Save.souls < cost) { Sound.play('deny'); return; }
+      this.txt(x, y - h / 2 + 17, title, 11, '#fff', { align: 'center', lineSpacing: -2 });
+      this.txt(x, y - 24, 'Lv ' + Save[key], 20);
+      this.txt(x, y - 2, stat, 10, '#cfc3d6', { fontStyle: 'normal' });
+      const b = this.button(x, y + 42, 80, 40, can ? color : 0x4a4250, maxed ? 'MAX' : coins(cost), 15, () => {
+        if (maxed || Save.souls < cost) { Sound.play('deny'); return; }
         Save.souls -= cost; Save[key]++; Save.save(); Sound.play('buy');
         this.time.delayedCall(0, () => { if (!this.started) this.showStartUi(); });
       });
@@ -1551,24 +1559,31 @@ class GameScene extends BaseScene {
 
   updateCombat(dt) {
     const cd = Stats.attackMs(), dmg = Stats.damage() * this.dmgMod;
-    const near = this.enemies.filter(e => e.y > 250 && e.y < H);
+    const reach = Stats.reach(), extra = reach - CFG.attackRange;
+    const near = this.enemies.filter(e => e.y > 250 - extra && e.y < H);
     this.soldiers.forEach(s => {
       s.cd -= dt * 1000;
       if (s.cd > 0) return;
-      let best = null, bestD = CFG.attackRange;
+      let best = null, bestD = reach, wall = null;
       near.forEach(e => {
-        if (e.hp <= 0) return;
-        if (e.kind === 'wall') {       // cut at from a distance, but anything in reach comes first
-          if (bestD >= CFG.attackRange && e.y > this.formY - CFG.wall.range && e.y < this.formY && Math.abs(this.armyX - e.x) < CFG.wall.half) best = e;
+        if (e.hp <= 0 || e.incoming >= e.hp) return;      // already finished off by a slash in flight
+        if (e.kind === 'wall') {       // cut at from a distance, but anything closer comes first
+          if (e.y > this.formY - Math.max(CFG.wall.range, reach) && e.y < this.formY && Math.abs(this.armyX - e.x) < CFG.wall.half) wall = e;
           return;
         }
-        const d = e === this.boss && this.fight ? (Math.abs(s.x - e.x) < e.prof.reach + 10 ? 0 : Infinity) : Math.hypot(e.x - s.x, e.y - s.y) - e.r;
+        // Big fights: the army stands below the boss, so reach is measured sideways (half the Range bonus counts).
+        const d = e === this.boss && this.fight ? (Math.abs(s.x - e.x) < e.prof.reach + 10 + extra / 2 ? 0 : Infinity) : Math.hypot(e.x - s.x, e.y - s.y) - e.r;
         if (d < bestD) { bestD = d; best = e; }
       });
+      if (wall && (!best || bestD > CFG.attackRange && this.formY - wall.y < bestD)) best = wall;
       if (!best) return;
       s.cd = cd * (0.9 + Math.random() * 0.2);
       s.lunge = 7; s.swing = 1;
       if (best.kind === 'wall') this.airSlash(s, best);
+      else if (best !== this.boss && bestD > CFG.attackRange) {     // out of sword reach: a wind slash flies to it
+        this.windSlash(s, best, dmg);
+        return;
+      }
       this.strike(best, dmg + this.lightningBonus(best, dmg), s);
       if (this.thunderBlade && Math.random() < 0.6) this.zap(s.x + 9, s.y - 12, best.x, best.y, 90);   // Futsu-no-mitama's trail
     });
@@ -2048,6 +2063,19 @@ class GameScene extends BaseScene {
   }
 
   // A blade of wind from a samurai to a wall ahead.
+  // The Range upgrade: a crescent of wind flies from the samurai and lands its hit on arrival. The foe is
+  // marked so other samurai do not all fire at one that is already as good as dead.
+  windSlash(s, e, dmg) {
+    const dist = Math.hypot(e.x - s.x, e.y - s.y), ms = 1000 * dist / CFG.slashSpeed;
+    const sl = this.img(s.x, s.y - 14, 'slash').setDepth(2900).setRotation(Math.atan2(e.y - s.y, e.x - s.x)).setScale(S * 0.95).setAlpha(0.95).setTint(this.thunderBlade ? 0xd9a8ff : 0xb3e5fc);
+    e.incoming = (e.incoming || 0) + dmg;
+    this.tweens.add({ targets: sl, x: e.x, y: e.y, duration: ms, onComplete: () => sl.destroy() });
+    this.time.delayedCall(ms, () => {                     // the hit runs on the clock, not the tween
+      e.incoming -= dmg;
+      if (!e.gone && e.hp > 0 && !this.over) this.strike(e, dmg + this.lightningBonus(e, dmg), s);
+    });
+  }
+
   airSlash(s, e) {
     const tx = e.x + clamp(s.x - e.x, -50, 50), sl = this.img(s.x, s.y - 14, 'slash').setDepth(2900).setRotation(-Math.PI / 2).setScale(S * 0.6).setAlpha(0.85).setTint(this.bladeTint);
     this.tweens.add({ targets: sl, x: tx, y: e.y, duration: 110, onComplete: () => sl.destroy() });

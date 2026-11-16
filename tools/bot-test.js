@@ -6,11 +6,11 @@ const { chromium } = require('playwright');
 //     node tools/bot-test.js '[[1,1,"dodge"],[2,3,"dodge"],[4,5,"stand"]]'
 //
 // Each case is [stage, upgradeLevel, mode]. Stages 1-3 are levels, 4 is the saga boss, 5 is saga 2 level 1.
-// upgradeLevel sets attack speed and blade damage. "dodge" reacts to boss attacks and storm
+// upgradeLevel sets attack speed and blade damage; an optional 4th entry sets Range. "dodge" reacts to boss attacks and storm
 // waves after 0.3s; "stand" never dodges. The bot is sharper than a person, so treat a
 // narrow bot win as "hard" for a real player.
 const path = require('path');
-const CASES = JSON.parse(process.argv[2]);
+const CASES = JSON.parse(process.argv[2]);   // an optional 4th entry sets the Range level (default 1)
 const PHASER = process.env.PHASER;
 const GAME = 'file://' + path.resolve(__dirname, '..', 'samurai-runner.html');
 (async () => {
@@ -25,8 +25,8 @@ const GAME = 'file://' + path.resolve(__dirname, '..', 'samurai-runner.html');
     const g = samuraiGame; g.loop.sleep(); g.renderer.render = () => {}; g.renderer.preRender = () => {}; g.renderer.postRender = () => {};
     let t = performance.now(); const step = () => { t += 16.667; g.step(t, 16.667); };
     const out = [];
-    for (const [level, up, mode] of CASES) {
-      Save.fire = Save.damage = up;
+    for (const [level, up, mode, range] of CASES) {
+      Save.fire = Save.damage = up; Save.range = range || 1;
       g.scene.start('Game', { level }); step(); step();
       const sc = g.scene.getScene('Game');
       sc.beginRun(); const total = sc.enemies.length;
@@ -61,7 +61,7 @@ const GAME = 'file://' + path.resolve(__dirname, '..', 'samurai-runner.html');
         sc.targetX = tx;
         step(); f++;
       }
-      out.push([level, 'up' + up, mode, sc.finaleDone && sc.count > 0 ? 'WIN ' : 'lose', 'left ' + sc.count, Math.round(f / 60) + 's', 'dist ' + Math.round(100 * sc.dist / sc.L.length) + '%', at.join(' '), (lastBoss && lastBoss.phase2 ? 'phase2' : ''), 'fight ' + secs.join('/') + 's', 'souls ' + sc.earned, 'dmg x' + sc.dmgMod.toFixed(2), 'enemies ' + total, 'bar ' + sc.specialMax, miss ? 'MISS x' + miss : '', 'walls ' + walls.join(' '), sc.crushed ? 'CRUSHED' : ''].join(' | '));
+      out.push([level, 'up' + up + (range ? '+R' + range : ''), mode, sc.finaleDone && sc.count > 0 ? 'WIN ' : 'lose', 'left ' + sc.count, Math.round(f / 60) + 's', 'dist ' + Math.round(100 * sc.dist / sc.L.length) + '%', at.join(' '), (lastBoss && lastBoss.phase2 ? 'phase2' : ''), 'fight ' + secs.join('/') + 's', 'souls ' + sc.earned, 'dmg x' + sc.dmgMod.toFixed(2), 'enemies ' + total, 'bar ' + sc.specialMax, miss ? 'MISS x' + miss : '', 'walls ' + walls.join(' '), sc.crushed ? 'CRUSHED' : ''].join(' | '));
     }
     return out;
   }, CASES);
