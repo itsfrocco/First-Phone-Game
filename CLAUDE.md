@@ -72,6 +72,30 @@ Saga 2 level 1 (stage 5) is tuned for about 5: the dodging bot wins from 3 up, t
 - Enemy and boss ideas usually come with a reference picture: draw an original version in the
   game's style.
 
+## Plan: App Store release with in-app purchases
+
+The owner wants the game free to download on the App Store (Android too, ideally) with in-app purchases:
+gems as a premium currency for upgrades, weapon upgrades and similar. Advice already given to them, in order:
+
+1. Finish more content first (all of saga 2, ideally saga 3); purchases only pay if players stay.
+2. Build gems and the Store in the web game with pretend purchases, so prices and balance can be tried on
+   the phone before any money is spent. Read the shop plan back to them first.
+3. Their part: Apple Developer account ($99/year; Google Play $25 once), apply to Apple's Small Business
+   Program (15% cut instead of 30%), and in App Store Connect accept the Paid Apps agreement, add banking
+   and a tax form. Purchases do not appear until that is done.
+4. Our part: wrap the game with Capacitor, add real purchases (Apple's system is required for digital
+   goods; RevenueCat suggested), a Restore Purchases button (required for one-time buys), cloud saving
+   (progress is only in localStorage now, so gems would be lost on deleting the app and are easy to cheat),
+   and a privacy policy page (required; could live on GitHub Pages).
+5. Build on a Mac with Xcode or a paid cloud build service, test with sandbox accounts and TestFlight, submit.
+
+Design advice: coins earned by play plus gems that are mostly bought but sometimes earned (daily rewards,
+bosses); keep the game beatable free, just slower; good sellers are a cheap one-time starter pack, cosmetic
+skins, rewarded ads (revive, double coins), remove ads, and gems that skip grinding. Random prize boxes
+must show their odds (Apple rule). Suggest a tax adviser once money comes in.
+
+Still waiting on the owner: whether they have a Mac, and what the shop should sell.
+
 ## Open ideas
 
 - The Store (button on the level start screen, `showStore`) is an empty "coming soon" panel. What it sells is undecided.
