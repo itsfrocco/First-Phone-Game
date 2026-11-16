@@ -82,6 +82,9 @@ beatable). Walking into the weapon with an obstacle still standing gives "MISSED
 run, and boosts add up: SHARP BLADE +20% damage, SWIFT BLADE 15% faster swings, LONG REACH +5 Range levels (owner chose
 these sizes). Bot mode "weapon" (e.g. "dodge weapon") takes the weapon side and cuts through; in testing the obstacles
 always broke before reaching the army, and taking the weapon instead of the blue gate costs some men but rarely decides a run.
+Owner's follow-up: no weapon rows in level 1 (stage 1), saga 1 is always logs (stone only from saga 2 with Range 6), and the
+obstacles were made about 50% tougher (`margin` 0.5 / 0.55, was 0.33 / 0.38): they now sometimes block the army for a moment
+before breaking, but the bot was never crushed and still collected the weapons.
 
 ## Testing
 

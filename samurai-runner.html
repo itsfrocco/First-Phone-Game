@@ -100,7 +100,7 @@ const CFG = {
   // The obstacles' health is set as they come into view from the army's damage, swing speed and size right then, so they always
   // break in time: `margin` of what the army could cut in the time it has. Picking the weapon up gives one random boost for the
   // rest of the run (they add up): `dmg` more damage, `speed` faster swings, or `rangeLevels` extra Range levels.
-  weapon: { minRange: 3, stoneRange: 6, gap: 92, margin: { log: 0.33, stone: 0.38 }, minHp: 3, dmg: 0.20, speed: 0.15, rangeLevels: 5 },
+  weapon: { minRange: 3, stoneRange: 6, gap: 92, margin: { log: 0.5, stone: 0.55 }, minHp: 3, dmg: 0.20, speed: 0.15, rangeLevels: 5 },
   // The saga boss stage's storm: every `everyMs` a wave of lightning sweeps down the lane the army stands in.
   storm: { everyMs: [4600, 5800], warnMs: 1100, sweepMs: 380, half: 52, cleave: 2, cleaveShare: 0.08 },
   // Futsu-no-mitama: its lightning adds to hits on some kinds of foe and is shrugged off by others. Everything else takes normal damage.
@@ -176,7 +176,8 @@ function layoutLevel(spec, index) {
   // Weapon rows (see CFG.weapon): about a third and two thirds of the way in, never in the saga boss stage,
   // and moved along a row if that row already has a lucky charm or stone wall, or a big fight right after it.
   L.weapons = [];
-  if (!spec.storm && spec.rows >= 6) {
+  L.saga = Math.floor(index / (SAGA_LEVELS + 1));
+  if (!spec.storm && spec.rows >= 6 && index > 0) {              // not in the very first level (owner)
     const busy = i => (spec.charms && spec.charms[0].includes(i)) || (spec.walls && spec.walls[0].includes(i)) || spec.bosses.some(b => b.after === i) || L.weapons.includes(i);
     [0.35, 0.7].forEach(f => { let i = Math.round(spec.rows * f); while (i < spec.rows - 1 && busy(i)) i++; if (!busy(i)) L.weapons.push(i); });
   }
@@ -1911,7 +1912,7 @@ class GameScene extends BaseScene {
       if (!g.weaponRow || g.weaponDone || g.y < -330) return;
       g.weaponDone = true;
       if (Save.range < C.minRange) return;
-      const side = g.left.good ? g.right : g.left, mat = Save.range >= C.stoneRange ? 'stone' : 'log';
+      const side = g.left.good ? g.right : g.left, mat = this.L.saga > 0 && Save.range >= C.stoneRange ? 'stone' : 'log';     // saga 1 is always logs (owner)
       side.obj.destroy();
       const glow = this.img(0, -4, 'glow').setBlendMode(Phaser.BlendModes.ADD).setTint(0xffd54f);
       const blade = this.img(0, 0, 'katana').setOrigin(0.5, 0.6).setRotation(0.5);
