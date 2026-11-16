@@ -45,7 +45,8 @@ Tutorial: `TutorialScene.PAGES` are nine picture pages (steer, gates, fight, red
 lucky charm, upgrade cards, gear and store) with SKIP on every page. Tapping level 1 opens them while
 `Save.tutorial` (`samurai_tutorial`) is false; finishing or skipping sets it and starts level 1 with `tips: true`,
 which pauses that run once for each live hint (`updateTips`/`tip`: gate, enemies, SLOW ready, boss red circle,
-green grave hands). HOW TO PLAY above saga 1 on the sagas screen replays the pages (owner wanted it there, not in Settings).
+orange circle). Saga 1 levels also show "DON'T FORGET TO UPGRADE!" (`remindUpgrade`) once per visit when the player
+taps to start without buying anything but could afford a card. HOW TO PLAY above saga 1 on the sagas screen replays the pages (owner wanted it there, not in Settings).
 
 Inside `GameScene`: the pause menu (`setPaused`; music, sound effects and screen shake switches, resume, quit),
 the level start screen (upgrade cards, Equipment menu, Store), then per frame
@@ -56,9 +57,9 @@ All big fights (giant zombie, tengu, fat demon, Takemikazuchi, rock oni) share o
 chase, wind-up with a warning zone, strike, recover. A profile in `CFG.bosses` sets speeds,
 damage, combos, power attacks (`jump`, `fly`, `bolt`, `dash`, `bounce`, and the multi-zone `hands`, `feathers`,
 `drums` from `zonesFor`) and an optional second phase. The saga 1 bosses were made tougher at the owner's request
-(more health, faster to follow, quicker leaps) and each got a new attack: giant zombie Grave Hands (green circles under
-and beside the army), tengu Feather Storm (all lanes but one), fat demon Belly Bounce (three re-aimed slams),
-Takemikazuchi Thunder Drums (all lanes but one, twice in phase 2). The rock oni was left as it is (the owner likes it).
+(more health, faster to follow, quicker leaps) and got new attacks: tengu Feather Storm (all lanes but one), fat demon Belly Bounce (three re-aimed slams),
+Takemikazuchi Thunder Drums (all lanes but one, twice in phase 2). The giant zombie's Grave Hands (green circles)
+was removed: the owner did not like it. Do not bring it back. The rock oni was left as it is (the owner likes it).
 
 Range: each level adds `CFG.rangeStep` to the samurai's reach, up to `CFG.rangeMax`. A foe beyond melee reach
 is hit by a wind slash (`windSlash`) that lands on a timer, not on its tween (tweens never finish in the bot's
@@ -82,7 +83,7 @@ level 1 wins with no upgrades; level 2 needs about 2; level 3 about 3-4 (3 wins 
 boss about 5-6 (5 wins about half the time, 6 wins). Bot mode "dodge wall" walks into stone walls.
 Owner's later trims: levels 2 and 3 have 20% fewer enemies, the run scrolls 10% slower (`CFG.baseSpeed` 81),
 coins per kill are 1.25 plus 0.75 per Coin Reward level (was 1.5 per level). Then: scroll +3% (`baseSpeed` 83),
-levels 2 and 3 shortened to 12 and 16 rows, Takemikazuchi 3900 health with a slower three-swing combo
+levels 2 and 3 shortened to 12 and 16 rows, Takemikazuchi 3500 health, the level 1 and level 2 giant zombies 600 and 720 with a slower three-swing combo
 (`comboWindMs` 600), the fat demon 10% slower in movement and attacks, storm waves every 4.6-5.8s to make up for
 the slower run. The saga boss stage is swingy for the bot (it arrives with 1-57 men); arriving healthy it wins at 5-6.
 Saga 2 level 1 (stage 5) is tuned for about 5: the dodging bot wins from 3 up, the bot that never dodges loses at 5.

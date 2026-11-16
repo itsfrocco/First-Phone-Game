@@ -65,13 +65,13 @@ const CFG = {
   //   trickle        regular enemies keep arriving while he lives
   bosses: {
     // Saga 1 bosses were made tougher: more health (in LEVEL_SPECS), faster to follow, quicker leaps, and one new attack each.
-    // Multi-zone attacks (`hands`, `feathers`, `drums`, see `zonesFor`) mark several places at once and leave a way out.
+    // Multi-zone attacks (`feathers`, `drums`, see `zonesFor`) light up every lane but one.
     // `bounce` is a jump that lands `bounces` times, re-aiming at the army each time.
     demon: { key: 'boss', name: 'FAT DEMON', slain: 'DEMON SLAIN', r: 50, souls: 40, speed: 67, chaseMs: 990, windMs: 660, recoverMs: 365,
       reach: 85, cleave: 4, cleaveShare: 0.10, powerChance: 0.4, powerWind: { jump: 935, bounce: 880 }, powerReach: 100, powerMult: 2,
       powers: [['jump', 'bounce']], bounces: 3, bounceWindMs: 570 },          // 10% slower than first retuned (owner)
     giant: { key: 'giant', name: 'GIANT ZOMBIE', slain: 'GIANT SLAIN', r: 44, souls: 20, speed: 54, chaseMs: 1300, windMs: 850, recoverMs: 500,
-      reach: 85, cleave: 2, cleaveShare: 0.05, powerChance: 0.3, powers: [['hands']], powerWind: { hands: 1100 }, powerReach: 85, powerMult: 1.5,
+      reach: 85, cleave: 2, cleaveShare: 0.05, powerChance: 0,
       trickle: true, trickleMs: 1500 },
     // The saga boss. Phase 1 is measured: two-swing combos and an occasional lightning slash down a lane.
     // At `phase2` of his health he powers up (a short cutscene; he cannot be hurt and regains `powerUpHeal` of his health).
@@ -112,14 +112,14 @@ const CFG = {
 //   bosses   big fights: `after` a given row, or at the 'end'
 const LEVEL_SPECS = [
   { name: 'Restless Dead', demons: false, rows: 10, seg: 370, pack: [3, 1.2, 0.20], crowd: 0.05, hp: 3, 
-    bosses: [{ type: 'giant', after: 'end', hp: 750 }] },
+    bosses: [{ type: 'giant', after: 'end', hp: 600 }] },
   { name: 'The Tengu', demons: true, rows: 12, seg: 370, pack: [4, 1.9, 0.22], crowd: 0.16, hp: 5, charms: [[4, 10], 8, 3],
-    bosses: [{ type: 'giant', after: 6, hp: 900 }, { type: 'tengu', after: 'end', hp: 1800 }] },
+    bosses: [{ type: 'giant', after: 6, hp: 720 }, { type: 'tengu', after: 'end', hp: 1800 }] },
   { name: 'The Fat Demon', demons: true, rows: 16, seg: 370, pack: [4.8, 1.9, 0.13], crowd: 0.14, hp: 8, charms: [[5, 11, 15], 11, 4],
     bosses: [{ type: 'giant', after: 8, hp: 2300 }, { type: 'demon', after: 'end', hp: 3800 }] },
   // The saga boss stage: a short run to build an army, then the fight.
   { name: 'Takemikazuchi', demons: true, storm: true, rows: 8, seg: 370, pack: [5, 2.4, 0.30], crowd: 0.15, hp: 8, pace: 1.2, charms: [[4], 11, 0],
-    bosses: [{ type: 'thunder', after: 'end', hp: 3900 }] },
+    bosses: [{ type: 'thunder', after: 'end', hp: 3500 }] },
   // Saga 2, Mountain Pass. `theme` picks the scenery, `foe` the common enemy.
   { name: 'The Rock Oni', theme: 'mountain', foe: 'rockOni', demons: false, rows: 14, seg: 370, pack: [7, 3.0, 0.26], crowd: 0.15, hp: 13, charms: [[5, 10], 14, 4], walls: [[4], 80, 0],
     bosses: [{ type: 'rock', after: 'end', hp: 6000 }] },
@@ -1214,7 +1214,7 @@ TutorialScene.PAGES = [
       sc.tweens.add({ targets: a, x: 222, duration: 900, repeat: -1, repeatDelay: 600, ease: 'Cubic.out' });
       c.add(sc.txt(222, 352, 'DODGED', 16, '#80d8ff', { stroke: '#000', strokeThickness: 3 }));
     } },
-  { title: 'FIND THE SAFE LANE', text: 'Some bosses light up lanes or circles.\nMove to the spot that is NOT lit up.',
+  { title: 'FIND THE SAFE LANE', text: 'Some bosses light up whole lanes.\nMove into the lane that is NOT lit up.',
     draw(sc, c) {
       const g = sc.add.graphics(); c.add(g);
       [0, 1, 3].forEach(i => g.fillStyle(0xb388ff, 0.3).fillRect(40 + i * 80, 110, 76, 270).lineStyle(2, 0xb388ff, 1).strokeRect(40 + i * 80, 110, 76, 270));
@@ -1285,6 +1285,7 @@ class GameScene extends BaseScene {
     this.time.paused = false;
     this.crushed = false;          // true if a stone wall ended the run
     this.push = 0;                 // how far a stone wall has shoved the army down the screen
+    this.upgraded = this.reminded = this.reminder = false;   // the saga 1 upgrade reminder
     this.blockedBy = null;         // the wall the army is pressed against, if any
     this.wallSeen = false;         // the first wall of a run gets a warning banner
     this.fight = false;            // true while the scroll is stopped for a big fight
@@ -1312,7 +1313,9 @@ class GameScene extends BaseScene {
     this.banner(this.stageName, this.L.name);
     this.showStartUi();
     this.input.on('pointerdown', p => {
-      if (this.started || this.paused || this.gearOpen || p.worldY < 120 || p.worldY > 505 || (p.worldX < 124 && p.worldY < 198)) return;
+      if (this.started || this.paused || this.gearOpen || this.reminder || p.worldY < 120 || p.worldY > 505 || (p.worldX < 124 && p.worldY < 198)) return;
+      // Saga 1: a player who bought nothing here but could have gets one reminder first.
+      if (this.levelNo <= SAGA_LEVELS + 1 && !this.upgraded && !this.reminded && this.canUpgrade()) { this.remindUpgrade(); return; }
       this.beginRun();
     });
 
@@ -1366,7 +1369,7 @@ class GameScene extends BaseScene {
       this.txt(x, y - 2, stat, 10, '#cfc3d6', { fontStyle: 'normal' });
       const b = this.button(x, y + 42, 80, 40, can ? color : 0x4a4250, maxed ? 'MAX' : coins(cost), 15, () => {
         if (maxed || Save.souls < cost) { Sound.play('deny'); return; }
-        Save.souls -= cost; Save[key]++; Save.save(); Sound.play('buy');
+        Save.souls -= cost; Save[key]++; Save.save(); Sound.play('buy'); this.upgraded = true;
         this.time.delayedCall(0, () => { if (!this.started) this.showStartUi(); });
       });
       if (!can) b.t.setColor('#9a90a0');
@@ -1381,6 +1384,29 @@ class GameScene extends BaseScene {
     else if (this.gearOpen) this.showEquipment(reopen);
     this.startUi = this.children.list.filter(o => !before.has(o));
     this.startUi.forEach((o, i) => o.setDepth(5400 + i));
+  }
+
+  canUpgrade() {
+    return ['fire', 'damage', 'range', 'revenue'].some(k => !(k === 'range' && Stats.rangeMaxed()) && Save.souls >= Stats.cost(Save[k], k));
+  }
+
+  // "Don't forget to upgrade": shown once per visit to a saga 1 level when coins are waiting to be spent.
+  remindUpgrade() {
+    this.reminded = true;
+    const before = new Set(this.children.list);
+    this.add.rectangle(W / 2, H / 2, W, H, 0x05020c, 0.6).setInteractive();
+    const g = this.add.graphics();
+    g.fillStyle(0x1c1220, 0.97).fillRoundedRect(30, 200, 340, 250, 14).lineStyle(3, 0xffd54f, 0.9).strokeRoundedRect(30, 200, 340, 250, 14);
+    this.txt(W / 2, 236, "DON'T FORGET TO UPGRADE!", 19, '#ffd54f');
+    this.img(W / 2 - 52, 282, 'soul').setScale(S * 1.6);
+    this.txt(W / 2 + 10, 282, coins(Save.souls) + ' coins', 19, '#ffe082');
+    this.txt(W / 2, 324, 'Spend them on the cards at the bottom\nto make your samurai stronger.', 14, '#fff3e0', { fontStyle: 'normal', align: 'center', lineSpacing: 4 });
+    const close = () => { ui.forEach(o => o.destroy()); this.time.delayedCall(0, () => { this.reminder = false; }); };
+    this.button(W / 2, 382, 220, 46, 0x2e7d32, 'UPGRADE', 18, close);
+    this.button(W / 2, 428, 220, 30, 0x4a3f63, 'play anyway', 13, () => { close(); this.beginRun(); });
+    const ui = this.children.list.filter(o => !before.has(o));
+    ui.forEach((o, i) => o.setDepth(7000 + i));
+    this.reminder = true;
   }
 
   // The store: nothing for sale yet.
@@ -2015,7 +2041,7 @@ class GameScene extends BaseScene {
     Sound.play(style ? 'warnPower' : 'warn');
   }
 
-  // Attacks that mark several places at once. Each leaves a way out: a gap beside the hands, one clear lane in the others.
+  // Attacks that light up every lane but one.
   zonesFor(style) {
     const lanes = (n, half) => {                             // every lane but one; the clear one is never the lane the army is in
       const w = (CFG.pathRight - CFG.pathLeft) / n, xs = [...Array(n)].map((_, i) => CFG.pathLeft + w * (i + 0.5));
@@ -2024,45 +2050,28 @@ class GameScene extends BaseScene {
       const safe = options[Math.floor(Math.random() * options.length)];
       return xs.filter((_, i) => i !== safe).map(x => ({ x, half, lane: true }));
     };
-    if (style === 'hands') {                                 // under the army and beside it, on the side with more room
-      const a = clamp(this.armyX, 100, 300), side = a < W / 2 ? 1 : -1;
-      return [{ x: a, half: 48 }, { x: clamp(a + side * 100, 90, 310), half: 48 }];
-    }
     if (style === 'feathers') return lanes(4, 33);
     if (style === 'drums') return lanes(5, 26);
     return null;
   }
 
   drawZones(b, k) {
-    const col = { hands: 0x76ff03, feathers: 0xff8a80, drums: 0xb388ff }[b.style], blink = 0.6 + 0.4 * Math.sin(this.time.now * 0.03);
+    const col = { feathers: 0xff8a80, drums: 0xb388ff }[b.style], blink = 0.6 + 0.4 * Math.sin(this.time.now * 0.03);
     b.zones.forEach(z => {
-      if (z.lane) {
-        const w = (CFG.pathRight - CFG.pathLeft) / (b.style === 'drums' ? 5 : 4);
-        this.danger.fillStyle(col, 0.1 + 0.26 * k).fillRect(z.x - w / 2 + 2, b.y + 40, w - 4, H);
-        this.danger.lineStyle(2, col, (0.4 + 0.6 * k) * blink).strokeRect(z.x - w / 2 + 2, b.y + 40, w - 4, H);
-        if (b.style === 'drums' && Math.random() < 0.12) this.zap(z.x, b.y + 50 + Math.random() * 200, z.x + (Math.random() - 0.5) * 30, b.y + 150 + Math.random() * 250, 70);
-      } else {
-        this.danger.fillStyle(col, 0.12 + 0.28 * k).fillEllipse(z.x, this.formY + 12, z.half * 2, 70);
-        this.danger.lineStyle(2, col, (0.5 + 0.5 * k) * blink).strokeEllipse(z.x, this.formY + 12, z.half * 2, 70);
-        if (Math.random() < 0.25 * k) { this.burst.setParticleTint(0x33691e); this.burst.explode(1, z.x + (Math.random() - 0.5) * z.half, this.formY + 20); }
-      }
+      const w = (CFG.pathRight - CFG.pathLeft) / (b.style === 'drums' ? 5 : 4);
+      this.danger.fillStyle(col, 0.1 + 0.26 * k).fillRect(z.x - w / 2 + 2, b.y + 40, w - 4, H);
+      this.danger.lineStyle(2, col, (0.4 + 0.6 * k) * blink).strokeRect(z.x - w / 2 + 2, b.y + 40, w - 4, H);
+      if (b.style === 'drums' && Math.random() < 0.12) this.zap(z.x, b.y + 50 + Math.random() * 200, z.x + (Math.random() - 0.5) * 30, b.y + 150 + Math.random() * 250, 70);
     });
     if (b.style === 'feathers') b.obj.setRotation(Math.sin(this.time.now * 0.04) * 0.15 * k);       // wings beating
-    else if (b.style === 'drums') b.obj.setRotation(Math.sin(this.time.now * 0.05) * 0.1 * k);
-    else b.obj.setRotation(-0.3 * k);
+    else b.obj.setRotation(Math.sin(this.time.now * 0.05) * 0.1 * k);
   }
 
   zonesStrike(b) {
     const B = b.prof, style = b.style;
     b.obj.setRotation(0);
     b.zones.forEach(z => {
-      if (style === 'hands') {                               // rotting hands claw up out of the ground
-        this.burst.setParticleTint(0x558b2f); this.burst.explode(22, z.x, this.formY + 16);
-        for (let i = 0; i < 3; i++) {
-          const c = this.img(z.x + (i - 1) * z.half * 0.6, this.formY + 30, 'slash').setDepth(2900).setRotation(-Math.PI / 2 + (i - 1) * 0.3).setScale(S * 0.9).setTint(0x9ccc65);
-          this.tweens.add({ targets: c, y: c.y - 50, alpha: 0, duration: 380, ease: 'Cubic.out', onComplete: () => c.destroy() });
-        }
-      } else if (style === 'feathers') {                     // a rain of razor feathers down the lane
+      if (style === 'feathers') {                            // a rain of razor feathers down the lane
         for (let i = 0; i < 5; i++) {
           const f = this.add.rectangle(z.x + (Math.random() - 0.5) * 50, b.y + 40 - i * 40, 3, 22, 0xffebee).setDepth(2900).setRotation(0.25);
           this.tweens.add({ targets: f, y: H + 40, duration: 320 + i * 40, onComplete: () => f.destroy() });
@@ -2229,7 +2238,6 @@ class GameScene extends BaseScene {
     if (this.charge >= this.specialMax && this.slowLeft <= 0) this.tip('slow', 'Your SLOW power is ready!\nTap the SLOW button (bottom right) to slow time.', true);
     if (this.fight && b && b.state === 'wind' && b.t < b.windFull * 0.5) {      // once the circle has lit up
       if (!b.style) this.tip('swing', 'RED circle: the boss will strike right there.\nSlide out of it before it lands!');
-      else if (b.zones) this.tip('zones', 'GREEN circles: grave hands are about to burst up!\nMove to a spot with no circle.');
       else this.tip('power', 'ORANGE circle: a big power attack!\nGet clear fast, it hits twice as hard.');
     }
   }
