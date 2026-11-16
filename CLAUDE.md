@@ -72,6 +72,17 @@ One still standing when the army reaches it in that lane blocks it ("BLOCKED!"):
 and the wall shoves the army down the screen (`push`, `blockedBy`) until it breaks or the army steers around it; pushed
 to `CFG.wall.crushY` the run ends ("CLAN CRUSHED"). An earlier push version was reverted; the owner asked for this one.
 
+Weapon rows (`CFG.weapon`, `L.weapons`, `updateWeapons`, `pickWeapon`): about a third and two thirds into each ordinary level
+(never the saga boss stage), once the Range card is at 3 or more, the red gate of that row is swapped for a glowing weapon
+behind two obstacles in its lane: logs below Range 6, stone from Range 6. The player picks the blue gate or cuts through
+to the weapon. The obstacles are `kind: 'wall'` entries (`weaponWall`, `mat`), so they block and push like stone walls,
+but their health is recalculated every frame until the army can reach them, from the army's damage, swing speed, size
+(up to 20 drawn) and the enemies arriving at the same time, so a small army gets weaker obstacles (owner's wish: always
+beatable). Walking into the weapon with an obstacle still standing gives "MISSED". A pickup gives one random boost for that
+run, and boosts add up: SHARP BLADE +20% damage, SWIFT BLADE 15% faster swings, LONG REACH +5 Range levels (owner chose
+these sizes). Bot mode "weapon" (e.g. "dodge weapon") takes the weapon side and cuts through; in testing the obstacles
+always broke before reaching the army, and taking the weapon instead of the blue gate costs some men but rarely decides a run.
+
 ## Testing
 
 There is no test suite. Use `tools/bot-test.js` (instructions at the top of that file) to play
