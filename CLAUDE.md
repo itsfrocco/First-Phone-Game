@@ -149,8 +149,11 @@ Still waiting on the owner: what the shop should sell.
 
 ## Open ideas
 
-- Split path, asked for by the owner, read back to them, not built yet: once a level a wall runs down the middle of the road
-  for a stretch. One side has four or five logs in a row with a weapon at the end, the other the usual enemies.
+- Split path, asked for by the owner, being agreed, not built yet: once a level (replacing one of the two weapon rows) a wall
+  runs down the middle of the road for a stretch. One side has four or five logs in a row and, at the end, a steel cage of
+  civilians: the lock snaps open easily, they escape back down the road, and the clan gets a weapon boost like a weapon row.
+  The other side is the usual enemies. Keep a saved running total of civilians freed: the owner will later add rewards for
+  100, 200, 300 and so on (not designed yet).
 
 - Controls discussed with the owner, not built yet: flick up for an ultimate (a meter filled by kills; a full-width
   wind wave that breaks walls, cuts the front enemies, flips a gate it hits higher, hurts bosses) and later flick
