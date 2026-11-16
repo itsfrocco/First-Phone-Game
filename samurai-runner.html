@@ -32,7 +32,7 @@ const CFG = {
   armyY: 560,              // front row of the army
   pathLeft: 60, pathRight: 340,
   steerMin: 78, steerMax: 322,
-  baseSpeed: 81,           // px/s at the start of a level
+  baseSpeed: 83,           // px/s at the start of a level
   speedRamp: 0.30,         // +30% by the end
   attackRange: 38,        // melee reach; the Range upgrade adds to it
   rangeStep: 9,            // extra reach per Range level (shown as 1m a level)
@@ -67,9 +67,9 @@ const CFG = {
     // Saga 1 bosses were made tougher: more health (in LEVEL_SPECS), faster to follow, quicker leaps, and one new attack each.
     // Multi-zone attacks (`hands`, `feathers`, `drums`, see `zonesFor`) mark several places at once and leave a way out.
     // `bounce` is a jump that lands `bounces` times, re-aiming at the army each time.
-    demon: { key: 'boss', name: 'FAT DEMON', slain: 'DEMON SLAIN', r: 50, souls: 40, speed: 74, chaseMs: 900, windMs: 600, recoverMs: 330,
-      reach: 85, cleave: 4, cleaveShare: 0.10, powerChance: 0.4, powerWind: { jump: 850, bounce: 800 }, powerReach: 100, powerMult: 2,
-      powers: [['jump', 'bounce']], bounces: 3, bounceWindMs: 520 },
+    demon: { key: 'boss', name: 'FAT DEMON', slain: 'DEMON SLAIN', r: 50, souls: 40, speed: 67, chaseMs: 990, windMs: 660, recoverMs: 365,
+      reach: 85, cleave: 4, cleaveShare: 0.10, powerChance: 0.4, powerWind: { jump: 935, bounce: 880 }, powerReach: 100, powerMult: 2,
+      powers: [['jump', 'bounce']], bounces: 3, bounceWindMs: 570 },          // 10% slower than first retuned (owner)
     giant: { key: 'giant', name: 'GIANT ZOMBIE', slain: 'GIANT SLAIN', r: 44, souls: 20, speed: 54, chaseMs: 1300, windMs: 850, recoverMs: 500,
       reach: 85, cleave: 2, cleaveShare: 0.05, powerChance: 0.3, powers: [['hands']], powerWind: { hands: 1100 }, powerReach: 85, powerMult: 1.5,
       trickle: true, trickleMs: 1500 },
@@ -78,7 +78,7 @@ const CFG = {
     // Phase 2 runs `phase2Haste` times faster with three-swing combos, his swings leave lightning on the ground
     // for `linger` ms, and he sometimes dashes to where the army stands.
     thunder: { key: 'thunder', name: 'TAKEMIKAZUCHI', slain: 'THE THUNDER GOD FALLS', r: 48, souls: 150, speed: 80, chaseMs: 1000, windMs: 650, recoverMs: 470,
-      reach: 85, cleave: 3, cleaveShare: 0.06, combo: 2, phase2Combo: 3, comboWindMs: 480, comboStep: 55,
+      reach: 85, cleave: 3, cleaveShare: 0.06, combo: 2, phase2Combo: 3, comboWindMs: 600, comboStep: 55,
       powerChance: 0.3, powers: [['bolt', 'drums'], ['bolt', 'dash', 'drums']], powerWind: { bolt: 1100, dash: 600, drums: 1300 }, drumsAgainMs: 950,
       powerReach: 85, boltHalf: 48, powerMult: 2,
       phase2: 0.5, phase2Haste: 1.33, phase2Name: 'THE STORM AWAKENS', powerUpMs: 2400, powerUpHeal: 0.2, linger: 1000, lingerTick: 500, lingerShare: 0.03 },
@@ -96,7 +96,7 @@ const CFG = {
   // down the screen until it breaks, the army steps around it, or the army is pushed to `crushY` (the run ends).
   wall: { lead: 64, range: 200, half: 66, souls: 5, pushSlow: 0.3, crushY: 676 },      // lead: how far in front of its gate it stands; half: half its width
   // The saga boss stage's storm: every `everyMs` a wave of lightning sweeps down the lane the army stands in.
-  storm: { everyMs: [4000, 5000], warnMs: 1100, sweepMs: 380, half: 52, cleave: 2, cleaveShare: 0.08 },
+  storm: { everyMs: [4600, 5800], warnMs: 1100, sweepMs: 380, half: 52, cleave: 2, cleaveShare: 0.08 },
   // Futsu-no-mitama: its lightning adds to hits on some kinds of foe and is shrugged off by others. Everything else takes normal damage.
   thunderBlade: { strong: ['water', 'metal', 'flying'], strongBonus: 0.15, weak: ['earth', 'fire', 'thunder'], weakPenalty: 0.15 },
   levelPace: 0.10,         // each level in a saga runs this much faster than the one before (the army and the enemies)
@@ -113,13 +113,13 @@ const CFG = {
 const LEVEL_SPECS = [
   { name: 'Restless Dead', demons: false, rows: 10, seg: 370, pack: [3, 1.2, 0.20], crowd: 0.05, hp: 3, 
     bosses: [{ type: 'giant', after: 'end', hp: 750 }] },
-  { name: 'The Tengu', demons: true, rows: 13, seg: 370, pack: [4, 1.9, 0.22], crowd: 0.16, hp: 5, charms: [[4, 10], 8, 3],
+  { name: 'The Tengu', demons: true, rows: 12, seg: 370, pack: [4, 1.9, 0.22], crowd: 0.16, hp: 5, charms: [[4, 10], 8, 3],
     bosses: [{ type: 'giant', after: 6, hp: 900 }, { type: 'tengu', after: 'end', hp: 1800 }] },
-  { name: 'The Fat Demon', demons: true, rows: 18, seg: 370, pack: [4.8, 1.9, 0.13], crowd: 0.14, hp: 8, charms: [[5, 11, 15], 11, 4],
+  { name: 'The Fat Demon', demons: true, rows: 16, seg: 370, pack: [4.8, 1.9, 0.13], crowd: 0.14, hp: 8, charms: [[5, 11, 15], 11, 4],
     bosses: [{ type: 'giant', after: 8, hp: 2300 }, { type: 'demon', after: 'end', hp: 3800 }] },
   // The saga boss stage: a short run to build an army, then the fight.
   { name: 'Takemikazuchi', demons: true, storm: true, rows: 8, seg: 370, pack: [5, 2.4, 0.30], crowd: 0.15, hp: 8, pace: 1.2, charms: [[4], 11, 0],
-    bosses: [{ type: 'thunder', after: 'end', hp: 4300 }] },
+    bosses: [{ type: 'thunder', after: 'end', hp: 3900 }] },
   // Saga 2, Mountain Pass. `theme` picks the scenery, `foe` the common enemy.
   { name: 'The Rock Oni', theme: 'mountain', foe: 'rockOni', demons: false, rows: 14, seg: 370, pack: [7, 3.0, 0.26], crowd: 0.15, hp: 13, charms: [[5, 10], 14, 4], walls: [[4], 80, 0],
     bosses: [{ type: 'rock', after: 'end', hp: 6000 }] },
