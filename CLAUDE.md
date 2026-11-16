@@ -70,7 +70,8 @@ Balance as last tuned (attack speed and blade damage both at the stated level, d
 level 1 wins with no upgrades; level 2 needs about 2; level 3 about 3; the saga boss about 5.
 Saga 2 level 1 (stage 5) is tuned for about 5: the dodging bot wins from 3 up, the bot that never dodges loses at 5.
 Range is an extra, optional card: spending coins on it helps about as much as the same coins on speed and
-damage (level 3: speed/damage 2 loses, adding Range 3 wins), and even Range 12 does not make bosses easy.
+damage (level 3: speed/damage 2 loses, adding Range 5 wins). Range grows 1m (9px) a level and has its own cheaper
+cost curve; even Range 10 does not make bosses easy.
 
 ## Working with the owner
 
