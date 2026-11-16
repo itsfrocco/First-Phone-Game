@@ -18,9 +18,9 @@ Only open or merge a pull request yourself if they ask for it in that message.
 Always resend the game link with a fresh cache-busting number on the end, one higher than
 the last one used, so their phone downloads the new copy:
 
-    https://itsfrocco.github.io/First-Phone-Game/samurai-runner.html?v=28
+    https://itsfrocco.github.io/First-Phone-Game/samurai-runner.html?v=29
 
-Last number sent: `?v=27`. Update this line each time a new link is sent.
+Last number sent: `?v=28`. Update this line each time a new link is sent.
 
 Before sending the link, check that the "pages build and deployment" run for the merge commit has
 finished (GitHub MCP `actions_list`); a link opened earlier caches the old game for about ten minutes.
@@ -90,6 +90,19 @@ and often block for a moment (bot still never crushed). Log rows (`L.logs`, `log
 five sixths in, put one or two of the same obstacles in front of the blue gate with the red gate beside it ("LOGS AHEAD");
 same Range 3 rule, same health sums, none in level 1. The owner does not want obstacles all the time.
 Level 1 was shortened to 9 rows (owner: a tiny bit too long). The upgrade reminder shows on saga 1 levels 1-3 only.
+Then (owner: level 3's obstacles all came at the crowded end): rows are spread evenly and kept out of the last quarter. Saga 1
+levels have a weapon row about 30% and 70% in and one log row at half way; later sagas have two of each (20/38/58/80%).
+Level 3's giant and fat demon lost 10% health (2070 and 3420).
+
+The split path (`CFG.split`, `L.split`, `buildSplit`, `updateSplit`), once per ordinary level from level 2 on, with no Range
+requirement (owner): the later weapon row is replaced by a stretch with no gates where a palisade fence runs down the
+middle of the road. One side has four or five logs in a row (stone in saga 2+ with Range 6; health follows the army as for
+weapon rows, `margin` 0.95) and a steel cage at the end: reaching it with the logs broken snaps the lock, ten civilians
+run back down the road, `Save.civilians` goes up by 10 and the clan gets a random weapon boost. The other side has that
+row's enemies only (`pack` 0.4 of the usual number, as there is no gate to make up losses; no gates, owner's wish). The
+army is held to its side while beside the fence (`splitSide`, `steerClamp`), the pack keeps to its side and runs straight
+past if the army took the logs, and blades do not reach across. The next gate row is `extra` further on so either gate
+can still be reached. Bot mode "split" takes the log side. Both sides win at the usual upgrade levels.
 
 ## Testing
 
@@ -145,6 +158,9 @@ The owner has a Mac with Xcode, so step 5 is done there, with step-by-step instr
 Still waiting on the owner: what the shop should sell.
 
 ## Open ideas
+
+- Rewards for civilians saved (100, 200, 300 and so on): the owner will design them later. The total is already kept
+  (`Save.civilians`, `samurai_civilians`) and shown on the sagas screen.
 
 - Controls discussed with the owner, not built yet: flick up for an ultimate (a meter filled by kills; a full-width
   wind wave that breaks walls, cuts the front enemies, flips a gate it hits higher, hurts bosses) and later flick
