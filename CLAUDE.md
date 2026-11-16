@@ -18,9 +18,9 @@ Only open or merge a pull request yourself if they ask for it in that message.
 Always resend the game link with a fresh cache-busting number on the end, one higher than
 the last one used, so their phone downloads the new copy:
 
-    https://itsfrocco.github.io/First-Phone-Game/samurai-runner.html?v=27
+    https://itsfrocco.github.io/First-Phone-Game/samurai-runner.html?v=28
 
-Last number sent: `?v=26`. Update this line each time a new link is sent.
+Last number sent: `?v=27`. Update this line each time a new link is sent.
 
 Before sending the link, check that the "pages build and deployment" run for the merge commit has
 finished (GitHub MCP `actions_list`); a link opened earlier caches the old game for about ten minutes.
@@ -85,6 +85,11 @@ always broke before reaching the army, and taking the weapon instead of the blue
 Owner's follow-up: no weapon rows in level 1 (stage 1), saga 1 is always logs (stone only from saga 2 with Range 6), and the
 obstacles were made about 50% tougher (`margin` 0.5 / 0.55, was 0.33 / 0.38): they now sometimes block the army for a moment
 before breaking, but the bot was never crushed and still collected the weapons.
+Then (owner: still too easy, wants more of them): `margin` 0.8 / 0.85, so they usually last until the army is right on them
+and often block for a moment (bot still never crushed). Log rows (`L.logs`, `logRow`): two more rows a level, about half and
+five sixths in, put one or two of the same obstacles in front of the blue gate with the red gate beside it ("LOGS AHEAD");
+same Range 3 rule, same health sums, none in level 1. The owner does not want obstacles all the time.
+Level 1 was shortened to 9 rows (owner: a tiny bit too long). The upgrade reminder shows on saga 1 levels 1-3 only.
 
 ## Testing
 

@@ -100,7 +100,7 @@ const CFG = {
   // The obstacles' health is set as they come into view from the army's damage, swing speed and size right then, so they always
   // break in time: `margin` of what the army could cut in the time it has. Picking the weapon up gives one random boost for the
   // rest of the run (they add up): `dmg` more damage, `speed` faster swings, or `rangeLevels` extra Range levels.
-  weapon: { minRange: 3, stoneRange: 6, gap: 92, margin: { log: 0.5, stone: 0.55 }, minHp: 3, dmg: 0.20, speed: 0.15, rangeLevels: 5 },
+  weapon: { minRange: 3, stoneRange: 6, gap: 92, margin: { log: 0.8, stone: 0.85 }, minHp: 3, dmg: 0.20, speed: 0.15, rangeLevels: 5 },
   // The saga boss stage's storm: every `everyMs` a wave of lightning sweeps down the lane the army stands in.
   storm: { everyMs: [4600, 5800], warnMs: 1100, sweepMs: 380, half: 52, cleave: 2, cleaveShare: 0.08 },
   // Futsu-no-mitama: its lightning adds to hits on some kinds of foe and is shrugged off by others. Everything else takes normal damage.
@@ -117,7 +117,7 @@ const CFG = {
 //   walls    [rows whose blue gate is behind a stone wall, its health, health growth per wall]; none in saga 1, few after
 //   bosses   big fights: `after` a given row, or at the 'end'
 const LEVEL_SPECS = [
-  { name: 'Restless Dead', demons: false, rows: 10, seg: 370, pack: [3, 1.2, 0.20], crowd: 0.05, hp: 3, 
+  { name: 'Restless Dead', demons: false, rows: 9, seg: 370, pack: [3, 1.2, 0.20], crowd: 0.05, hp: 3, 
     bosses: [{ type: 'giant', after: 'end', hp: 600 }] },
   { name: 'The Tengu', demons: true, rows: 12, seg: 370, pack: [4, 1.9, 0.22], crowd: 0.16, hp: 5, charms: [[4, 10], 8, 3],
     bosses: [{ type: 'giant', after: 6, hp: 720 }, { type: 'tengu', after: 'end', hp: 1800 }] },
@@ -175,11 +175,13 @@ function layoutLevel(spec, index) {
   L.length = d + 100;
   // Weapon rows (see CFG.weapon): about a third and two thirds of the way in, never in the saga boss stage,
   // and moved along a row if that row already has a lucky charm or stone wall, or a big fight right after it.
-  L.weapons = [];
+  L.weapons = []; L.logs = [];
   L.saga = Math.floor(index / (SAGA_LEVELS + 1));
   if (!spec.storm && spec.rows >= 6 && index > 0) {              // not in the very first level (owner)
     const busy = i => (spec.charms && spec.charms[0].includes(i)) || (spec.walls && spec.walls[0].includes(i)) || spec.bosses.some(b => b.after === i) || L.weapons.includes(i);
-    [0.35, 0.7].forEach(f => { let i = Math.round(spec.rows * f); while (i < spec.rows - 1 && busy(i)) i++; if (!busy(i)) L.weapons.push(i); });
+    const pick = (f, list) => { let i = Math.round(spec.rows * f); while (i < spec.rows - 1 && (busy(i) || L.logs.includes(i))) i++; if (!busy(i) && !L.logs.includes(i)) list.push(i); };
+    [0.35, 0.7].forEach(f => pick(f, L.weapons));
+    [0.52, 0.86].forEach(f => pick(f, L.logs));              // log rows: one or two obstacles in front of the blue gate
   }
   return L;
 }
@@ -1316,7 +1318,7 @@ class GameScene extends BaseScene {
     this.upgraded = this.reminded = this.reminder = false;   // the saga 1 upgrade reminder
     this.blockedBy = null;         // the wall the army is pressed against, if any
     this.wallSeen = false;         // the first wall of a run gets a warning banner
-    this.weaponSeen = false;       // ...and the first weapon row
+    this.weaponSeen = this.logSeen = false;       // ...and the first weapon row
     this.boost = { dmg: 0, speed: 0, range: 0 };   // weapons picked up this run (CFG.weapon)
     this.fight = false;            // true while the scroll is stopped for a big fight
     this.boss = null;              // the next (or current) big fight; set in buildLevel
@@ -1345,7 +1347,7 @@ class GameScene extends BaseScene {
     this.input.on('pointerdown', p => {
       if (this.started || this.paused || this.gearOpen || this.reminder || p.worldY < 120 || p.worldY > 505 || (p.worldX < 124 && p.worldY < 198)) return;
       // Saga 1: a player who bought nothing here but could have gets one reminder first.
-      if (this.levelNo <= SAGA_LEVELS + 1 && !this.upgraded && !this.reminded && this.canUpgrade()) { this.remindUpgrade(); return; }
+      if (this.levelNo <= SAGA_LEVELS && !this.upgraded && !this.reminded && this.canUpgrade()) { this.remindUpgrade(); return; }
       this.beginRun();
     });
 
@@ -1554,7 +1556,7 @@ class GameScene extends BaseScene {
     this.L.gates.forEach((g, i) => {
       const goodLeft = Math.random() < 0.5;
       this.gates.push({
-        d: g.d, used: false, weaponRow: this.L.weapons.includes(i),
+        d: g.d, used: false, weaponRow: this.L.weapons.includes(i), logRow: this.L.logs.includes(i),
         left: this.makeGate(130, goodLeft ? g.good : g.bad, goodLeft),
         right: this.makeGate(270, goodLeft ? g.bad : g.good, !goodLeft),
       });
@@ -1909,23 +1911,27 @@ class GameScene extends BaseScene {
   updateWeapons() {
     const C = CFG.weapon;
     this.gates.forEach(g => {
-      if (!g.weaponRow || g.weaponDone || g.y < -330) return;
+      if (!(g.weaponRow || g.logRow) || g.weaponDone || g.y < -330) return;
       g.weaponDone = true;
       if (Save.range < C.minRange) return;
-      const side = g.left.good ? g.right : g.left, mat = this.L.saga > 0 && Save.range >= C.stoneRange ? 'stone' : 'log';     // saga 1 is always logs (owner)
+      const bad = g.left.good ? g.right : g.left, side = g.weaponRow ? bad : g.left.good ? g.left : g.right, mat = this.L.saga > 0 && Save.range >= C.stoneRange ? 'stone' : 'log';     // saga 1 is always logs (owner)
+      side.walls = []; side.mat = mat; g.blocked = side;
+      const leads = g.weaponRow || Math.random() < 0.5 ? [CFG.wall.lead + C.gap, CFG.wall.lead] : [CFG.wall.lead];     // nearest the army first
+      if (g.weaponRow) {
       side.obj.destroy();
       const glow = this.img(0, -4, 'glow').setBlendMode(Phaser.BlendModes.ADD).setTint(0xffd54f);
       const blade = this.img(0, 0, 'katana').setOrigin(0.5, 0.6).setRotation(0.5);
       const tag = this.txt(0, -58, 'WEAPON', 15, '#ffd54f', { stroke: '#3a2400', strokeThickness: 4 });
       side.obj = this.add.container(side.x, -200, [glow, blade, tag]);
-      Object.assign(side, { weapon: true, glow, blade, mat, walls: [] });
-      [CFG.wall.lead + C.gap, CFG.wall.lead].forEach(lead => {     // nearest the army first
+      Object.assign(side, { weapon: true, glow, blade });
+      }
+      leads.forEach(lead => {
         const e = this.addEnemy('wall', side.x, g.d - lead, C.minHp);
         if (mat === 'log') e.obj.setTexture('log');
         e.sprite = e.obj.setOrigin(0.5, 0.62);
         e.label = this.txt(0, -40, '', 26, '#fff', { stroke: '#3a0d14', strokeThickness: 6 });
         e.obj = this.add.container(e.x, -200, [e.sprite.setPosition(0, 0), e.label]);
-        Object.assign(e, { r: 20, souls: CFG.wall.souls, mat, weaponWall: true, y: CFG.armyY - (e.d - this.dist) });   // y set now: it is checked before the next draw
+        Object.assign(e, { r: 20, souls: CFG.wall.souls, mat, weaponWall: true, forWeapon: g.weaponRow, y: CFG.armyY - (e.d - this.dist) });   // y set now: it is checked before the next draw
         side.walls.push(e);
         this.wallLabel(e);
       });
@@ -1935,19 +1941,21 @@ class GameScene extends BaseScene {
     const speed = CFG.baseSpeed * this.L.pace * (1 + CFG.speedRamp * this.dist / this.L.length) * this.speedMod;
     const cutFrom = Math.max(CFG.wall.range, this.reachNow()) - 26;          // distance over which the first one can be cut before it blocks
     this.gates.forEach(g => {
-      const side = g.left && g.left.weapon ? g.left : g.right && g.right.weapon ? g.right : null;
+      const side = g.blocked;
       if (!side || g.used) return;
-      const pulse = Math.sin(this.time.now * 0.008);
-      side.glow.setScale(S * (1.6 + pulse * 0.2)).setAlpha(0.75 + pulse * 0.2);
-      side.blade.setScale(S * 2).setY(Math.sin(this.time.now * 0.005) * 3);
+      if (side.weapon) {
+        const pulse = Math.sin(this.time.now * 0.008);
+        side.glow.setScale(S * (1.6 + pulse * 0.2)).setAlpha(0.75 + pulse * 0.2);
+        side.blade.setScale(S * 2).setY(Math.sin(this.time.now * 0.005) * 3);
+      }
       if (side.locked) return;
       const first = side.walls[0];
       if (first.y > this.formY - cutFrom - 50 || side.walls.some(e => e.hp < e.maxHp)) { side.locked = true; return; }
       // Time the army has, less the time it will spend cutting down the enemies that arrive in the meantime.
       const foes = this.enemies.reduce((sum, e) => sum + (!e.r && !e.gone && e.y > first.y - CFG.weapon.gap - 150 ? Math.max(0, e.hp) : 0), 0);
-      const time = (cutFrom + CFG.weapon.gap) / speed;
+      const time = (cutFrom + CFG.weapon.gap * (side.walls.length - 1)) / speed;
       const total = CFG.weapon.margin[side.mat] * dps * Math.max(0.3 * time, time - foes / Math.max(1, dps));
-      side.walls.forEach(e => { e.hp = e.maxHp = Math.max(CFG.weapon.minHp, Math.round(total / 2)); this.wallLabel(e); });
+      side.walls.forEach(e => { e.hp = e.maxHp = Math.max(CFG.weapon.minHp, Math.round(total / side.walls.length)); this.wallLabel(e); });
     });
   }
 
@@ -1984,7 +1992,8 @@ class GameScene extends BaseScene {
     let blocked = null;
     this.enemies.forEach(e => {
       if (e.kind !== 'wall' || e.gone || e.hp <= 0 || e.passed) return;
-      if (e.weaponWall) { if (!this.weaponSeen && e.y > 120) { this.weaponSeen = true; this.banner('WEAPON AHEAD', 'cut through for a boost, or take the blue gate'); } }
+      if (e.forWeapon) { if (!this.weaponSeen && e.y > 120) { this.weaponSeen = true; this.banner('WEAPON AHEAD', 'cut through for a boost, or take the blue gate'); } }
+      else if (e.weaponWall) { if (!this.logSeen && e.y > 120) { this.logSeen = true; this.banner(e.mat === 'log' ? 'LOGS AHEAD' : 'STONE AHEAD', 'break through or go around'); } }
       else if (!this.wallSeen && e.y > 120) { this.wallSeen = true; this.banner('STONE WALL', 'break it or go around'); }
       const close = e.y > this.formY - 110;
       e.label.setColor(close && Math.sin(this.time.now * 0.025) > 0 ? '#ff5252' : '#fff');
