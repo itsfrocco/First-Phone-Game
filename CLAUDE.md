@@ -18,9 +18,9 @@ Only open or merge a pull request yourself if they ask for it in that message.
 Always resend the game link with a fresh cache-busting number on the end, one higher than
 the last one used, so their phone downloads the new copy:
 
-    https://itsfrocco.github.io/First-Phone-Game/samurai-runner.html?v=29
+    https://itsfrocco.github.io/First-Phone-Game/samurai-runner.html?v=31
 
-Last number sent: `?v=28`. Update this line each time a new link is sent.
+Last number sent: `?v=30`. Update this line each time a new link is sent.
 
 Before sending the link, check that the "pages build and deployment" run for the merge commit has
 finished (GitHub MCP `actions_list`); a link opened earlier caches the old game for about ten minutes.
@@ -112,6 +112,19 @@ ordinary enemy on screen dies, walls, logs and lucky charms break, a boss loses 
 in the air or powering up). It sits alongside SLOW, not instead of it. Gates are not touched. In testing the bot ("ult" in the mode)
 used it once a run with the bar a third to half full again by the end, and it was worth about one upgrade level (level 2 wins at 1
 instead of 2). Cloud test browsers are too slow for a real flick to register in time; raise `CFG.ult.flickMs` in the test or call `activateUlt`.
+
+Owner's follow-up (after playing the ultimate):
+- Ultimate bar fills 10% faster (`perLevel` 2.55), and Dragon Slash now breaks only the two nearest obstacles (`CFG.ult.walls`,
+  those in the army's lane first), not every one on screen. It still kills every ordinary enemy.
+- Cage reward (`offerUpgrade`, `freePick`): freeing the civilians pauses the run and offers one FREE, permanent level of any of the
+  four upgrade cards. It replaces the random weapon boost the cage used to give. The owner chose always permanent, knowing a level
+  can be replayed for more.
+- Obstacles "tough but fair" with a scare: `margin` is now above 1 (weapon and log rows 1.4 / 1.45, split logs 1.25, stage 5's
+  stone wall 120 health), so they are meant to reach the army still standing and shove it. While blocked the run goes at half speed
+  (`pushSlow` 0.5, owner's number) and `drawCrush` shows a toothed red death line at the bottom, a reddening screen, "BREAK IT OR
+  BE CRUSHED!" and a quickening alarm. The bot cutting straight through (wall, weapon and split modes) was pushed a quarter to
+  half of the way to the line (up to 67 of 116px) and never crushed; a real player cuts less well, so do not raise these without testing.
+  The bot output shows `pushed n/116`; it takes Blade Damage at the free upgrade and then resets it.
 
 ## Testing
 

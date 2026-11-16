@@ -35,7 +35,7 @@ const GAME = 'file://' + path.resolve(__dirname, '..', 'samurai-runner.html');
       sc.beginRun(); const total = sc.enemies.length;
       let f = 0, react = 0, prevT = 0, prev = 'chase', miss = 0; const at = [], secs = [];
       const fl = sc.float.bind(sc); sc.float = (x, y, str, ...a) => { if (str === 'MISS') miss++; return fl(x, y, str, ...a); };
-      let lastBoss = null, ff = 0; const walls = [], wallsUp = [];
+      let lastBoss = null, ff = 0, maxPush = 0, freed = 0; const walls = [], wallsUp = [];
       while (!sc.over && f < 60000) {
         const gate = sc.gates.find(x => !x.used);
         const wpn = gate && mode.includes('weapon') && [gate.left, gate.right].find(x => x.weapon);
@@ -74,10 +74,12 @@ const GAME = 'file://' + path.resolve(__dirname, '..', 'samurai-runner.html');
           }
         } else if (lastBoss && ff) { secs.push(+(ff / 60).toFixed(0)); ff = 0; }
         if (mode.startsWith('dodge') && sc.wave && Math.abs(tx - sc.wave.x) < 80) tx = sc.wave.x < 200 ? sc.wave.x + 85 : sc.wave.x - 85;
+        if (sc.freePick) { sc.freePick('damage'); Save.damage = up; freed++; }
+        maxPush = Math.max(maxPush, sc.push);
         sc.targetX = tx;
         step(); f++;
       }
-      out.push([level, 'up' + up + (range ? '+R' + range : ''), mode, sc.finaleDone && sc.count > 0 ? 'WIN ' : 'lose', 'left ' + sc.count, Math.round(f / 60) + 's', 'dist ' + Math.round(100 * sc.dist / sc.L.length) + '%', at.join(' '), (lastBoss && lastBoss.phase2 ? 'phase2' : ''), 'fight ' + secs.join('/') + 's', 'souls ' + sc.earned, 'dmg x' + sc.dmgMod.toFixed(2), 'enemies ' + total, 'bar ' + sc.specialMax, 'ult ' + sc.ultUsed + ' used (bar ' + sc.ultMax + ', ' + Math.round(sc.ultCharge) + ' in it)', miss ? 'MISS x' + miss : '', 'walls ' + walls.join(' '), 'boost ' + JSON.stringify(sc.boost), sc.split ? 'split ' + (sc.split.freed ? 'FREED' : 'not freed') : '', sc.crushed ? 'CRUSHED' : ''].join(' | '));
+      out.push([level, 'up' + up + (range ? '+R' + range : ''), mode, sc.finaleDone && sc.count > 0 ? 'WIN ' : 'lose', 'left ' + sc.count, Math.round(f / 60) + 's', 'dist ' + Math.round(100 * sc.dist / sc.L.length) + '%', at.join(' '), (lastBoss && lastBoss.phase2 ? 'phase2' : ''), 'fight ' + secs.join('/') + 's', 'souls ' + sc.earned, 'dmg x' + sc.dmgMod.toFixed(2), 'enemies ' + total, 'bar ' + sc.specialMax, 'ult ' + sc.ultUsed + ' used (bar ' + sc.ultMax + ', ' + Math.round(sc.ultCharge) + ' in it)', miss ? 'MISS x' + miss : '', 'walls ' + walls.join(' '), 'boost ' + JSON.stringify(sc.boost), sc.split ? 'split ' + (sc.split.freed ? 'FREED' : 'not freed') : '', 'pushed ' + Math.round(maxPush) + '/116', freed ? 'free upgrade offered' : '', sc.crushed ? 'CRUSHED' : ''].join(' | '));
     }
     return out;
   }, CASES);
