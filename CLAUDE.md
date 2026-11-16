@@ -94,7 +94,8 @@ bosses); keep the game beatable free, just slower; good sellers are a cheap one-
 skins, rewarded ads (revive, double coins), remove ads, and gems that skip grinding. Random prize boxes
 must show their odds (Apple rule). Suggest a tax adviser once money comes in.
 
-Still waiting on the owner: whether they have a Mac, and what the shop should sell.
+The owner has a Mac with Xcode, so step 5 is done there, with step-by-step instructions from us.
+Still waiting on the owner: what the shop should sell.
 
 ## Open ideas
 
