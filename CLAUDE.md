@@ -36,7 +36,7 @@ Also say one visible thing that tells them they have the new version.
 | `CFG` | Every tuning number: enemies, boss profiles (`CFG.bosses`), storm waves, lucky charm, stone wall, sword |
 | `LEVEL_SPECS`, `layoutLevel` | Levels are generated from a short spec (rows, pack size and growth, crowding, health, charms, walls, bosses). Stages run in saga order, four per saga (three levels, then the saga boss): stages 1-4 are saga 1, stage 5 is saga 2 level 1. A spec's `theme` picks the scenery (`'mountain'`) and `foe` the common enemy (`'rockOni'`) |
 | `GEAR`, `ELEMENT` | Equipment items (weapon, armor, necklace slots) and which enemy kinds are flying, armoured and so on |
-| `Save`, `Stats` | localStorage keys (`samurai_*`) and upgrade formulas. The currency is shown as coins but is still called `souls` in the code and the save, so old saves carry over |
+| `Save`, `Stats` | localStorage keys (`samurai_*`) and upgrade formulas. Four upgrade cards: attack speed (`fire`), blade damage, range, coin reward (`revenue`). The currency is shown as coins but is still called `souls` in the code and the save, so old saves carry over |
 | `Sound`, `Music` | Web Audio synth. Music modes: menu (arcade theme), run, boss, storm, stormBoss |
 | `Art` | Every texture, drawn with Canvas 2D at device resolution. The only image file is `menu.jpg`, loaded in `BootScene`; its PLAY and SETTINGS buttons are painted in, with invisible touch areas over them in `MenuScene`. `Art.menuBg` and plain buttons are the fallback if it does not load (always the case from `file://`) |
 | Scenes | `MenuScene`, `SagaScene`, `SettingsScene`, `GameScene` |
@@ -49,6 +49,11 @@ the level start screen (upgrade cards, Equipment menu, Store), then per frame
 All big fights (giant zombie, tengu, fat demon, Takemikazuchi, rock oni) share one cycle in `updateBoss`:
 chase, wind-up with a warning zone, strike, recover. A profile in `CFG.bosses` sets speeds,
 damage, combos, power attacks (`jump`, `fly`, `bolt`, `dash`) and an optional second phase.
+
+Range: each level adds `CFG.rangeStep` to the samurai's reach, up to `CFG.rangeMax`. A foe beyond melee reach
+is hit by a wind slash (`windSlash`) that lands on a timer, not on its tween (tweens never finish in the bot's
+no-render mode). Walls are cut at when nothing is closer. Slashes do not touch gates; flipping gates was
+planned for a flick-up ultimate.
 
 Stone walls (`kind: 'wall'`, an entry in `enemies`) stand in front of a few blue gates. Samurai with no
 enemy in reach cut at a wall from `CFG.wall.range` away; one still standing when the army reaches it in
@@ -64,6 +69,8 @@ are preinstalled in cloud sessions. Audio cannot be heard there; say so when rep
 Balance as last tuned (attack speed and blade damage both at the stated level, dodging bot):
 level 1 wins with no upgrades; level 2 needs about 2; level 3 about 3; the saga boss about 5.
 Saga 2 level 1 (stage 5) is tuned for about 5: the dodging bot wins from 3 up, the bot that never dodges loses at 5.
+Range is an extra, optional card: spending coins on it helps about as much as the same coins on speed and
+damage (level 3: speed/damage 2 loses, adding Range 3 wins), and even Range 12 does not make bosses easy.
 
 ## Working with the owner
 
@@ -98,6 +105,12 @@ The owner has a Mac with Xcode, so step 5 is done there, with step-by-step instr
 Still waiting on the owner: what the shop should sell.
 
 ## Open ideas
+
+- Controls discussed with the owner, not built yet: flick up for an ultimate (a meter filled by kills; a full-width
+  wind wave that breaks walls, cuts the front enemies, flips a gate it hits higher, hurts bosses) and later flick
+  down for a guard stance (crossed blades or planted wooden *tate* shields; blocks boss hits, lightning, spikes,
+  on a recharge). The game already has a SLOW special button with its own kill-filled bar; decide with the owner
+  whether the ultimate replaces it.
 
 - The Store (button on the level start screen, `showStore`) is an empty "coming soon" panel. What it sells is undecided.
 
