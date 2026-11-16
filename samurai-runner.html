@@ -64,28 +64,37 @@ const CFG = {
   //   power*         occasional special: 'jump' slams where the army stood; 'fly' does the same from the air, untouchable meanwhile
   //   trickle        regular enemies keep arriving while he lives
   bosses: {
-    demon: { key: 'boss', name: 'FAT DEMON', slain: 'DEMON SLAIN', r: 50, souls: 40, speed: 60, chaseMs: 930, windMs: 600, recoverMs: 330,
-      reach: 85, cleave: 4, cleaveShare: 0.10, powerChance: 0.35, powerWindMs: 1070, powerReach: 100, powerMult: 2, powerStyle: 'jump' },
-    giant: { key: 'giant', name: 'GIANT ZOMBIE', slain: 'GIANT SLAIN', r: 44, souls: 20, speed: 40, chaseMs: 1400, windMs: 900, recoverMs: 500,
-      reach: 85, cleave: 2, cleaveShare: 0.05, powerChance: 0, trickle: true, trickleMs: 1500 },       // half the fat demon's speed and damage
+    // Saga 1 bosses were made tougher: more health (in LEVEL_SPECS), faster to follow, quicker leaps, and one new attack each.
+    // Multi-zone attacks (`hands`, `feathers`, `drums`, see `zonesFor`) mark several places at once and leave a way out.
+    // `bounce` is a jump that lands `bounces` times, re-aiming at the army each time.
+    demon: { key: 'boss', name: 'FAT DEMON', slain: 'DEMON SLAIN', r: 50, souls: 40, speed: 74, chaseMs: 900, windMs: 600, recoverMs: 330,
+      reach: 85, cleave: 4, cleaveShare: 0.10, powerChance: 0.4, powerWind: { jump: 850, bounce: 800 }, powerReach: 100, powerMult: 2,
+      powers: [['jump', 'bounce']], bounces: 3, bounceWindMs: 520 },
+    giant: { key: 'giant', name: 'GIANT ZOMBIE', slain: 'GIANT SLAIN', r: 44, souls: 20, speed: 54, chaseMs: 1300, windMs: 850, recoverMs: 500,
+      reach: 85, cleave: 2, cleaveShare: 0.05, powerChance: 0.3, powers: [['hands']], powerWind: { hands: 1100 }, powerReach: 85, powerMult: 1.5,
+      trickle: true, trickleMs: 1500 },
     // The saga boss. Phase 1 is measured: two-swing combos and an occasional lightning slash down a lane.
     // At `phase2` of his health he powers up (a short cutscene; he cannot be hurt and regains `powerUpHeal` of his health).
     // Phase 2 runs `phase2Haste` times faster with three-swing combos, his swings leave lightning on the ground
     // for `linger` ms, and he sometimes dashes to where the army stands.
-    thunder: { key: 'thunder', name: 'TAKEMIKAZUCHI', slain: 'THE THUNDER GOD FALLS', r: 48, souls: 150, speed: 68, chaseMs: 1070, windMs: 690, recoverMs: 470,
-      reach: 85, cleave: 3, cleaveShare: 0.06, combo: 2, phase2Combo: 3, comboWindMs: 510, comboStep: 45,
-      powerChance: 0.25, powers: [['bolt'], ['bolt', 'dash']], powerWind: { bolt: 1200, dash: 640 }, powerReach: 85, boltHalf: 48, powerMult: 2,
+    thunder: { key: 'thunder', name: 'TAKEMIKAZUCHI', slain: 'THE THUNDER GOD FALLS', r: 48, souls: 150, speed: 80, chaseMs: 1000, windMs: 650, recoverMs: 470,
+      reach: 85, cleave: 3, cleaveShare: 0.06, combo: 2, phase2Combo: 3, comboWindMs: 480, comboStep: 55,
+      powerChance: 0.3, powers: [['bolt', 'drums'], ['bolt', 'dash', 'drums']], powerWind: { bolt: 1100, dash: 600, drums: 1300 }, drumsAgainMs: 950,
+      powerReach: 85, boltHalf: 48, powerMult: 2,
       phase2: 0.5, phase2Haste: 1.33, phase2Name: 'THE STORM AWAKENS', powerUpMs: 2400, powerUpHeal: 0.2, linger: 1000, lingerTick: 500, lingerShare: 0.03 },
     // Saga 2, level 1. Slow and heavy: long wind-ups that are easy to read, but a club that takes a big bite, and a wider ground-pound.
     rock: { key: 'rockBoss', name: 'ROCK ONI', slain: 'ROCK ONI SLAIN', r: 50, souls: 60, speed: 46, chaseMs: 1300, windMs: 950, recoverMs: 600,
       reach: 90, cleave: 5, cleaveShare: 0.12, powerChance: 0.3, powerWindMs: 1300, powerReach: 120, powerMult: 2, powerStyle: 'jump' },
-    tengu: { key: 'tenguBoss', name: 'TENGU', slain: 'TENGU SLAIN', r: 46, souls: 35, speed: 40, chaseMs: 1400, windMs: 900, recoverMs: 500,
-      reach: 85, cleave: 3, cleaveShare: 0.08, powerChance: 0.45, powerWindMs: 1600, powerReach: 100, powerMult: 2, powerStyle: 'fly' },
+    tengu: { key: 'tenguBoss', name: 'TENGU', slain: 'TENGU SLAIN', r: 46, souls: 35, speed: 56, chaseMs: 1250, windMs: 820, recoverMs: 480,
+      reach: 85, cleave: 3, cleaveShare: 0.08, powerChance: 0.5, powers: [['fly', 'feathers']], powerWind: { fly: 1250, feathers: 1200 },
+      powerReach: 100, powerMult: 2 },
   },
   // The glowing lucky charm that slides from side to side. Harmless; break it for the damage bonus.
   charm: { speed: 70, lead: 110, souls: 15 },   // speed: px/s sideways; lead: how far in front of its gate row it appears
   // A stone wall stands in front of some blue gates. The army cuts at it from `range` away; if it still stands when they reach it, it crushes them all.
-  wall: { lead: 64, range: 200, half: 66, souls: 5 },      // lead: how far in front of its gate it stands; half: half its width
+  // A wall still standing when the army reaches it blocks the way: the run slows to `pushSlow` and the wall shoves the army
+  // down the screen until it breaks, the army steps around it, or the army is pushed to `crushY` (the run ends).
+  wall: { lead: 64, range: 200, half: 66, souls: 5, pushSlow: 0.3, crushY: 676 },      // lead: how far in front of its gate it stands; half: half its width
   // The saga boss stage's storm: every `everyMs` a wave of lightning sweeps down the lane the army stands in.
   storm: { everyMs: [4000, 5000], warnMs: 1100, sweepMs: 380, half: 52, cleave: 2, cleaveShare: 0.08 },
   // Futsu-no-mitama: its lightning adds to hits on some kinds of foe and is shrugged off by others. Everything else takes normal damage.
@@ -99,20 +108,20 @@ const CFG = {
 //   crowd    how much tighter each pack is bunched than the one before, so later packs arrive faster
 //   hp       zombie health (demons have more, see CFG.enemy.demonHp); difficulty comes from numbers, not tougher enemies
 //   charms   [rows where a lucky charm appears, its health, health growth per charm]
-//   walls    [rows whose blue gate is behind a stone wall, its health, health growth per wall]
+//   walls    [rows whose blue gate is behind a stone wall, its health, health growth per wall]; none in saga 1, few after
 //   bosses   big fights: `after` a given row, or at the 'end'
 const LEVEL_SPECS = [
-  { name: 'Restless Dead', demons: false, rows: 10, seg: 370, pack: [3, 1.2, 0.20], crowd: 0.05, hp: 3, walls: [[6], 22, 0],
-    bosses: [{ type: 'giant', after: 'end', hp: 400 }] },
-  { name: 'The Tengu', demons: true, rows: 13, seg: 370, pack: [5, 2.4, 0.27], crowd: 0.16, hp: 5, charms: [[4, 10], 8, 3], walls: [[3, 8, 11], 38, 16],
-    bosses: [{ type: 'giant', after: 6, hp: 700 }, { type: 'tengu', after: 'end', hp: 1400 }] },
-  { name: 'The Fat Demon', demons: true, rows: 18, seg: 370, pack: [6, 2.4, 0.16], crowd: 0.14, hp: 8, charms: [[5, 11, 15], 11, 4], walls: [[3, 7, 10], 48, 24],
-    bosses: [{ type: 'giant', after: 8, hp: 1800 }, { type: 'demon', after: 'end', hp: 3000 }] },
+  { name: 'Restless Dead', demons: false, rows: 10, seg: 370, pack: [3, 1.2, 0.20], crowd: 0.05, hp: 3, 
+    bosses: [{ type: 'giant', after: 'end', hp: 750 }] },
+  { name: 'The Tengu', demons: true, rows: 13, seg: 370, pack: [5, 2.4, 0.27], crowd: 0.16, hp: 5, charms: [[4, 10], 8, 3],
+    bosses: [{ type: 'giant', after: 6, hp: 900 }, { type: 'tengu', after: 'end', hp: 1800 }] },
+  { name: 'The Fat Demon', demons: true, rows: 18, seg: 370, pack: [6, 2.4, 0.16], crowd: 0.14, hp: 8, charms: [[5, 11, 15], 11, 4],
+    bosses: [{ type: 'giant', after: 8, hp: 2300 }, { type: 'demon', after: 'end', hp: 3800 }] },
   // The saga boss stage: a short run to build an army, then the fight.
-  { name: 'Takemikazuchi', demons: true, storm: true, rows: 8, seg: 370, pack: [5, 2.4, 0.30], crowd: 0.15, hp: 8, pace: 1.2, charms: [[4], 11, 0], walls: [[3, 6], 38, 20],
-    bosses: [{ type: 'thunder', after: 'end', hp: 2600 }] },
+  { name: 'Takemikazuchi', demons: true, storm: true, rows: 8, seg: 370, pack: [5, 2.4, 0.30], crowd: 0.15, hp: 8, pace: 1.2, charms: [[4], 11, 0],
+    bosses: [{ type: 'thunder', after: 'end', hp: 3300 }] },
   // Saga 2, Mountain Pass. `theme` picks the scenery, `foe` the common enemy.
-  { name: 'The Rock Oni', theme: 'mountain', foe: 'rockOni', demons: false, rows: 14, seg: 370, pack: [7, 3.0, 0.26], crowd: 0.15, hp: 13, charms: [[5, 10], 14, 4], walls: [[3, 7, 10], 70, 30],
+  { name: 'The Rock Oni', theme: 'mountain', foe: 'rockOni', demons: false, rows: 14, seg: 370, pack: [7, 3.0, 0.26], crowd: 0.15, hp: 13, charms: [[5, 10], 14, 4], walls: [[4], 80, 0],
     bosses: [{ type: 'rock', after: 'end', hp: 6000 }] },
 ];
 // Equipment, chosen on a level's start screen: one weapon, one armor, one necklace. `boss: true` items are won by beating the saga boss.
@@ -1138,6 +1147,8 @@ class GameScene extends BaseScene {
     this.paused = false;           // true while the pause menu is open
     this.time.paused = false;
     this.crushed = false;          // true if a stone wall ended the run
+    this.push = 0;                 // how far a stone wall has shoved the army down the screen
+    this.blockedBy = null;         // the wall the army is pressed against, if any
     this.wallSeen = false;         // the first wall of a run gets a warning banner
     this.fight = false;            // true while the scroll is stopped for a big fight
     this.boss = null;              // the next (or current) big fight; set in buildLevel
@@ -1483,7 +1494,7 @@ class GameScene extends BaseScene {
 
   updateScroll(wdt) {
     if (!this.fight) {
-      const speed = CFG.baseSpeed * this.L.pace * (1 + CFG.speedRamp * this.dist / this.L.length) * this.speedMod;
+      const speed = CFG.baseSpeed * this.L.pace * (1 + CFG.speedRamp * this.dist / this.L.length) * this.speedMod * (this.blockedBy ? CFG.wall.pushSlow : 1);
       const step = speed * wdt;
       this.dist += step;
       this.grass.tilePositionY -= step * R;
@@ -1515,8 +1526,9 @@ class GameScene extends BaseScene {
 
   updateArmy(time, dt) {
     this.armyX += (this.targetX - this.armyX) * damp(12, dt);
-    const wantForm = !this.started ? 440 : this.fight ? this.boss.y + 92 : CFG.armyY;   // stands above the upgrade cards until the run begins
+    const wantForm = !this.started ? 440 : this.fight ? this.boss.y + 92 : CFG.armyY + this.push;   // stands above the upgrade cards until the run begins
     this.formY += (wantForm - this.formY) * damp(5, dt);
+    if (this.blockedBy) this.formY = Math.max(this.formY, this.blockedBy.y + 26);          // pressed against a stone wall
     const n = this.soldiers.length, cols = Math.min(5, Math.ceil(Math.sqrt(n || 1)));
     this.soldiers.forEach((s, i) => {
       const col = i % cols, row = Math.floor(i / cols);
@@ -1700,20 +1712,29 @@ class GameScene extends BaseScene {
       e.glow.setScale(S * (1.5 + pulse * 0.2)).setAlpha(0.8 + pulse * 0.2);
       e.sprite.setRotation(Math.sin(this.time.now * 0.012 + e.seed) * 0.12);
     });
-    // Stone walls: a warning as one comes into view, a red pulse as it closes in, and the crush.
+    // Stone walls: a warning as one comes into view, a red pulse as it closes in, then it blocks and pushes.
+    let blocked = null;
     this.enemies.forEach(e => {
       if (e.kind !== 'wall' || e.gone || e.hp <= 0 || e.passed) return;
       if (!this.wallSeen && e.y > 120) { this.wallSeen = true; this.banner('STONE WALL', 'break it or go around'); }
       const close = e.y > this.formY - 110;
       e.label.setColor(close && Math.sin(this.time.now * 0.025) > 0 ? '#ff5252' : '#fff');
       if (e.y < this.formY - 26) return;
-      e.passed = true;
-      if (Math.abs(this.armyX - e.x) >= CFG.wall.half) return;                 // went around it
-      this.crushed = true;
-      Sound.play('slam'); this.shake(450, 0.02);
-      this.float(this.armyX, this.formY - 50, 'CRUSHED', '#ff5252', 30);
-      this.count = 0; this.syncArmy();
+      if (Math.abs(this.armyX - e.x) >= CFG.wall.half || e.y > this.formY + 10) { if (e.y > this.formY + 10) e.passed = true; return; }   // around it
+      blocked = e;                                           // in its way: the wall shoves the army down the screen
     });
+    if (blocked && !this.blockedBy) { Sound.play('slam'); this.shake(220, 0.012); this.float(this.armyX, this.formY - 50, 'BLOCKED!', '#ff5252', 24); }
+    this.blockedBy = blocked;
+    if (blocked) {
+      this.push = Math.max(this.push, blocked.y + 26 - CFG.armyY);
+      if (Math.random() < 0.08) this.shake(90, 0.005);
+      if (this.formY >= CFG.wall.crushY && !this.crushed) {
+        this.crushed = true;
+        Sound.play('slam'); this.shake(450, 0.02);
+        this.float(this.armyX, this.formY - 50, 'CRUSHED', '#ff5252', 30);
+        this.count = 0; this.syncArmy();
+      }
+    } else this.push = Math.max(0, this.push - 45 * wdt);   // free again: the army works its way back up
     // Spikes.
     this.spikes.forEach(o => {
       if (o.hit || o.y < this.formY - 20) return;
@@ -1742,7 +1763,7 @@ class GameScene extends BaseScene {
       }
     }
     if (B.phase2 && !b.phase2 && !b.powering && b.hp <= b.maxHp * B.phase2) {          // second phase: he powers up first
-      Object.assign(b, { powering: true, state: 'powerup', t: B.powerUpMs, style: null, air: false, comboLeft: 0 });
+      Object.assign(b, { powering: true, state: 'powerup', t: B.powerUpMs, style: null, air: false, comboLeft: 0, zones: null, drumsAgain: false });
       this.hazards = [];
       b.obj.setRotation(0);
       Sound.play('warnPower');
@@ -1759,18 +1780,22 @@ class GameScene extends BaseScene {
       const chance = B.powerChance * (b.phase2 ? 1.6 : 1);
       b.power = chance > 0 && b.swings > 0 && !b.power && Math.random() < chance;
       b.comboLeft = b.power ? 0 : ((b.phase2 && B.phase2Combo) || B.combo || 1) - 1;
-      this.startWind(b, b.power ? this.pickPower(b) : null);
+      const style = b.power ? this.pickPower(b) : null;
+      b.bouncesLeft = style === 'bounce' ? B.bounces - 1 : 0;
+      b.drumsAgain = style === 'drums' && b.phase2;
+      this.startWind(b, style);
     } else if (b.state === 'wind') {
       const k = clamp(1 - b.t / b.windFull, 0, 1), style = b.style;
       const reach = style === 'bolt' ? B.boltHalf : style ? B.powerReach : B.reach;
-      if (style === 'jump' || style === 'fly') {             // leap toward where the army stood
+      if (style === 'jump' || style === 'fly' || style === 'bounce') {             // leap toward where the army stood
         const h = Math.sin(k * Math.PI);
         b.x = b.fromX + (b.aimX - b.fromX) * k;
         b.obj.y -= h * (b.air ? 130 : 80);
         b.obj.setScale(b.obj.scaleX * (1 + h * 0.25)).setRotation(b.air ? Math.sin(this.time.now * 0.02) * 0.08 : -0.35 * h);
         if (b.air) this.danger.fillStyle(0x000000, 0.28).fillEllipse(b.x, b.y + 50, 70 - h * 30, 22 - h * 9);   // his shadow
       } else b.obj.setRotation((style === 'dash' ? 0.3 : -0.25) * k);
-      if (style === 'bolt') {                                // a lane of lightning, from him to the bottom of the screen
+      if (b.zones) this.drawZones(b, k);
+      else if (style === 'bolt') {                           // a lane of lightning, from him to the bottom of the screen
         this.danger.fillStyle(0xb388ff, 0.14 + 0.3 * k).fillRect(b.aimX - reach, b.y + 30, reach * 2, H);
         this.danger.lineStyle(2, 0xede7f6, 0.4 + 0.6 * k).strokeRect(b.aimX - reach, b.y + 30, reach * 2, H);
         if (Math.random() < 0.3) this.zap(b.aimX + (Math.random() - 0.5) * reach, b.y + 40 + Math.random() * 300, b.aimX + (Math.random() - 0.5) * reach, b.y + 120 + Math.random() * 300, 90);
@@ -1780,6 +1805,7 @@ class GameScene extends BaseScene {
         if (style === 'dash') this.danger.lineStyle(4, 0xb388ff, 0.3 + 0.6 * k).lineBetween(b.x, b.y + 50, b.aimX, b.y + 110);
       }
       if (b.t > 0) return;
+      if (b.zones) { this.zonesStrike(b); return; }
       if (style === 'dash') this.zap(b.x, b.y + 40, b.aimX, b.y + 40, 220);
       if (style !== 'bolt') b.x = b.aimX;
       b.air = false;
@@ -1796,6 +1822,11 @@ class GameScene extends BaseScene {
       } else { Sound.play('dodge'); this.float(this.armyX, this.formY - 46, 'DODGED', '#80d8ff', 18); }
       if (b.phase2 && B.linger && style !== 'bolt') this.hazards.push({ x: b.aimX, y: b.y + 118, rx: reach, ry: 62, t: B.linger, tick: B.lingerTick });
       b.swings++;
+      if (style === 'bounce' && b.bouncesLeft > 0) {         // the belly bounce: straight up again, aimed at where the army is now
+        b.bouncesLeft--;
+        this.startWind(b, 'bounce', B.bounceWindMs);
+        return;
+      }
       if (!style && b.comboLeft > 0) {                       // next swing of the combo: a step toward the army, a shorter wind-up
         b.comboLeft--;
         b.x = clamp(b.x + clamp(this.armyX - b.x, -B.comboStep, B.comboStep), 120, 280);
@@ -1842,7 +1873,82 @@ class GameScene extends BaseScene {
     b.fromX = b.x;
     b.aimX = style ? clamp(this.armyX, 100, 300) : b.x;
     b.air = style === 'fly';                                 // in the air he cannot be hit
+    b.zones = this.zonesFor(style);
     Sound.play(style ? 'warnPower' : 'warn');
+  }
+
+  // Attacks that mark several places at once. Each leaves a way out: a gap beside the hands, one clear lane in the others.
+  zonesFor(style) {
+    const lanes = (n, half) => {                             // every lane but one; the clear one is never the lane the army is in
+      const w = (CFG.pathRight - CFG.pathLeft) / n, xs = [...Array(n)].map((_, i) => CFG.pathLeft + w * (i + 0.5));
+      const mine = xs.findIndex(x => Math.abs(this.armyX - x) <= w / 2);
+      const options = xs.map((_, i) => i).filter(i => i !== mine);
+      const safe = options[Math.floor(Math.random() * options.length)];
+      return xs.filter((_, i) => i !== safe).map(x => ({ x, half, lane: true }));
+    };
+    if (style === 'hands') {                                 // under the army and beside it, on the side with more room
+      const a = clamp(this.armyX, 100, 300), side = a < W / 2 ? 1 : -1;
+      return [{ x: a, half: 48 }, { x: clamp(a + side * 100, 90, 310), half: 48 }];
+    }
+    if (style === 'feathers') return lanes(4, 33);
+    if (style === 'drums') return lanes(5, 26);
+    return null;
+  }
+
+  drawZones(b, k) {
+    const col = { hands: 0x76ff03, feathers: 0xff8a80, drums: 0xb388ff }[b.style], blink = 0.6 + 0.4 * Math.sin(this.time.now * 0.03);
+    b.zones.forEach(z => {
+      if (z.lane) {
+        const w = (CFG.pathRight - CFG.pathLeft) / (b.style === 'drums' ? 5 : 4);
+        this.danger.fillStyle(col, 0.1 + 0.26 * k).fillRect(z.x - w / 2 + 2, b.y + 40, w - 4, H);
+        this.danger.lineStyle(2, col, (0.4 + 0.6 * k) * blink).strokeRect(z.x - w / 2 + 2, b.y + 40, w - 4, H);
+        if (b.style === 'drums' && Math.random() < 0.12) this.zap(z.x, b.y + 50 + Math.random() * 200, z.x + (Math.random() - 0.5) * 30, b.y + 150 + Math.random() * 250, 70);
+      } else {
+        this.danger.fillStyle(col, 0.12 + 0.28 * k).fillEllipse(z.x, this.formY + 12, z.half * 2, 70);
+        this.danger.lineStyle(2, col, (0.5 + 0.5 * k) * blink).strokeEllipse(z.x, this.formY + 12, z.half * 2, 70);
+        if (Math.random() < 0.25 * k) { this.burst.setParticleTint(0x33691e); this.burst.explode(1, z.x + (Math.random() - 0.5) * z.half, this.formY + 20); }
+      }
+    });
+    if (b.style === 'feathers') b.obj.setRotation(Math.sin(this.time.now * 0.04) * 0.15 * k);       // wings beating
+    else if (b.style === 'drums') b.obj.setRotation(Math.sin(this.time.now * 0.05) * 0.1 * k);
+    else b.obj.setRotation(-0.3 * k);
+  }
+
+  zonesStrike(b) {
+    const B = b.prof, style = b.style;
+    b.obj.setRotation(0);
+    b.zones.forEach(z => {
+      if (style === 'hands') {                               // rotting hands claw up out of the ground
+        this.burst.setParticleTint(0x558b2f); this.burst.explode(22, z.x, this.formY + 16);
+        for (let i = 0; i < 3; i++) {
+          const c = this.img(z.x + (i - 1) * z.half * 0.6, this.formY + 30, 'slash').setDepth(2900).setRotation(-Math.PI / 2 + (i - 1) * 0.3).setScale(S * 0.9).setTint(0x9ccc65);
+          this.tweens.add({ targets: c, y: c.y - 50, alpha: 0, duration: 380, ease: 'Cubic.out', onComplete: () => c.destroy() });
+        }
+      } else if (style === 'feathers') {                     // a rain of razor feathers down the lane
+        for (let i = 0; i < 5; i++) {
+          const f = this.add.rectangle(z.x + (Math.random() - 0.5) * 50, b.y + 40 - i * 40, 3, 22, 0xffebee).setDepth(2900).setRotation(0.25);
+          this.tweens.add({ targets: f, y: H + 40, duration: 320 + i * 40, onComplete: () => f.destroy() });
+        }
+      } else {                                               // the thunder drums: a bolt down every lane but one
+        this.zap(z.x, b.y + 20, z.x + (Math.random() - 0.5) * 20, H, 300);
+        this.zap(z.x + (Math.random() - 0.5) * 20, b.y + 20, z.x, H, 240);
+      }
+    });
+    if (style === 'drums') { this.cameras.main.flash(120, 200, 170, 255); Sound.play('thunder'); }
+    Sound.play(style === 'feathers' ? 'swing' : 'slam');
+    this.shake(260, 0.02);
+    if (b.zones.some(z => Math.abs(this.armyX - z.x) < z.half)) {
+      this.lose(Math.ceil(Math.max(B.cleave, Math.ceil(this.count * B.cleaveShare)) * B.powerMult), null, style === 'drums');
+    } else { Sound.play('dodge'); this.float(this.armyX, this.formY - 46, 'DODGED', '#80d8ff', 18); }
+    b.swings++;
+    if (b.drumsAgain) {                                      // in his second phase the drums roll twice
+      b.drumsAgain = false;
+      this.startWind(b, 'drums', B.drumsAgainMs);
+      return;
+    }
+    b.zones = null;
+    b.state = 'recover';
+    b.t = B.recoverMs;
   }
 
   pickPower(b) {
