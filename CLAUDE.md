@@ -71,7 +71,9 @@ level 1 wins with no upgrades; level 2 needs about 2; level 3 about 3; the saga 
 Saga 2 level 1 (stage 5) is tuned for about 5: the dodging bot wins from 3 up, the bot that never dodges loses at 5.
 Range is an extra, optional card: spending coins on it helps about as much as the same coins on speed and
 damage (level 3: speed/damage 2 loses, adding Range 5 wins). Range grows 1m (9px) a level and has its own cheaper
-cost curve; even Range 10 does not make bosses easy.
+cost curve. Ranged swings take `CFG.rangedSwing` (1.5) times a normal swing: the owner does not want early
+players to progress fast. At 1.5 the bot at level 3 with speed/damage 2 wins or loses narrowly with Range 5-10
+(Range is a modest help, never a shortcut); at 2 it never helped, so the card was a waste of coins.
 
 ## Working with the owner
 

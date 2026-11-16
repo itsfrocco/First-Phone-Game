@@ -37,6 +37,7 @@ const CFG = {
   attackRange: 38,        // melee reach; the Range upgrade adds to it
   rangeStep: 9,            // extra reach per Range level (shown as 1m a level)
   rangeMax: 250,           // furthest a samurai can ever strike (about a third of the screen)
+  rangedSwing: 1.5,          // a wind slash at a foe beyond melee reach takes this many times a normal swing
   slashSpeed: 900,         // px/s of the wind slash a samurai sends at a foe beyond melee reach
   slowScale: 0.30,         // world speed while the special is active
   slowMs: 4000,
@@ -1582,6 +1583,7 @@ class GameScene extends BaseScene {
       if (best.kind === 'wall') this.airSlash(s, best);
       else if (best !== this.boss && bestD > CFG.attackRange) {     // out of sword reach: a wind slash flies to it
         this.windSlash(s, best, dmg);
+        s.cd *= CFG.rangedSwing;
         return;
       }
       this.strike(best, dmg + this.lightningBonus(best, dmg), s);
