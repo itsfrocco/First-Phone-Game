@@ -18,9 +18,9 @@ Only open or merge a pull request yourself if they ask for it in that message.
 Always resend the game link with a fresh cache-busting number on the end, one higher than
 the last one used, so their phone downloads the new copy:
 
-    https://itsfrocco.github.io/First-Phone-Game/samurai-runner.html?v=26
+    https://itsfrocco.github.io/First-Phone-Game/samurai-runner.html?v=27
 
-Last number sent: `?v=25`. Update this line each time a new link is sent.
+Last number sent: `?v=26`. Update this line each time a new link is sent.
 
 Before sending the link, check that the "pages build and deployment" run for the merge commit has
 finished (GitHub MCP `actions_list`); a link opened earlier caches the old game for about ten minutes.
@@ -82,6 +82,9 @@ beatable). Walking into the weapon with an obstacle still standing gives "MISSED
 run, and boosts add up: SHARP BLADE +20% damage, SWIFT BLADE 15% faster swings, LONG REACH +5 Range levels (owner chose
 these sizes). Bot mode "weapon" (e.g. "dodge weapon") takes the weapon side and cuts through; in testing the obstacles
 always broke before reaching the army, and taking the weapon instead of the blue gate costs some men but rarely decides a run.
+Owner's follow-up: no weapon rows in level 1 (stage 1), saga 1 is always logs (stone only from saga 2 with Range 6), and the
+obstacles were made about 50% tougher (`margin` 0.5 / 0.55, was 0.33 / 0.38): they now sometimes block the army for a moment
+before breaking, but the bot was never crushed and still collected the weapons.
 
 ## Testing
 
