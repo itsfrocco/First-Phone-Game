@@ -18,9 +18,9 @@ Only open or merge a pull request yourself if they ask for it in that message.
 Always resend the game link with a fresh cache-busting number on the end, one higher than
 the last one used, so their phone downloads the new copy:
 
-    https://itsfrocco.github.io/First-Phone-Game/samurai-runner.html?v=23
+    https://itsfrocco.github.io/First-Phone-Game/samurai-runner.html?v=25
 
-Last number sent: `?v=22`. Update this line each time a new link is sent.
+Last number sent: `?v=24`. Update this line each time a new link is sent.
 
 Before sending the link, check that the "pages build and deployment" run for the merge commit has
 finished (GitHub MCP `actions_list`); a link opened earlier caches the old game for about ten minutes.
@@ -39,7 +39,13 @@ Also say one visible thing that tells them they have the new version.
 | `Save`, `Stats` | localStorage keys (`samurai_*`) and upgrade formulas. Four upgrade cards: attack speed (`fire`), blade damage, range, coin reward (`revenue`). The currency is shown as coins but is still called `souls` in the code and the save, so old saves carry over |
 | `Sound`, `Music` | Web Audio synth. Music modes: menu (arcade theme), run, boss, storm, stormBoss |
 | `Art` | Every texture, drawn with Canvas 2D at device resolution. The only image file is `menu.jpg`, loaded in `BootScene`; its PLAY and SETTINGS buttons are painted in, with invisible touch areas over them in `MenuScene`. `Art.menuBg` and plain buttons are the fallback if it does not load (always the case from `file://`) |
-| Scenes | `MenuScene`, `SagaScene`, `SettingsScene`, `GameScene` |
+| Scenes | `MenuScene`, `SagaScene`, `SettingsScene`, `TutorialScene`, `GameScene` |
+
+Tutorial: `TutorialScene.PAGES` are nine picture pages (steer, gates, fight, red/orange circles, safe lanes, SLOW,
+lucky charm, upgrade cards, gear and store) with SKIP on every page. Tapping level 1 opens them while
+`Save.tutorial` (`samurai_tutorial`) is false; finishing or skipping sets it and starts level 1 with `tips: true`,
+which pauses that run once for each live hint (`updateTips`/`tip`: gate, enemies, SLOW ready, boss red circle,
+green grave hands). HOW TO PLAY above saga 1 on the sagas screen replays the pages (owner wanted it there, not in Settings).
 
 Inside `GameScene`: the pause menu (`setPaused`; music, sound effects and screen shake switches, resume, quit),
 the level start screen (upgrade cards, Equipment menu, Store), then per frame
@@ -75,7 +81,10 @@ Balance as last tuned (attack speed and blade damage both at the stated level, d
 level 1 wins with no upgrades; level 2 needs about 2; level 3 about 3-4 (3 wins or loses to the mid giant); the saga
 boss about 5-6 (5 wins about half the time, 6 wins). Bot mode "dodge wall" walks into stone walls.
 Owner's later trims: levels 2 and 3 have 20% fewer enemies, the run scrolls 10% slower (`CFG.baseSpeed` 81),
-Takemikazuchi has 4300 health, and coins per kill are 1.25 plus 0.75 per Coin Reward level (was 1.5 per level).
+coins per kill are 1.25 plus 0.75 per Coin Reward level (was 1.5 per level). Then: scroll +3% (`baseSpeed` 83),
+levels 2 and 3 shortened to 12 and 16 rows, Takemikazuchi 3900 health with a slower three-swing combo
+(`comboWindMs` 600), the fat demon 10% slower in movement and attacks, storm waves every 4.6-5.8s to make up for
+the slower run. The saga boss stage is swingy for the bot (it arrives with 1-57 men); arriving healthy it wins at 5-6.
 Saga 2 level 1 (stage 5) is tuned for about 5: the dodging bot wins from 3 up, the bot that never dodges loses at 5.
 Range is an extra, optional card: spending coins on it helps about as much as the same coins on speed and
 damage (level 3: speed/damage 2 loses, adding Range 5 wins). Range grows 1m (9px) a level and has its own cheaper

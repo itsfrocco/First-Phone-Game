@@ -32,7 +32,7 @@ const CFG = {
   armyY: 560,              // front row of the army
   pathLeft: 60, pathRight: 340,
   steerMin: 78, steerMax: 322,
-  baseSpeed: 81,           // px/s at the start of a level
+  baseSpeed: 83,           // px/s at the start of a level
   speedRamp: 0.30,         // +30% by the end
   attackRange: 38,        // melee reach; the Range upgrade adds to it
   rangeStep: 9,            // extra reach per Range level (shown as 1m a level)
@@ -67,9 +67,9 @@ const CFG = {
     // Saga 1 bosses were made tougher: more health (in LEVEL_SPECS), faster to follow, quicker leaps, and one new attack each.
     // Multi-zone attacks (`hands`, `feathers`, `drums`, see `zonesFor`) mark several places at once and leave a way out.
     // `bounce` is a jump that lands `bounces` times, re-aiming at the army each time.
-    demon: { key: 'boss', name: 'FAT DEMON', slain: 'DEMON SLAIN', r: 50, souls: 40, speed: 74, chaseMs: 900, windMs: 600, recoverMs: 330,
-      reach: 85, cleave: 4, cleaveShare: 0.10, powerChance: 0.4, powerWind: { jump: 850, bounce: 800 }, powerReach: 100, powerMult: 2,
-      powers: [['jump', 'bounce']], bounces: 3, bounceWindMs: 520 },
+    demon: { key: 'boss', name: 'FAT DEMON', slain: 'DEMON SLAIN', r: 50, souls: 40, speed: 67, chaseMs: 990, windMs: 660, recoverMs: 365,
+      reach: 85, cleave: 4, cleaveShare: 0.10, powerChance: 0.4, powerWind: { jump: 935, bounce: 880 }, powerReach: 100, powerMult: 2,
+      powers: [['jump', 'bounce']], bounces: 3, bounceWindMs: 570 },          // 10% slower than first retuned (owner)
     giant: { key: 'giant', name: 'GIANT ZOMBIE', slain: 'GIANT SLAIN', r: 44, souls: 20, speed: 54, chaseMs: 1300, windMs: 850, recoverMs: 500,
       reach: 85, cleave: 2, cleaveShare: 0.05, powerChance: 0.3, powers: [['hands']], powerWind: { hands: 1100 }, powerReach: 85, powerMult: 1.5,
       trickle: true, trickleMs: 1500 },
@@ -78,7 +78,7 @@ const CFG = {
     // Phase 2 runs `phase2Haste` times faster with three-swing combos, his swings leave lightning on the ground
     // for `linger` ms, and he sometimes dashes to where the army stands.
     thunder: { key: 'thunder', name: 'TAKEMIKAZUCHI', slain: 'THE THUNDER GOD FALLS', r: 48, souls: 150, speed: 80, chaseMs: 1000, windMs: 650, recoverMs: 470,
-      reach: 85, cleave: 3, cleaveShare: 0.06, combo: 2, phase2Combo: 3, comboWindMs: 480, comboStep: 55,
+      reach: 85, cleave: 3, cleaveShare: 0.06, combo: 2, phase2Combo: 3, comboWindMs: 600, comboStep: 55,
       powerChance: 0.3, powers: [['bolt', 'drums'], ['bolt', 'dash', 'drums']], powerWind: { bolt: 1100, dash: 600, drums: 1300 }, drumsAgainMs: 950,
       powerReach: 85, boltHalf: 48, powerMult: 2,
       phase2: 0.5, phase2Haste: 1.33, phase2Name: 'THE STORM AWAKENS', powerUpMs: 2400, powerUpHeal: 0.2, linger: 1000, lingerTick: 500, lingerShare: 0.03 },
@@ -96,7 +96,7 @@ const CFG = {
   // down the screen until it breaks, the army steps around it, or the army is pushed to `crushY` (the run ends).
   wall: { lead: 64, range: 200, half: 66, souls: 5, pushSlow: 0.3, crushY: 676 },      // lead: how far in front of its gate it stands; half: half its width
   // The saga boss stage's storm: every `everyMs` a wave of lightning sweeps down the lane the army stands in.
-  storm: { everyMs: [4000, 5000], warnMs: 1100, sweepMs: 380, half: 52, cleave: 2, cleaveShare: 0.08 },
+  storm: { everyMs: [4600, 5800], warnMs: 1100, sweepMs: 380, half: 52, cleave: 2, cleaveShare: 0.08 },
   // Futsu-no-mitama: its lightning adds to hits on some kinds of foe and is shrugged off by others. Everything else takes normal damage.
   thunderBlade: { strong: ['water', 'metal', 'flying'], strongBonus: 0.15, weak: ['earth', 'fire', 'thunder'], weakPenalty: 0.15 },
   levelPace: 0.10,         // each level in a saga runs this much faster than the one before (the army and the enemies)
@@ -113,13 +113,13 @@ const CFG = {
 const LEVEL_SPECS = [
   { name: 'Restless Dead', demons: false, rows: 10, seg: 370, pack: [3, 1.2, 0.20], crowd: 0.05, hp: 3, 
     bosses: [{ type: 'giant', after: 'end', hp: 750 }] },
-  { name: 'The Tengu', demons: true, rows: 13, seg: 370, pack: [4, 1.9, 0.22], crowd: 0.16, hp: 5, charms: [[4, 10], 8, 3],
+  { name: 'The Tengu', demons: true, rows: 12, seg: 370, pack: [4, 1.9, 0.22], crowd: 0.16, hp: 5, charms: [[4, 10], 8, 3],
     bosses: [{ type: 'giant', after: 6, hp: 900 }, { type: 'tengu', after: 'end', hp: 1800 }] },
-  { name: 'The Fat Demon', demons: true, rows: 18, seg: 370, pack: [4.8, 1.9, 0.13], crowd: 0.14, hp: 8, charms: [[5, 11, 15], 11, 4],
+  { name: 'The Fat Demon', demons: true, rows: 16, seg: 370, pack: [4.8, 1.9, 0.13], crowd: 0.14, hp: 8, charms: [[5, 11, 15], 11, 4],
     bosses: [{ type: 'giant', after: 8, hp: 2300 }, { type: 'demon', after: 'end', hp: 3800 }] },
   // The saga boss stage: a short run to build an army, then the fight.
   { name: 'Takemikazuchi', demons: true, storm: true, rows: 8, seg: 370, pack: [5, 2.4, 0.30], crowd: 0.15, hp: 8, pace: 1.2, charms: [[4], 11, 0],
-    bosses: [{ type: 'thunder', after: 'end', hp: 4300 }] },
+    bosses: [{ type: 'thunder', after: 'end', hp: 3900 }] },
   // Saga 2, Mountain Pass. `theme` picks the scenery, `foe` the common enemy.
   { name: 'The Rock Oni', theme: 'mountain', foe: 'rockOni', demons: false, rows: 14, seg: 370, pack: [7, 3.0, 0.26], crowd: 0.15, hp: 13, charms: [[5, 10], 14, 4], walls: [[4], 80, 0],
     bosses: [{ type: 'rock', after: 'end', hp: 6000 }] },
@@ -181,6 +181,7 @@ const Save = {
   level: 1,                      // highest level unlocked (4 = saga 1 cleared)
   music: true, sfx: true, shake: true,
   armor: '', weapon: '', necklace: '',   // equipped gear ids
+  tutorial: false,               // true once the how-to-play pages have been seen or skipped
   load() {
     const num = (k, def) => {
       try { const v = parseInt(localStorage.getItem(k), 10); return Number.isFinite(v) ? v : def; }
@@ -195,6 +196,7 @@ const Save = {
     this.music = num('samurai_music', 1) === 1;
     this.sfx = num('samurai_sfx', 1) === 1;
     this.shake = num('samurai_shake', 1) === 1;
+    this.tutorial = num('samurai_tutorial', 0) === 1;
     try { this.armor = localStorage.getItem('samurai_armor') || ''; this.weapon = localStorage.getItem('samurai_weapon') || ''; this.necklace = localStorage.getItem('samurai_necklace') || ''; } catch (e) {}
   },
   save() {
@@ -208,12 +210,13 @@ const Save = {
       localStorage.setItem('samurai_music', this.music ? 1 : 0);
       localStorage.setItem('samurai_sfx', this.sfx ? 1 : 0);
       localStorage.setItem('samurai_shake', this.shake ? 1 : 0);
+      localStorage.setItem('samurai_tutorial', this.tutorial ? 1 : 0);
       localStorage.setItem('samurai_armor', this.armor);
       localStorage.setItem('samurai_weapon', this.weapon);
       localStorage.setItem('samurai_necklace', this.necklace);
     } catch (e) {}
   },
-  resetProgress() { this.souls = 0; this.fire = this.damage = this.range = this.revenue = this.level = 1; this.armor = this.weapon = this.necklace = ''; this.save(); },
+  resetProgress() { this.souls = 0; this.fire = this.damage = this.range = this.revenue = this.level = 1; this.armor = this.weapon = this.necklace = ''; this.tutorial = false; this.save(); },
 };
 Save.load();
 window.addEventListener('pagehide', () => Save.save());
@@ -1047,23 +1050,26 @@ class SagaScene extends MenuBase {
   create() {
     this.backdrop('SAGAS');
     const numerals = ['I', 'II', 'III', 'IV', 'V'];
+    // How to play: replays the tutorial pages.
+    this.button(W / 2, 92, 368, 34, 0x00695c, '?  HOW TO PLAY', 14, () => this.scene.start('Tutorial', {}));
     // Saga 1: open, with its three levels.
-    this.panel(W / 2, 214, 368, 264);
-    this.txt(34, 106, numerals[0] + ' · ' + SAGAS[0].toUpperCase(), 17, '#ffd54f').setOrigin(0, 0.5);
-    this.txt(34, 128, Save.level > SAGA_LEVELS + 1 ? 'saga cleared' : Save.level > SAGA_LEVELS ? 'the saga boss awaits' : 'level ' + Save.level + ' of ' + SAGA_LEVELS, 12, '#cfc3d6', { fontStyle: 'normal' }).setOrigin(0, 0.5);
+    this.panel(W / 2, 254, 368, 264);
+    this.txt(34, 146, numerals[0] + ' · ' + SAGAS[0].toUpperCase(), 17, '#ffd54f').setOrigin(0, 0.5);
+    this.txt(34, 168, Save.level > SAGA_LEVELS + 1 ? 'saga cleared' : Save.level > SAGA_LEVELS ? 'the saga boss awaits' : 'level ' + Save.level + ' of ' + SAGA_LEVELS, 12, '#cfc3d6', { fontStyle: 'normal' }).setOrigin(0, 0.5);
     LEVELS.slice(0, SAGA_LEVELS).forEach((L, i) => {
       const n = i + 1, x = 82 + i * 118, open = n <= Save.level, done = n < Save.level;
-      const b = this.button(x, 206, 104, 96, open ? (done ? 0x2e7d32 : 0xc62828) : 0x3a3444, open ? String(n) : '—', 34, () => {
+      const b = this.button(x, 246, 104, 96, open ? (done ? 0x2e7d32 : 0xc62828) : 0x3a3444, open ? String(n) : '—', 34, () => {
         if (!open) { Sound.play('deny'); return; }
-        this.scene.start('Game', { level: n });
+        if (n === 1 && !Save.tutorial) this.scene.start('Tutorial', { then: 1 });      // first time: learn the basics first
+        else this.scene.start('Game', { level: n });
       });
       b.t.y -= 12; if (!open) b.t.setColor('#8a8094');
-      this.txt(x, 232, open ? L.name : 'LOCKED', 10, open ? '#fff' : '#8a8094', { align: 'center', wordWrap: { width: 96 } });
-      if (done) this.txt(x + 38, 172, '✓', 16, '#fff59d');
+      this.txt(x, 272, open ? L.name : 'LOCKED', 10, open ? '#fff' : '#8a8094', { align: 'center', wordWrap: { width: 96 } });
+      if (done) this.txt(x + 38, 212, '✓', 16, '#fff59d');
     });
     // The saga's major boss, fought after level 3.
     const bossOpen = Save.level > SAGA_LEVELS, bossDone = Save.level > SAGA_LEVELS + 1;
-    const boss = this.button(W / 2, 304, 340, 46, bossDone ? 0x2e7d32 : bossOpen ? 0x6a1b9a : 0x3a3444,
+    const boss = this.button(W / 2, 344, 340, 46, bossDone ? 0x2e7d32 : bossOpen ? 0x6a1b9a : 0x3a3444,
       bossOpen ? 'SAGA BOSS · ' + LEVELS[SAGA_LEVELS].name.toUpperCase() + (bossDone ? '  ✓' : '') : 'SAGA BOSS · LOCKED', 14, () => {
         if (!bossOpen) { Sound.play('deny'); return; }
         this.scene.start('Game', { level: SAGA_LEVELS + 1 });
@@ -1071,25 +1077,25 @@ class SagaScene extends MenuBase {
     if (!bossOpen) boss.t.setColor('#8a8094');
     // Saga 2: opens once the first saga's boss is beaten. Only its first level exists so far.
     const first2 = SAGA_LEVELS + 2, open2 = Save.level >= first2;          // stage number of saga 2, level 1
-    this.panel(W / 2, 432, 368, 156, open2 ? 0.92 : 0.7);
-    this.txt(34, 372, numerals[1] + ' · ' + SAGAS[1].toUpperCase(), 17, open2 ? '#ffd54f' : '#8a8094').setOrigin(0, 0.5);
-    this.txt(34, 392, !open2 ? 'defeat the saga boss to unlock' : Save.level > first2 ? 'level 1 cleared · more coming soon' : 'level 1 of ' + SAGA_LEVELS, 12, open2 ? '#cfc3d6' : '#6f6678', { fontStyle: 'normal' }).setOrigin(0, 0.5);
+    this.panel(W / 2, 472, 368, 156, open2 ? 0.92 : 0.7);
+    this.txt(34, 412, numerals[1] + ' · ' + SAGAS[1].toUpperCase(), 17, open2 ? '#ffd54f' : '#8a8094').setOrigin(0, 0.5);
+    this.txt(34, 432, !open2 ? 'defeat the saga boss to unlock' : Save.level > first2 ? 'level 1 cleared · more coming soon' : 'level 1 of ' + SAGA_LEVELS, 12, open2 ? '#cfc3d6' : '#6f6678', { fontStyle: 'normal' }).setOrigin(0, 0.5);
     for (let k = 0; k < SAGA_LEVELS; k++) {
       const n = first2 + k, L = LEVELS[n - 1], x = 82 + k * 118, open = !!L && Save.level >= n, done = open && Save.level > n;
-      const b = this.button(x, 452, 104, 76, open ? (done ? 0x2e7d32 : 0xc62828) : 0x3a3444, open ? String(k + 1) : '—', 28, () => {
+      const b = this.button(x, 492, 104, 76, open ? (done ? 0x2e7d32 : 0xc62828) : 0x3a3444, open ? String(k + 1) : '—', 28, () => {
         if (!open) { Sound.play('deny'); return; }
         this.scene.start('Game', { level: n });
       });
       b.t.y -= 10; if (!open) b.t.setColor('#8a8094');
-      this.txt(x, 474, open ? L.name : L ? 'LOCKED' : 'COMING SOON', 10, open ? '#fff' : '#8a8094');
-      if (done) this.txt(x + 38, 426, '✓', 16, '#fff59d');
+      this.txt(x, 514, open ? L.name : L ? 'LOCKED' : 'COMING SOON', 10, open ? '#fff' : '#8a8094');
+      if (done) this.txt(x + 38, 466, '✓', 16, '#fff59d');
     }
     // Sagas 3-5: locked.
     for (let i = 2; i < SAGAS.length; i++) {
-      const y = 546 + (i - 2) * 62;
-      this.panel(W / 2, y, 368, 54, 0.7);
-      this.txt(34, y - 9, numerals[i] + ' · ' + SAGAS[i].toUpperCase(), 16, '#8a8094').setOrigin(0, 0.5);
-      this.txt(34, y + 11, '3 levels · coming soon', 12, '#6f6678', { fontStyle: 'normal' }).setOrigin(0, 0.5);
+      const y = 588 + (i - 2) * 46;
+      this.panel(W / 2, y, 368, 40, 0.7);
+      this.txt(34, y, numerals[i] + ' · ' + SAGAS[i].toUpperCase(), 15, '#8a8094').setOrigin(0, 0.5);
+      this.txt(250, y, 'coming soon', 11, '#6f6678', { fontStyle: 'normal' });
       this.txt(338, y, 'LOCKED', 12, '#8a8094');
     }
   }
@@ -1121,11 +1127,142 @@ class SettingsScene extends MenuBase {
 /* ============================================================
    GAME — the run
    ============================================================ */
+// The how-to-play pages. Shown before level 1 the first time, and from HOW TO PLAY on the sagas screen.
+// Each page has a picture made from the game's own art, a title and a few lines. SKIP is always there.
+class TutorialScene extends MenuBase {
+  constructor() { super('Tutorial'); }
+  init(data) { this.then = data && data.then; this.page = 0; }
+  create() {
+    this.backdrop('TUTORIAL');
+    this.show();
+  }
+  done() {
+    Save.tutorial = true; Save.save();
+    if (this.then) this.scene.start('Game', { level: this.then, tips: true });
+    else this.scene.start('Sagas');
+  }
+  show() {
+    if (this.pageUi) { this.pageUi.forEach(o => o.destroy()); this.tweens.killAll(); }
+    const before = new Set(this.children.list);
+    const P = TutorialScene.PAGES[this.page], last = this.page === TutorialScene.PAGES.length - 1;
+    this.panel(W / 2, 250, 368, 300);
+    const art = this.add.container(0, 0);
+    P.draw(this, art);
+    this.txt(W / 2, 438, P.title, 22, '#ffd54f', { stroke: '#2a0a14', strokeThickness: 5 });
+    this.txt(W / 2, 508, P.text, 15, '#fff3e0', { fontStyle: 'normal', align: 'center', wordWrap: { width: 360 }, lineSpacing: 5 });
+    TutorialScene.PAGES.forEach((_, i) => {                  // page dots
+      this.add.circle(W / 2 + (i - (TutorialScene.PAGES.length - 1) / 2) * 16, 584, i === this.page ? 5 : 3.5, i === this.page ? 0xffd54f : 0x8a8094);
+    });
+    if (this.page > 0) this.button(104, 640, 130, 50, 0x4a3f63, '‹ BACK', 16, () => { this.page--; this.show(); });
+    this.button(this.page > 0 ? 278 : W / 2, 640, this.page > 0 ? 210 : 260, 54, last ? 0x2e7d32 : 0xc62828,
+      last ? (this.then ? 'START LEVEL 1' : 'DONE') : 'NEXT ›', 19, () => { if (last) this.done(); else { this.page++; this.show(); } });
+    if (!last) this.button(346, 92, 76, 30, 0x3a3050, 'SKIP', 13, () => this.done());
+    this.pageUi = this.children.list.filter(o => !before.has(o));
+  }
+  // Helpers for the pictures.
+  pic(c, x, y, key, k = 1) { const o = this.img(x, y, key).setScale(S * k); c.add(o); return o; }
+  army(c, x, y, n = 5) {
+    const g = this.add.container(x, y); c.add(g);
+    for (let i = 0; i < n; i++) {
+      const sx = (i % 3 - 1) * 20, sy = Math.floor(i / 3) * 16;
+      g.add(this.img(sx, sy, 'samurai')); g.add(this.sword(sx + 9, sy + 5));
+    }
+    g.add(this.txt(0, -28, String(n), 15, '#fff', { stroke: '#000', strokeThickness: 3 }));
+    return g;
+  }
+  gate(c, x, y, label, good) {
+    const g = this.add.graphics(); c.add(g);
+    const col = good ? 0x1565c0 : 0xb71c1c;
+    g.fillStyle(col, 0.55).fillRect(x - 58, y - 22, 116, 44).lineStyle(3, 0xffffff, 0.8).strokeRect(x - 58, y - 22, 116, 44);
+    g.fillStyle(col, 1).fillRect(x - 64, y - 30, 128, 8).fillRect(x - 60, y - 22, 6, 50).fillRect(x + 54, y - 22, 6, 50);
+    c.add(this.txt(x, y, label, 24, '#fff', { stroke: '#000', strokeThickness: 4 }));
+  }
+  sway(target, dx, ms = 900) { this.tweens.add({ targets: target, x: target.x + dx, duration: ms, yoyo: true, repeat: -1, ease: 'Sine.inOut' }); }
+  finger(c, x, y, dx) {
+    const f = this.add.circle(x, y, 13, 0xffffff, 0.75).setStrokeStyle(3, 0xffd54f); c.add(f);
+    this.sway(f, dx);
+  }
+}
+TutorialScene.PAGES = [
+  { title: 'STEER YOUR ARMY', text: 'Slide your finger left and right\nanywhere on the path to move your samurai.',
+    draw(sc, c) {
+      const a = sc.army(c, 140, 250, 5); sc.sway(a, 120);
+      sc.finger(c, 140, 345, 120);
+      c.add(sc.txt(W / 2, 140, '‹   slide   ›', 22, '#ffd54f'));
+    } },
+  { title: 'PICK YOUR GATES', text: 'BLUE gates add samurai.\nRED gates take them away.\nThe number over your army is how many you have.',
+    draw(sc, c) {
+      sc.gate(c, 122, 170, '−2', false); sc.gate(c, 278, 170, '+3', true);
+      const a = sc.army(c, 200, 300, 5);
+      sc.tweens.add({ targets: a, x: 278, y: 230, duration: 1300, repeat: -1, repeatDelay: 500, ease: 'Sine.inOut' });
+    } },
+  { title: 'FIGHT!', text: 'Your samurai attack on their own.\nKeep your army big, and steer around spikes.',
+    draw(sc, c) {
+      [[150, 140], [200, 130], [250, 145], [175, 175], [230, 180]].forEach(([x, y]) => sc.pic(c, x, y, 'zombie'));
+      sc.army(c, 200, 300, 6);
+      const sl = sc.pic(c, 200, 215, 'slash', 1.2); sc.tweens.add({ targets: sl, alpha: 0.1, duration: 300, yoyo: true, repeat: -1 });
+      sc.pic(c, 310, 290, 'spike', 1.3);
+      c.add(sc.txt(310, 322, 'avoid!', 13, '#ff8a80'));
+    } },
+  { title: 'DODGE THE BOSS', text: 'RED circle: the boss strikes there.\nORANGE circle: a big attack, twice as hard.\nSlide out before it lands!',
+    draw(sc, c) {
+      sc.pic(c, 200, 150, 'giant', 0.9);
+      const g = sc.add.graphics(); c.add(g);
+      g.fillStyle(0xff1744, 0.3).fillEllipse(140, 300, 150, 70).lineStyle(3, 0xff8a80, 1).strokeEllipse(140, 300, 150, 70);
+      g.fillStyle(0xff6d00, 0.3).fillEllipse(300, 300, 120, 56).lineStyle(3, 0xffab91, 1).strokeEllipse(300, 300, 120, 56);
+      const a = sc.army(c, 140, 300, 4);
+      sc.tweens.add({ targets: a, x: 222, duration: 900, repeat: -1, repeatDelay: 600, ease: 'Cubic.out' });
+      c.add(sc.txt(222, 352, 'DODGED', 16, '#80d8ff', { stroke: '#000', strokeThickness: 3 }));
+    } },
+  { title: 'FIND THE SAFE LANE', text: 'Some bosses light up lanes or circles.\nMove to the spot that is NOT lit up.',
+    draw(sc, c) {
+      const g = sc.add.graphics(); c.add(g);
+      [0, 1, 3].forEach(i => g.fillStyle(0xb388ff, 0.3).fillRect(40 + i * 80, 110, 76, 270).lineStyle(2, 0xb388ff, 1).strokeRect(40 + i * 80, 110, 76, 270));
+      c.add(sc.txt(200, 130, 'safe', 15, '#b9f6ca'));
+      const a = sc.army(c, 118, 320, 4);
+      sc.tweens.add({ targets: a, x: 200, duration: 1000, repeat: -1, repeatDelay: 700, ease: 'Cubic.out' });
+    } },
+  { title: 'SLOW MOTION', text: 'Defeating enemies fills your SPECIAL bar.\nWhen it is full, tap SLOW to slow time down.',
+    draw(sc, c) {
+      const g = sc.add.graphics(); c.add(g);
+      g.fillStyle(0x000000, 0.5).fillRoundedRect(60, 240, 200, 16, 8).fillStyle(0x7c4dff, 1).fillRoundedRect(62, 242, 196, 12, 6);
+      c.add(sc.txt(160, 220, 'SPECIAL', 13, '#b39ddb'));
+      const b = sc.add.circle(310, 248, 40, 0x4a2a80).setStrokeStyle(4, 0xb39ddb); c.add(b);
+      c.add(sc.txt(310, 248, 'SLOW', 16));
+      sc.tweens.add({ targets: b, scale: 1.12, duration: 500, yoyo: true, repeat: -1 });
+      sc.finger(c, 310, 300, 0);
+    } },
+  { title: 'LUCKY CHARMS', text: 'A glowing lucky cat slides across some levels.\nBreak it for +10% blade damage this run.',
+    draw(sc, c) {
+      const gl = sc.pic(c, 120, 220, 'glow', 2), ch = sc.pic(c, 120, 220, 'charm', 1.6);
+      sc.sway(gl, 160, 1400); sc.sway(ch, 160, 1400);
+    } },
+  { title: 'COINS & UPGRADES', text: 'Kills earn coins. Spend them before a level:\nRANGE hits from further away,\nCOIN REWARD gives more coins per kill.',
+    draw(sc, c) {
+      [['ATTACK\nSPEED', 0x2e7d32], ['BLADE\nDAMAGE', 0x1565c0], ['RANGE', 0xc62828], ['COIN\nREWARD', 0x6a1b9a]].forEach(([t, col], i) => {
+        const x = 62 + i * 92, g = sc.add.graphics(); c.add(g);
+        g.fillStyle(0x120b18, 1).fillRoundedRect(x - 40, 170, 80, 130, 10).fillStyle(col, 1).fillRoundedRect(x - 40, 170, 80, 34, { tl: 10, tr: 10, bl: 0, br: 0 });
+        c.add(sc.txt(x, 187, t, 10, '#fff', { align: 'center', lineSpacing: -2 }));
+        c.add(sc.txt(x, 240, 'Lv 1', 18));
+      });
+      const coin = sc.pic(c, 170, 130, 'soul', 2); c.add(sc.txt(220, 130, '+ coins', 18, '#ffe082'));
+      sc.tweens.add({ targets: coin, y: 122, duration: 400, yoyo: true, repeat: -1 });
+    } },
+  { title: 'GEAR & STORE', text: 'Beat a saga boss to win his weapon and armor.\nPut them on in EQUIPMENT before a level.\nThe STORE is coming soon. Good luck, samurai!',
+    draw(sc, c) {
+      sc.pic(c, 200, 170, 'thunder', 0.75);
+      const e = sc.button(120, 320, 130, 38, 0x4a3f63, 'EQUIPMENT', 13, () => {}), st = sc.button(280, 320, 130, 38, 0xb26a00, 'STORE', 13, () => {});
+      [e.g, e.t, e.z, st.g, st.t, st.z].forEach(o => c.add(o));
+    } },
+];
+
 class GameScene extends BaseScene {
   constructor() { super('Game'); }
   init(data) {
     this.levelNo = clamp((data && data.level) || 1, 1, LEVELS.length);
     this.L = LEVELS[this.levelNo - 1];
+    this.tips = !!(data && data.tips);   // straight after the tutorial: short hints pause the first level at the right moments
+    this.tipsShown = {};
   }
 
   create() {
@@ -1487,6 +1624,7 @@ class GameScene extends BaseScene {
     if (this.L.storm) this.updateStorm(wdt);
     this.drawBolts(wdt);
     this.updateHud(dt);
+    if (this.tips) this.updateTips();
 
     if (this.count <= 0) this.finish(false);
     else if (this.finaleDone && this.dist >= this.L.length) this.finish(true);
@@ -2082,6 +2220,38 @@ class GameScene extends BaseScene {
 
   /* ---------- pause ---------- */
   // Freezes the run and shows the pause menu: sound switches, resume, quit.
+  // Live hints for a first-time player, each shown once.
+  updateTips() {
+    const b = this.boss;
+    const gate = this.gates.find(g => !g.used && g.y > 200);
+    if (gate) return this.tip('gate', 'Slide your finger to steer.\nGo through the BLUE gate to add samurai!', true);
+    if (this.enemies.some(e => !e.r && e.kind !== 'wall' && e.y > 330)) this.tip('fight', 'Enemies! Your samurai fight on their own.\nThe bigger your army, the stronger it is.', true);
+    if (this.charge >= this.specialMax && this.slowLeft <= 0) this.tip('slow', 'Your SLOW power is ready!\nTap the SLOW button (bottom right) to slow time.', true);
+    if (this.fight && b && b.state === 'wind' && b.t < b.windFull * 0.5) {      // once the circle has lit up
+      if (!b.style) this.tip('swing', 'RED circle: the boss will strike right there.\nSlide out of it before it lands!');
+      else if (b.zones) this.tip('zones', 'GREEN circles: grave hands are about to burst up!\nMove to a spot with no circle.');
+      else this.tip('power', 'ORANGE circle: a big power attack!\nGet clear fast, it hits twice as hard.');
+    }
+  }
+
+  tip(key, text, low) {
+    if (this.tipsShown[key] || this.paused || this.over) return;
+    this.tipsShown[key] = true;
+    this.paused = true; this.time.paused = true; this.tweens.pauseAll();
+    const before = new Set(this.children.list);
+    this.add.rectangle(W / 2, H / 2, W, H, 0x05020c, 0.35).setInteractive();       // swallows touches meant for the game
+    const g = this.add.graphics();
+    const top = low ? 340 : 92;
+    g.fillStyle(0x1c1220, 0.96).fillRoundedRect(24, top, 352, 132, 14).lineStyle(3, 0xffd54f, 0.9).strokeRoundedRect(24, top, 352, 132, 14);
+    this.txt(W / 2, top + 48, text, 15, '#fff3e0', { align: 'center', wordWrap: { width: 330 }, lineSpacing: 4 });
+    this.button(W / 2, top + 102, 140, 38, 0x2e7d32, 'GOT IT', 16, () => {
+      ui.forEach(o => o.destroy());
+      this.paused = false; this.time.paused = false; this.tweens.resumeAll();
+    });
+    const ui = this.children.list.filter(o => !before.has(o));
+    ui.forEach((o, i) => o.setDepth(7000 + i));
+  }
+
   setPaused(on) {
     if (this.over || (on && this.paused)) return;
     this.paused = on;
@@ -2279,7 +2449,7 @@ window.samuraiGame = new Phaser.Game({
   height: H * R,
   backgroundColor: '#120c14',
   scale: { mode: Phaser.Scale.FIT, autoCenter: Phaser.Scale.CENTER_BOTH },
-  scene: [BootScene, MenuScene, SagaScene, SettingsScene, GameScene],
+  scene: [BootScene, MenuScene, SagaScene, SettingsScene, TutorialScene, GameScene],
 });
 </script>
 </body>
