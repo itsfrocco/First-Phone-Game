@@ -39,7 +39,13 @@ Also say one visible thing that tells them they have the new version.
 | `Save`, `Stats` | localStorage keys (`samurai_*`) and upgrade formulas. Four upgrade cards: attack speed (`fire`), blade damage, range, coin reward (`revenue`). The currency is shown as coins but is still called `souls` in the code and the save, so old saves carry over |
 | `Sound`, `Music` | Web Audio synth. Music modes: menu (arcade theme), run, boss, storm, stormBoss |
 | `Art` | Every texture, drawn with Canvas 2D at device resolution. The only image file is `menu.jpg`, loaded in `BootScene`; its PLAY and SETTINGS buttons are painted in, with invisible touch areas over them in `MenuScene`. `Art.menuBg` and plain buttons are the fallback if it does not load (always the case from `file://`) |
-| Scenes | `MenuScene`, `SagaScene`, `SettingsScene`, `GameScene` |
+| Scenes | `MenuScene`, `SagaScene`, `SettingsScene`, `TutorialScene`, `GameScene` |
+
+Tutorial: `TutorialScene.PAGES` are nine picture pages (steer, gates, fight, red/orange circles, safe lanes, SLOW,
+lucky charm, upgrade cards, gear and store) with SKIP on every page. Tapping level 1 opens them while
+`Save.tutorial` (`samurai_tutorial`) is false; finishing or skipping sets it and starts level 1 with `tips: true`,
+which pauses that run once for each live hint (`updateTips`/`tip`: gate, enemies, SLOW ready, boss red circle,
+green grave hands). HOW TO PLAY above saga 1 on the sagas screen replays the pages (owner wanted it there, not in Settings).
 
 Inside `GameScene`: the pause menu (`setPaused`; music, sound effects and screen shake switches, resume, quit),
 the level start screen (upgrade cards, Equipment menu, Store), then per frame
