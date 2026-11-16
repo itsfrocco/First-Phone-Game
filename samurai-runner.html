@@ -122,7 +122,7 @@ const LEVEL_SPECS = [
   { name: 'The Tengu', demons: true, rows: 12, seg: 370, pack: [4, 1.9, 0.22], crowd: 0.16, hp: 5, charms: [[4, 10], 8, 3],
     bosses: [{ type: 'giant', after: 6, hp: 720 }, { type: 'tengu', after: 'end', hp: 1800 }] },
   { name: 'The Fat Demon', demons: true, rows: 16, seg: 370, pack: [4.8, 1.9, 0.13], crowd: 0.14, hp: 8, charms: [[5, 11, 15], 11, 4],
-    bosses: [{ type: 'giant', after: 8, hp: 2300 }, { type: 'demon', after: 'end', hp: 3800 }] },
+    bosses: [{ type: 'giant', after: 8, hp: 2070 }, { type: 'demon', after: 'end', hp: 3420 }] },
   // The saga boss stage: a short run to build an army, then the fight.
   { name: 'Takemikazuchi', demons: true, storm: true, rows: 8, seg: 370, pack: [5, 2.4, 0.30], crowd: 0.15, hp: 8, pace: 1.2, charms: [[4], 11, 0],
     bosses: [{ type: 'thunder', after: 'end', hp: 3500 }] },
@@ -179,9 +179,11 @@ function layoutLevel(spec, index) {
   L.saga = Math.floor(index / (SAGA_LEVELS + 1));
   if (!spec.storm && spec.rows >= 6 && index > 0) {              // not in the very first level (owner)
     const busy = i => (spec.charms && spec.charms[0].includes(i)) || (spec.walls && spec.walls[0].includes(i)) || spec.bosses.some(b => b.after === i) || L.weapons.includes(i);
-    const pick = (f, list) => { let i = Math.round(spec.rows * f); while (i < spec.rows - 1 && (busy(i) || L.logs.includes(i))) i++; if (!busy(i) && !L.logs.includes(i)) list.push(i); };
-    [0.35, 0.7].forEach(f => pick(f, L.weapons));
-    [0.52, 0.86].forEach(f => pick(f, L.logs));              // log rows: one or two obstacles in front of the blue gate
+    // Spread evenly and kept out of the crowded last quarter (owner). A busy row moves one back, else one or two on.
+    const pick = (f, list) => { const r = Math.round(spec.rows * f), i = [r, r - 1, r + 1, r + 2].find(i => i > 0 && i < spec.rows - 2 && !busy(i) && !L.logs.includes(i)); if (i) list.push(i); };
+    // Log rows put one or two obstacles in front of the blue gate. Saga 1 has one a level, later sagas two (owner: not too many early).
+    if (L.saga === 0) { pick(0.3, L.weapons); pick(0.5, L.logs); pick(0.7, L.weapons); }
+    else { pick(0.2, L.logs); pick(0.38, L.weapons); pick(0.58, L.logs); pick(0.8, L.weapons); }
   }
   return L;
 }

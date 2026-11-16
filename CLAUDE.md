@@ -90,6 +90,9 @@ and often block for a moment (bot still never crushed). Log rows (`L.logs`, `log
 five sixths in, put one or two of the same obstacles in front of the blue gate with the red gate beside it ("LOGS AHEAD");
 same Range 3 rule, same health sums, none in level 1. The owner does not want obstacles all the time.
 Level 1 was shortened to 9 rows (owner: a tiny bit too long). The upgrade reminder shows on saga 1 levels 1-3 only.
+Then (owner: level 3's obstacles all came at the crowded end): rows are spread evenly and kept out of the last quarter. Saga 1
+levels have a weapon row about 30% and 70% in and one log row at half way; later sagas have two of each (20/38/58/80%).
+Level 3's giant and fat demon lost 10% health (2070 and 3420).
 
 ## Testing
 
@@ -145,6 +148,9 @@ The owner has a Mac with Xcode, so step 5 is done there, with step-by-step instr
 Still waiting on the owner: what the shop should sell.
 
 ## Open ideas
+
+- Split path, asked for by the owner, read back to them, not built yet: once a level a wall runs down the middle of the road
+  for a stretch. One side has four or five logs in a row with a weapon at the end, the other the usual enemies.
 
 - Controls discussed with the owner, not built yet: flick up for an ultimate (a meter filled by kills; a full-width
   wind wave that breaks walls, cuts the front enemies, flips a gate it hits higher, hurts bosses) and later flick
