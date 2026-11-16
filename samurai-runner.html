@@ -45,7 +45,7 @@ const CFG = {
   specialsPerLevel: 2.7,   // the bar is sized so a level's regular enemies fill it about this many times
   // The ultimate (flick up): a wave of wind that sweeps up the whole screen. It cuts down every ordinary enemy it passes,
   // breaks walls and logs, and takes `bossShare` of a boss's full health. Its bar fills with kills, about `perLevel` times a level.
-  ult: { perLevel: 2.3, min: 40, bossShare: 0.12, speed: 950, flickPx: 70, flickMs: 350 },
+  ult: { perLevel: 2.55, walls: 2, min: 40, bossShare: 0.12, speed: 950, flickPx: 70, flickMs: 350 },
   charmDamageUp: 1.10,     // each lucky charm broken: +10% blade damage for the rest of the run
   bossSlow: 0.97,          // the run slows 3% once the boss is down
   shake: 0.4,              // screen-shake strength multiplier (0 = off)
@@ -97,20 +97,20 @@ const CFG = {
   // A stone wall stands in front of some blue gates. The army cuts at it from `range` away; if it still stands when they reach it, it crushes them all.
   // A wall still standing when the army reaches it blocks the way: the run slows to `pushSlow` and the wall shoves the army
   // down the screen until it breaks, the army steps around it, or the army is pushed to `crushY` (the run ends).
-  wall: { lead: 64, range: 200, half: 66, souls: 5, pushSlow: 0.3, crushY: 676 },      // lead: how far in front of its gate it stands; half: half its width
+  wall: { lead: 64, range: 200, half: 66, souls: 5, pushSlow: 0.5, crushY: 676 },      // lead: how far in front of its gate it stands; half: half its width
   // Weapon or multiplier: in a weapon row the red gate is swapped for a weapon with two obstacles in front of it, so the player
   // chooses the blue gate or cuts through to the weapon. Only once the Range card is at `minRange` (logs; stone from `stoneRange`).
   // The obstacles' health is set as they come into view from the army's damage, swing speed and size right then, so they always
   // break in time: `margin` of what the army could cut in the time it has. Picking the weapon up gives one random boost for the
   // rest of the run (they add up): `dmg` more damage, `speed` faster swings, or `rangeLevels` extra Range levels.
-  weapon: { minRange: 3, stoneRange: 6, gap: 92, margin: { log: 0.8, stone: 0.85 }, minHp: 3, dmg: 0.20, speed: 0.15, rangeLevels: 5 },
+  weapon: { minRange: 3, stoneRange: 6, gap: 92, margin: { log: 1.4, stone: 1.45 }, minHp: 3, dmg: 0.20, speed: 0.15, rangeLevels: 5 },
   // The saga boss stage's storm: every `everyMs` a wave of lightning sweeps down the lane the army stands in.
   storm: { everyMs: [4600, 5800], warnMs: 1100, sweepMs: 380, half: 52, cleave: 2, cleaveShare: 0.08 },
   // Futsu-no-mitama: its lightning adds to hits on some kinds of foe and is shrugged off by others. Everything else takes normal damage.
   thunderBlade: { strong: ['water', 'metal', 'flying'], strongBonus: 0.15, weak: ['earth', 'fire', 'thunder'], weakPenalty: 0.15 },
   // The split path, once a level: a fence down the middle of the road. One side is `logs` obstacles in a row (health as for weapon
   // rows, with its own `margin`; `extra` road after it leaves room to reach either gate of the next row) and a cage of `civilians` at the end, which gives a weapon boost; the other is that row's enemies.
-  split: { before: 30, length: 450, extra: 280, logs: [4, 5], first: 40, span: 290, cage: 395, margin: 0.95, civilians: 10, edge: 146, pack: 0.4 },
+  split: { before: 30, length: 450, extra: 280, logs: [4, 5], first: 40, span: 290, cage: 395, margin: 1.25, civilians: 10, edge: 146, pack: 0.4 },
   levelPace: 0.10,         // each level in a saga runs this much faster than the one before (the army and the enemies)
 };
 
@@ -133,7 +133,7 @@ const LEVEL_SPECS = [
   { name: 'Takemikazuchi', demons: true, storm: true, rows: 8, seg: 370, pack: [5, 2.4, 0.30], crowd: 0.15, hp: 8, pace: 1.2, charms: [[4], 11, 0],
     bosses: [{ type: 'thunder', after: 'end', hp: 3500 }] },
   // Saga 2, Mountain Pass. `theme` picks the scenery, `foe` the common enemy.
-  { name: 'The Rock Oni', theme: 'mountain', foe: 'rockOni', demons: false, rows: 14, seg: 370, pack: [7, 3.0, 0.26], crowd: 0.15, hp: 13, charms: [[5, 10], 14, 4], walls: [[4], 80, 0],
+  { name: 'The Rock Oni', theme: 'mountain', foe: 'rockOni', demons: false, rows: 14, seg: 370, pack: [7, 3.0, 0.26], crowd: 0.15, hp: 13, charms: [[5, 10], 14, 4], walls: [[4], 120, 0],
     bosses: [{ type: 'rock', after: 'end', hp: 6000 }] },
 ];
 // Equipment, chosen on a level's start screen: one weapon, one armor, one necklace. `boss: true` items are won by beating the saga boss.
@@ -1755,6 +1755,8 @@ class GameScene extends BaseScene {
     this.boltG = this.add.graphics().setDepth(2960);        // lightning
     this.shade = this.add.rectangle(W / 2, H / 2, W, H, 0x05020c, 1).setAlpha(0).setDepth(-5);   // darkens the ground during a power-up
     this.slowTint = this.add.rectangle(W / 2, H / 2, W, H, 0x5e35b1, 1).setAlpha(0).setDepth(3600);
+    this.crushG = this.add.graphics().setDepth(4400);       // the red line an obstacle pushes the army toward
+    this.crushText = this.txt(W / 2, 0, '', 20, '#ff5252', { stroke: '#000', strokeThickness: 5 }).setDepth(4401).setVisible(false);
     this.ultG = this.add.graphics().setDepth(2970).setBlendMode(Phaser.BlendModes.ADD);       // the ultimate's wave
   }
 
@@ -2104,6 +2106,40 @@ class GameScene extends BaseScene {
     Sound.play('buy'); this.shake(160, 0.006);
   }
 
+  // The cage's reward: the run pauses and the player takes one free, permanent level of any upgrade card.
+  offerUpgrade() {
+    if (this.over || this.paused) { if (!this.over) this.time.delayedCall(300, () => this.offerUpgrade()); return; }
+    this.paused = true; this.time.paused = true; this.tweens.pauseAll();
+    const before = new Set(this.children.list);
+    this.add.rectangle(W / 2, H / 2, W, H, 0x05020c, 0.55).setInteractive();
+    const g = this.add.graphics();
+    g.fillStyle(0x1c1220, 0.97).fillRoundedRect(10, 196, 380, 290, 14).lineStyle(3, 0xffd54f, 0.9).strokeRoundedRect(10, 196, 380, 290, 14);
+    this.txt(W / 2, 226, 'CIVILIANS FREED!', 24, '#ffd54f', { stroke: '#2a0a14', strokeThickness: 5 });
+    this.txt(W / 2, 256, 'They thank you. Choose one FREE upgrade:', 13, '#fff3e0', { fontStyle: 'normal' });
+    this.freePick = key => {
+      if (key === 'range' && Stats.rangeMaxed()) { Sound.play('deny'); return; }
+      Save[key]++; Save.save(); Sound.play('buy');
+      ui.forEach(o => o.destroy());
+      this.freePick = null;
+      this.paused = false; this.time.paused = false; this.tweens.resumeAll();
+      this.banner({ fire: 'ATTACK SPEED', damage: 'BLADE DAMAGE', range: 'RANGE', revenue: 'COIN REWARD' }[key] + ' UP!', 'now level ' + Save[key] + ', for good');
+      this.cameras.main.flash(200, 255, 214, 110);
+    };
+    [['fire', 'ATTACK\nSPEED', 0x2e7d32], ['damage', 'BLADE\nDAMAGE', 0x1565c0], ['range', 'RANGE', 0xc62828], ['revenue', 'COIN\nREWARD', 0x6a1b9a]].forEach(([key, title, color], i) => {
+      const x = 59 + i * 94, y = 372, w = 86, h = 170, maxed = key === 'range' && Stats.rangeMaxed();
+      g.fillStyle(0x120b18, 1).fillRoundedRect(x - w / 2, y - h / 2, w, h, 12);
+      g.fillStyle(color, 1).fillRoundedRect(x - w / 2, y - h / 2, w, 36, { tl: 12, tr: 12, bl: 0, br: 0 });
+      g.lineStyle(2, 0xffffff, 0.25).strokeRoundedRect(x - w / 2, y - h / 2, w, h, 12);
+      this.txt(x, y - h / 2 + 18, title, 11, '#fff', { align: 'center', lineSpacing: -2 });
+      this.txt(x, y - 22, 'Lv ' + Save[key], 15, '#cfc3d6');
+      this.txt(x, y + 4, maxed ? 'MAX' : '▼\nLv ' + (Save[key] + 1), 18, '#ffe082', { align: 'center', lineSpacing: -4 });
+      const b = this.button(x, y + 56, 76, 40, maxed ? 0x4a4250 : color, maxed ? 'MAX' : 'FREE', 15, () => this.freePick(key));
+      if (maxed) b.t.setColor('#9a90a0');
+    });
+    const ui = this.children.list.filter(o => !before.has(o));
+    ui.forEach((o, i) => o.setDepth(7000 + i));
+  }
+
   // The split path: keeps the army and that row's enemies on their own sides of the fence, and opens the cage.
   updateSplit() {
     const sp = this.split, C = CFG.split;
@@ -2118,7 +2154,9 @@ class GameScene extends BaseScene {
     if (!sp.freed && this.splitSide === sp.logSide && cg.y >= this.formY - 44 && !sp.walls.some(e => e.hp > 0 && !e.gone)) {
       sp.freed = true;
       Save.civilians += C.civilians; Save.save();
-      this.grantBoost('the lock snaps: ' + C.civilians + ' civilians freed!');
+      this.banner('CIVILIANS FREED', 'the lock snaps: ' + C.civilians + ' saved!');
+      this.cameras.main.flash(160, 255, 200, 60); this.shake(160, 0.006);
+      this.time.delayedCall(650, () => this.offerUpgrade());
       this.float(cg.x, cg.y - 46, '+' + C.civilians + ' SAVED', '#a5d6a7', 22);
       Sound.play('wallBreak');
       this.tweens.add({ targets: cg.obj, alpha: 0.35, duration: 300 });
@@ -2128,6 +2166,25 @@ class GameScene extends BaseScene {
       }
     }
   }
+  // While an obstacle is shoving the army: a red line where the clan dies, the screen reddening as they near it, and an alarm.
+  drawCrush(blocked) {
+    const g = this.crushG; g.clear();
+    this.crushShow = (this.crushShow || 0) + ((blocked ? 1 : 0) - (this.crushShow || 0)) * 0.15;
+    const a = this.crushShow;
+    if (a < 0.02) { this.crushText.setVisible(false); return; }
+    const C = CFG.wall, near = clamp((this.formY - CFG.armyY) / (C.crushY - CFG.armyY), 0, 1);       // 0: just blocked, 1: at the line
+    const beat = 0.5 + 0.5 * Math.sin(this.time.now * (0.008 + near * 0.022)), ly = C.crushY + 14;
+    g.fillStyle(0xff1744, a * (0.12 + near * 0.3) * (0.6 + beat * 0.4)).fillRect(0, 0, W, H);          // the whole screen reddens
+    for (let i = 0; i < 6; i++) g.fillStyle(0xd50000, a * (0.5 - i * 0.07)).fillRect(0, ly + i * 8, W, 8);
+    g.lineStyle(4, 0xff5252, a * (0.6 + beat * 0.4)).lineBetween(0, ly, W, ly);
+    for (let x = 8; x < W; x += 24) g.fillStyle(0xffffff, a * 0.9).fillTriangle(x, ly, x + 8, ly - 12 - beat * 4, x + 16, ly);   // teeth along it
+    this.crushText.setVisible(true).setAlpha(a * (0.5 + beat * 0.5)).setPosition(W / 2, CFG.armyY - 150).setText(near > 0.55 ? 'BREAK IT NOW!' : 'BREAK IT OR BE CRUSHED!').setScale(1 + near * 0.25 * beat);
+    if (blocked) {
+      this.crushBeep = (this.crushBeep || 0) - 1;
+      if (this.crushBeep <= 0) { this.crushBeep = 34 - near * 24; Sound.play('warn'); }
+    }
+  }
+
   // Steering limits: the army keeps to its side of the fence.
   steerClamp(x) {
     const e = CFG.split.edge;
@@ -2159,6 +2216,7 @@ class GameScene extends BaseScene {
       if (Math.abs(this.armyX - e.x) >= CFG.wall.half || e.y > this.formY + 10) { if (e.y > this.formY + 10) e.passed = true; return; }   // around it
       blocked = e;                                           // in its way: the wall shoves the army down the screen
     });
+    this.drawCrush(blocked);
     if (blocked && !this.blockedBy) { Sound.play('slam'); this.shake(220, 0.012); this.float(this.armyX, this.formY - 50, 'BLOCKED!', '#ff5252', 24); }
     this.blockedBy = blocked;
     if (blocked) {
@@ -2576,7 +2634,10 @@ class GameScene extends BaseScene {
   activateUlt() {
     if (!this.started || this.over || this.paused || this.ultWave || this.ultCharge < this.ultMax) return;
     this.ultCharge = 0; this.ultUsed++;
-    this.ultWave = { y: this.formY - 10, hit: new Set(), tail: 0 };
+    // Of the obstacles, only the nearest `walls` break (those in the army's own lane first).
+    const walls = this.enemies.filter(e => e.kind === 'wall' && !e.gone && e.hp > 0 && e.y > -20 && e.y < this.formY + 30)
+      .sort((a, b) => (Math.abs(a.x - this.armyX) < CFG.wall.half ? 0 : 1000) - a.y - ((Math.abs(b.x - this.armyX) < CFG.wall.half ? 0 : 1000) - b.y)).slice(0, CFG.ult.walls);
+    this.ultWave = { y: this.formY + 30, hit: new Set(), tail: 0, walls };
     Sound.play('ultimate');
     this.cameras.main.flash(260, 255, 214, 110);
     this.shake(450, 0.012);
@@ -2595,6 +2656,7 @@ class GameScene extends BaseScene {
     for (const e of [...this.enemies]) {
       if (e.gone || e.hp <= 0 || w.hit.has(e) || e.y < w.y || e.y < -20 || e.y > H + 20) continue;
       w.hit.add(e);
+      if (e.kind === 'wall' && !w.walls.includes(e)) continue;
       this.strike(e, e.prof ? e.maxHp * CFG.ult.bossShare : e.hp, { x: e.x, y: e.y + 40 });
       if (e.prof && !e.air && !e.powering) { this.float(e.x, e.y - 50, 'DRAGON SLASH!', '#ffe082', 18); this.shake(250, 0.014); }
     }
