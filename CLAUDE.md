@@ -72,8 +72,10 @@ levels headlessly, check for errors and see where the difficulty lands. Chromium
 are preinstalled in cloud sessions. Audio cannot be heard there; say so when reporting.
 
 Balance as last tuned (attack speed and blade damage both at the stated level, dodging bot):
-level 1 wins with no upgrades; level 2 needs about 2; level 3 about 4 (3 loses to the mid giant); the saga boss about 5
-(4 loses, and the bot that never dodges loses at 5). Bot mode "dodge wall" walks into stone walls.
+level 1 wins with no upgrades; level 2 needs about 2; level 3 about 3-4 (3 wins or loses to the mid giant); the saga
+boss about 5-6 (5 wins about half the time, 6 wins). Bot mode "dodge wall" walks into stone walls.
+Owner's later trims: levels 2 and 3 have 20% fewer enemies, the run scrolls 10% slower (`CFG.baseSpeed` 81),
+Takemikazuchi has 4300 health, and coins per kill are 1.25 plus 0.75 per Coin Reward level (was 1.5 per level).
 Saga 2 level 1 (stage 5) is tuned for about 5: the dodging bot wins from 3 up, the bot that never dodges loses at 5.
 Range is an extra, optional card: spending coins on it helps about as much as the same coins on speed and
 damage (level 3: speed/damage 2 loses, adding Range 5 wins). Range grows 1m (9px) a level and has its own cheaper
