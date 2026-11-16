@@ -9,6 +9,7 @@ const { chromium } = require('playwright');
 // upgradeLevel sets attack speed and blade damage; an optional 4th entry sets Range. "dodge" reacts to boss attacks and storm
 // waves after 0.3s; "stand" never dodges. Add "wall" to the mode (e.g. "dodge wall") to walk into stone walls,
 // "split" to take the log side of the split path and free the civilians (otherwise it takes the enemy side),
+// "ult" to use the ultimate when its bar is full (in a boss fight, or with six or more enemies on screen),
 // and "weapon" to always take the weapon side of a weapon row (Range 3+) and cut through its obstacles. The bot is sharper than a person, so treat a
 // narrow bot win as "hard" for a real player.
 const path = require('path');
@@ -51,6 +52,7 @@ const GAME = 'file://' + path.resolve(__dirname, '..', 'samurai-runner.html');
         const spike = sc.spikes.find(o => !o.hit && o.y > sc.formY - 110 && o.y < sc.formY + 40);
         if (spike && Math.abs(spike.x - tx) < 45 && !(gate && gate.y > 430) && !(wall && wall.y > sc.formY - 70)) tx = spike.x < 200 ? 270 : 130;
         if (sc.charge >= sc.specialMax && sc.slowLeft <= 0) sc.activateSpecial();
+        if (mode.includes('ult') && sc.ultCharge >= sc.ultMax && (sc.fight || sc.enemies.filter(e => !e.gone && e.kind !== 'wall' && e.y > 0 && e.y < 720).length >= 6)) sc.activateUlt();
         const bo = sc.boss;
         if (sc.fight && bo) {
           if (bo !== lastBoss) { lastBoss = bo; at.push(bo.kind + ':' + sc.count); ff = 0; }
@@ -75,7 +77,7 @@ const GAME = 'file://' + path.resolve(__dirname, '..', 'samurai-runner.html');
         sc.targetX = tx;
         step(); f++;
       }
-      out.push([level, 'up' + up + (range ? '+R' + range : ''), mode, sc.finaleDone && sc.count > 0 ? 'WIN ' : 'lose', 'left ' + sc.count, Math.round(f / 60) + 's', 'dist ' + Math.round(100 * sc.dist / sc.L.length) + '%', at.join(' '), (lastBoss && lastBoss.phase2 ? 'phase2' : ''), 'fight ' + secs.join('/') + 's', 'souls ' + sc.earned, 'dmg x' + sc.dmgMod.toFixed(2), 'enemies ' + total, 'bar ' + sc.specialMax, miss ? 'MISS x' + miss : '', 'walls ' + walls.join(' '), 'boost ' + JSON.stringify(sc.boost), sc.split ? 'split ' + (sc.split.freed ? 'FREED' : 'not freed') : '', sc.crushed ? 'CRUSHED' : ''].join(' | '));
+      out.push([level, 'up' + up + (range ? '+R' + range : ''), mode, sc.finaleDone && sc.count > 0 ? 'WIN ' : 'lose', 'left ' + sc.count, Math.round(f / 60) + 's', 'dist ' + Math.round(100 * sc.dist / sc.L.length) + '%', at.join(' '), (lastBoss && lastBoss.phase2 ? 'phase2' : ''), 'fight ' + secs.join('/') + 's', 'souls ' + sc.earned, 'dmg x' + sc.dmgMod.toFixed(2), 'enemies ' + total, 'bar ' + sc.specialMax, 'ult ' + sc.ultUsed + ' used (bar ' + sc.ultMax + ', ' + Math.round(sc.ultCharge) + ' in it)', miss ? 'MISS x' + miss : '', 'walls ' + walls.join(' '), 'boost ' + JSON.stringify(sc.boost), sc.split ? 'split ' + (sc.split.freed ? 'FREED' : 'not freed') : '', sc.crushed ? 'CRUSHED' : ''].join(' | '));
     }
     return out;
   }, CASES);
