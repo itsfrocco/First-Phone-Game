@@ -48,17 +48,22 @@ the level start screen (upgrade cards, Equipment menu, Store), then per frame
 
 All big fights (giant zombie, tengu, fat demon, Takemikazuchi, rock oni) share one cycle in `updateBoss`:
 chase, wind-up with a warning zone, strike, recover. A profile in `CFG.bosses` sets speeds,
-damage, combos, power attacks (`jump`, `fly`, `bolt`, `dash`) and an optional second phase.
+damage, combos, power attacks (`jump`, `fly`, `bolt`, `dash`, `bounce`, and the multi-zone `hands`, `feathers`,
+`drums` from `zonesFor`) and an optional second phase. The saga 1 bosses were made tougher at the owner's request
+(more health, faster to follow, quicker leaps) and each got a new attack: giant zombie Grave Hands (green circles under
+and beside the army), tengu Feather Storm (all lanes but one), fat demon Belly Bounce (three re-aimed slams),
+Takemikazuchi Thunder Drums (all lanes but one, twice in phase 2). The rock oni was left as it is (the owner likes it).
 
 Range: each level adds `CFG.rangeStep` to the samurai's reach, up to `CFG.rangeMax`. A foe beyond melee reach
 is hit by a wind slash (`windSlash`) that lands on a timer, not on its tween (tweens never finish in the bot's
 no-render mode). Walls are cut at when nothing is closer. Slashes do not touch gates; flipping gates was
 planned for a flick-up ultimate.
 
-Stone walls (`kind: 'wall'`, an entry in `enemies`) stand in front of a few blue gates. Samurai with no
-enemy in reach cut at a wall from `CFG.wall.range` away; one still standing when the army reaches it in
-that lane ends the run ("CLAN CRUSHED"). Steering to the red gate avoids it. Late in a level the army is
-too busy with packs to dent a wall, so walls sit in early and middle rows with modest health.
+Stone walls (`kind: 'wall'`, an entry in `enemies`) stand in front of a few blue gates, never in saga 1 and only a
+few after (the owner's wish; stage 5 has one). Samurai with no enemy in reach cut at a wall from `CFG.wall.range` away.
+One still standing when the army reaches it in that lane blocks it ("BLOCKED!"): the run slows to `CFG.wall.pushSlow`
+and the wall shoves the army down the screen (`push`, `blockedBy`) until it breaks or the army steers around it; pushed
+to `CFG.wall.crushY` the run ends ("CLAN CRUSHED"). An earlier push version was reverted; the owner asked for this one.
 
 ## Testing
 
@@ -67,7 +72,8 @@ levels headlessly, check for errors and see where the difficulty lands. Chromium
 are preinstalled in cloud sessions. Audio cannot be heard there; say so when reporting.
 
 Balance as last tuned (attack speed and blade damage both at the stated level, dodging bot):
-level 1 wins with no upgrades; level 2 needs about 2; level 3 about 3; the saga boss about 5.
+level 1 wins with no upgrades; level 2 needs about 2; level 3 about 4 (3 loses to the mid giant); the saga boss about 5
+(4 loses, and the bot that never dodges loses at 5). Bot mode "dodge wall" walks into stone walls.
 Saga 2 level 1 (stage 5) is tuned for about 5: the dodging bot wins from 3 up, the bot that never dodges loses at 5.
 Range is an extra, optional card: spending coins on it helps about as much as the same coins on speed and
 damage (level 3: speed/damage 2 loses, adding Range 5 wins). Range grows 1m (9px) a level and has its own cheaper
