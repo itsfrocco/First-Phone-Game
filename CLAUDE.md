@@ -94,6 +94,16 @@ Then (owner: level 3's obstacles all came at the crowded end): rows are spread e
 levels have a weapon row about 30% and 70% in and one log row at half way; later sagas have two of each (20/38/58/80%).
 Level 3's giant and fat demon lost 10% health (2070 and 3420).
 
+The split path (`CFG.split`, `L.split`, `buildSplit`, `updateSplit`), once per ordinary level from level 2 on, with no Range
+requirement (owner): the later weapon row is replaced by a stretch with no gates where a palisade fence runs down the
+middle of the road. One side has four or five logs in a row (stone in saga 2+ with Range 6; health follows the army as for
+weapon rows, `margin` 0.95) and a steel cage at the end: reaching it with the logs broken snaps the lock, ten civilians
+run back down the road, `Save.civilians` goes up by 10 and the clan gets a random weapon boost. The other side has that
+row's enemies only (`pack` 0.4 of the usual number, as there is no gate to make up losses; no gates, owner's wish). The
+army is held to its side while beside the fence (`splitSide`, `steerClamp`), the pack keeps to its side and runs straight
+past if the army took the logs, and blades do not reach across. The next gate row is `extra` further on so either gate
+can still be reached. Bot mode "split" takes the log side. Both sides win at the usual upgrade levels.
+
 ## Testing
 
 There is no test suite. Use `tools/bot-test.js` (instructions at the top of that file) to play
@@ -149,11 +159,8 @@ Still waiting on the owner: what the shop should sell.
 
 ## Open ideas
 
-- Split path, asked for by the owner, being agreed, not built yet: once a level (replacing one of the two weapon rows) a wall
-  runs down the middle of the road for a stretch. One side has four or five logs in a row and, at the end, a steel cage of
-  civilians: the lock snaps open easily, they escape back down the road, and the clan gets a weapon boost like a weapon row.
-  The other side is the usual enemies. Keep a saved running total of civilians freed: the owner will later add rewards for
-  100, 200, 300 and so on (not designed yet).
+- Rewards for civilians saved (100, 200, 300 and so on): the owner will design them later. The total is already kept
+  (`Save.civilians`, `samurai_civilians`) and shown on the sagas screen.
 
 - Controls discussed with the owner, not built yet: flick up for an ultimate (a meter filled by kills; a full-width
   wind wave that breaks walls, cuts the front enemies, flips a gate it hits higher, hurts bosses) and later flick

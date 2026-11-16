@@ -105,6 +105,9 @@ const CFG = {
   storm: { everyMs: [4600, 5800], warnMs: 1100, sweepMs: 380, half: 52, cleave: 2, cleaveShare: 0.08 },
   // Futsu-no-mitama: its lightning adds to hits on some kinds of foe and is shrugged off by others. Everything else takes normal damage.
   thunderBlade: { strong: ['water', 'metal', 'flying'], strongBonus: 0.15, weak: ['earth', 'fire', 'thunder'], weakPenalty: 0.15 },
+  // The split path, once a level: a fence down the middle of the road. One side is `logs` obstacles in a row (health as for weapon
+  // rows, with its own `margin`; `extra` road after it leaves room to reach either gate of the next row) and a cage of `civilians` at the end, which gives a weapon boost; the other is that row's enemies.
+  split: { before: 30, length: 450, extra: 280, logs: [4, 5], first: 40, span: 290, cage: 395, margin: 0.95, civilians: 10, edge: 146, pack: 0.4 },
   levelPace: 0.10,         // each level in a saga runs this much faster than the one before (the army and the enemies)
 };
 
@@ -158,21 +161,6 @@ function layoutLevel(spec, index) {
   L.theme = spec.theme || ''; L.foe = spec.foe || 'zombie';
   L.storm = !!spec.storm;                                    // dark sky, broken ground and lightning waves
   L.pace = spec.pace || 1 + CFG.levelPace * (index % (SAGA_LEVELS + 1));                 // level 1, 2, 3 of each saga
-  let d = 300;
-  const hp = spec.hp;
-  for (let i = 0; i < spec.rows; i++) {
-    const good = GOOD_GATES[i];
-    L.gates.push({ d, bad: { op: '-', n: Math.round(2 + i * 1.5) }, good: { op: good[0], n: +good.slice(1) } });
-    // The first pack hangs back so a lone samurai gets through the first gate before anything reaches it.
-    L.packs.push({ d: d + (i ? 150 : 420), n: Math.round(spec.pack[0] + spec.pack[1] * i + spec.pack[2] * i * i), gap: 14 / (1 + spec.crowd * i), hp });
-    if (i % 2 === 1 || i > spec.rows * 0.6) L.spikes.push(d + spec.seg / 2);      // midway between gate rows; more of them late on
-    d += spec.seg;
-    const mid = spec.bosses.find(b => b.after === i);
-    if (mid) { L.bosses.push({ type: mid.type, hp: mid.hp, at: d + 200, trickleHp: hp }); d += 630; }   // gap keeps gates off screen during the fight
-  }
-  const end = spec.bosses.find(b => b.after === 'end');
-  if (end) { L.bosses.push({ type: end.type, hp: end.hp, at: d + 200, trickleHp: hp }); d += 200; }
-  L.length = d + 100;
   // Weapon rows (see CFG.weapon): about a third and two thirds of the way in, never in the saga boss stage,
   // and moved along a row if that row already has a lucky charm or stone wall, or a big fight right after it.
   L.weapons = []; L.logs = [];
@@ -184,7 +172,30 @@ function layoutLevel(spec, index) {
     // Log rows put one or two obstacles in front of the blue gate. Saga 1 has one a level, later sagas two (owner: not too many early).
     if (L.saga === 0) { pick(0.3, L.weapons); pick(0.5, L.logs); pick(0.7, L.weapons); }
     else { pick(0.2, L.logs); pick(0.38, L.weapons); pick(0.58, L.logs); pick(0.8, L.weapons); }
+    if (L.weapons.length > 1) L.split = L.weapons.pop();       // the later weapon row becomes the split path (CFG.split)
   }
+  let d = 300;
+  const hp = spec.hp;
+  for (let i = 0; i < spec.rows; i++) {
+    const good = GOOD_GATES[i];
+    if (i === L.split) {                                     // no gates here: the road divides, and this row's pack keeps to one side
+      L.gates.push({ d, split: true });
+      L.packs.push({ d: d + 110, n: Math.round(CFG.split.pack * (spec.pack[0] + spec.pack[1] * i + spec.pack[2] * i * i)), gap: 14 / (1 + spec.crowd * i) / CFG.split.pack, hp, split: true });   // a smaller pack: there is no gate to make up the losses
+      L.splitAt = d;
+      d += spec.seg + CFG.split.extra;
+      continue;
+    }
+    L.gates.push({ d, bad: { op: '-', n: Math.round(2 + i * 1.5) }, good: { op: good[0], n: +good.slice(1) } });
+    // The first pack hangs back so a lone samurai gets through the first gate before anything reaches it.
+    L.packs.push({ d: d + (i ? 150 : 420), n: Math.round(spec.pack[0] + spec.pack[1] * i + spec.pack[2] * i * i), gap: 14 / (1 + spec.crowd * i), hp });
+    if (i % 2 === 1 || i > spec.rows * 0.6) L.spikes.push(d + spec.seg / 2);      // midway between gate rows; more of them late on
+    d += spec.seg;
+    const mid = spec.bosses.find(b => b.after === i);
+    if (mid) { L.bosses.push({ type: mid.type, hp: mid.hp, at: d + 200, trickleHp: hp }); d += 630; }   // gap keeps gates off screen during the fight
+  }
+  const end = spec.bosses.find(b => b.after === 'end');
+  if (end) { L.bosses.push({ type: end.type, hp: end.hp, at: d + 200, trickleHp: hp }); d += 200; }
+  L.length = d + 100;
   return L;
 }
 const LEVELS = LEVEL_SPECS.map(layoutLevel);
@@ -200,6 +211,7 @@ const Save = {
   music: true, sfx: true, shake: true,
   armor: '', weapon: '', necklace: '',   // equipped gear ids
   tutorial: false,               // true once the how-to-play pages have been seen or skipped
+  civilians: 0,                  // civilians freed from cages, all runs together (rewards at 100, 200... are planned)
   load() {
     const num = (k, def) => {
       try { const v = parseInt(localStorage.getItem(k), 10); return Number.isFinite(v) ? v : def; }
@@ -215,6 +227,7 @@ const Save = {
     this.sfx = num('samurai_sfx', 1) === 1;
     this.shake = num('samurai_shake', 1) === 1;
     this.tutorial = num('samurai_tutorial', 0) === 1;
+    this.civilians = num('samurai_civilians', 0);
     try { this.armor = localStorage.getItem('samurai_armor') || ''; this.weapon = localStorage.getItem('samurai_weapon') || ''; this.necklace = localStorage.getItem('samurai_necklace') || ''; } catch (e) {}
   },
   save() {
@@ -229,12 +242,13 @@ const Save = {
       localStorage.setItem('samurai_sfx', this.sfx ? 1 : 0);
       localStorage.setItem('samurai_shake', this.shake ? 1 : 0);
       localStorage.setItem('samurai_tutorial', this.tutorial ? 1 : 0);
+      localStorage.setItem('samurai_civilians', this.civilians);
       localStorage.setItem('samurai_armor', this.armor);
       localStorage.setItem('samurai_weapon', this.weapon);
       localStorage.setItem('samurai_necklace', this.necklace);
     } catch (e) {}
   },
-  resetProgress() { this.souls = 0; this.fire = this.damage = this.range = this.revenue = this.level = 1; this.armor = this.weapon = this.necklace = ''; this.tutorial = false; this.save(); },
+  resetProgress() { this.souls = 0; this.fire = this.damage = this.range = this.revenue = this.level = 1; this.armor = this.weapon = this.necklace = ''; this.tutorial = false; this.civilians = 0; this.save(); },
 };
 Save.load();
 window.addEventListener('pagehide', () => Save.save());
@@ -844,6 +858,36 @@ const Art = {
     trunk(43, 4, 128, 10); trunk(26, 14, 120, 9.5); trunk(11, 30, 104, 8.5);
     c.fillStyle = '#4c8a3a'; [[10, 53], [40, 54], [92, 54], [120, 53]].forEach(([x, y]) => { Art.tri(c, [x - 3, y], [x - 1, y - 6], [x, y], '#4c8a3a'); Art.tri(c, [x, y], [x + 2, y - 5], [x + 3, y], '#5fa348'); });
   },
+  // A palisade post for the fence that divides the road.
+  fence(c) {
+    Art.ell(c, 8, 33, 8, 3, 'rgba(0,0,0,0.35)');
+    c.fillStyle = '#3e2a1c'; c.beginPath(); c.moveTo(2, 33); c.lineTo(2, 8); c.lineTo(8, 0); c.lineTo(14, 8); c.lineTo(14, 33); c.closePath(); c.fill();
+    c.fillStyle = Art.grad(c, 3, 0, 13, 0, [[0, '#8d6e4f'], [0.6, '#6d4c33'], [1, '#4a3222']]); c.beginPath(); c.moveTo(3.2, 32); c.lineTo(3.2, 8.6); c.lineTo(8, 2); c.lineTo(12.8, 8.6); c.lineTo(12.8, 32); c.closePath(); c.fill();
+    c.fillStyle = '#d7c9a8'; c.fillRect(2, 16, 12, 2.4); c.fillStyle = '#a89878'; c.fillRect(2, 18, 12, 0.8);     // rope
+  },
+  // A villager: straw hat, plain robe. Tinted for variety.
+  civilian(c) {
+    Art.shadow(c, 10, 26, 6);
+    c.fillStyle = '#3b2a20'; c.fillRect(7, 21, 2.4, 5); c.fillRect(10.6, 21, 2.4, 5);
+    Art.rr(c, 5, 11, 10, 12, 3); c.fillStyle = '#e8e0d0'; c.fill();
+    c.fillStyle = '#b9ad98'; c.fillRect(5, 17, 10, 1.6);
+    Art.ell(c, 10, 8.4, 3.6, 3.4, '#f2c9a0');
+    Art.tri(c, [2, 7.6], [10, 1], [18, 7.6], '#d9b25f'); c.fillStyle = '#a8842f'; c.fillRect(2, 7.2, 16, 1);
+  },
+  // The steel cage the civilians are held in: heads behind bars, a lock on the front.
+  cage(c) {
+    Art.ell(c, 48, 66, 46, 6, 'rgba(0,0,0,0.4)');
+    c.fillStyle = 'rgba(12,14,20,0.78)'; c.fillRect(8, 12, 80, 50);
+    [[20, 40, '#f2c9a0'], [34, 44, '#e8b98c'], [48, 39, '#f2c9a0'], [62, 44, '#e8b98c'], [76, 40, '#f2c9a0']].forEach(([x, y, skin]) => {
+      Art.rr(c, x - 6, y + 4, 12, 16, 3); c.fillStyle = '#d8d0c0'; c.fill();
+      Art.ell(c, x, y, 4.4, 4.2, skin); Art.tri(c, [x - 8, y - 1.6], [x, y - 8], [x + 8, y - 1.6], '#d9b25f');
+    });
+    for (let x = 10; x <= 86; x += 9.5) { c.fillStyle = '#5a626c'; c.fillRect(x - 1.8, 10, 3.6, 54); c.fillStyle = '#aeb6c0'; c.fillRect(x - 1.8, 10, 1.3, 54); }
+    [[4, 6, 88, 7], [4, 58, 88, 7]].forEach(([x, y, w, h]) => { Art.rr(c, x, y, w, h, 2); c.fillStyle = '#3f464f'; c.fill(); c.fillStyle = '#8f98a3'; c.fillRect(x + 2, y + 1, w - 4, 1.6); });
+    Art.rr(c, 42, 30, 12, 11, 2); c.fillStyle = '#ffca28'; c.fill(); c.strokeStyle = '#8a5a00'; c.lineWidth = 1; c.stroke();
+    c.strokeStyle = '#cfd8dc'; c.lineWidth = 2.2; c.beginPath(); c.arc(48, 30, 4, Math.PI, 0); c.stroke();
+    c.fillStyle = '#5d4000'; c.fillRect(47, 33.5, 2, 4);
+  },
   rock(c) { Art.ell(c, 6, 6, 6, 5, '#2e3238'); Art.ell(c, 6, 5.6, 4.6, 3.8, '#7d848d'); Art.ell(c, 5, 4.4, 2.6, 1.6, '#a9b0b8'); },
   slash(c) {
     c.beginPath(); c.arc(24, 24, 20, -1.2, 1.2); c.arc(15, 24, 21, 1.0, -1.0, true); c.closePath();
@@ -976,7 +1020,7 @@ const Art = {
     m('samurai', 36, 50); m('katana', 12, 36); m('demon', 32, 40); m('zombie', 32, 40); m('boss', 130, 126); m('giant', 110, 130); m('thunder', 130, 134);
     Art.make(scene, 'tenguBoss', 130, 120, Art.tengu); m('charm', 40, 44); m('glow', 64, 64);
     m('rockOni', 32, 40); m('rockBoss', 130, 130); m('rockGround', 64, 64); m('stonePath', 280, 128); m('cliff', 72, 80); m('boulder', 30, 24);
-    m('spike', 36, 28); m('wall', 132, 60); m('log', 132, 60); m('rock', 12, 12); m('slash', 48, 48); m('soul', 16, 16); m('dot', 8, 8); m('petal', 8, 6);
+    m('spike', 36, 28); m('wall', 132, 60); m('log', 132, 60); m('fence', 16, 36); m('civilian', 20, 28); m('cage', 96, 70); m('rock', 12, 12); m('slash', 48, 48); m('soul', 16, 16); m('dot', 8, 8); m('petal', 8, 6);
     m('grass', 64, 64); m('path', 280, 128); m('lantern', 24, 42); m('deadTree', 60, 58); m('rubble', 30, 24); m('crack', 60, 40); m('tree', 60, 58); m('menuBg', W, H);
   },
 };
@@ -1087,6 +1131,7 @@ class SagaScene extends MenuBase {
     // Saga 1: open, with its three levels.
     this.panel(W / 2, 254, 368, 264);
     this.txt(34, 146, numerals[0] + ' · ' + SAGAS[0].toUpperCase(), 17, '#ffd54f').setOrigin(0, 0.5);
+    if (Save.civilians > 0) this.txt(W - 34, 146, 'Civilians saved: ' + Save.civilians, 12, '#a5d6a7', { fontStyle: 'normal' }).setOrigin(1, 0.5);
     this.txt(34, 168, Save.level > SAGA_LEVELS + 1 ? 'saga cleared' : Save.level > SAGA_LEVELS ? 'the saga boss awaits' : 'level ' + Save.level + ' of ' + SAGA_LEVELS, 12, '#cfc3d6', { fontStyle: 'normal' }).setOrigin(0, 0.5);
     LEVELS.slice(0, SAGA_LEVELS).forEach((L, i) => {
       const n = i + 1, x = 82 + i * 118, open = n <= Save.level, done = n < Save.level;
@@ -1321,6 +1366,8 @@ class GameScene extends BaseScene {
     this.blockedBy = null;         // the wall the army is pressed against, if any
     this.wallSeen = false;         // the first wall of a run gets a warning banner
     this.weaponSeen = this.logSeen = false;       // ...and the first weapon row
+    this.split = null;             // this level's split path, if any (buildLevel)
+    this.splitSide = 0;            // -1 or 1 while the army is beside the fence, on that side of it
     this.boost = { dmg: 0, speed: 0, range: 0 };   // weapons picked up this run (CFG.weapon)
     this.fight = false;            // true while the scroll is stopped for a big fight
     this.boss = null;              // the next (or current) big fight; set in buildLevel
@@ -1556,6 +1603,7 @@ class GameScene extends BaseScene {
 
   buildLevel() {
     this.L.gates.forEach((g, i) => {
+      if (g.split) return;
       const goodLeft = Math.random() < 0.5;
       this.gates.push({
         d: g.d, used: false, weaponRow: this.L.weapons.includes(i), logRow: this.L.logs.includes(i),
@@ -1563,15 +1611,18 @@ class GameScene extends BaseScene {
         right: this.makeGate(270, goodLeft ? g.bad : g.good, !goodLeft),
       });
     });
+    if (this.L.splitAt) this.buildSplit();
     this.L.packs.forEach(pk => {
       for (let i = 0; i < pk.n; i++) {
         const demon = this.L.demons && Math.random() < CFG.enemy.demonShare;
-        this.addEnemy(demon ? 'demon' : this.L.foe, 85 + Math.random() * 230, pk.d + i * pk.gap, Math.round(pk.hp * (demon ? CFG.enemy.demonHp : 1)));
+        const x = pk.split ? W / 2 + this.split.foeSide * (22 + Math.random() * 100) : 85 + Math.random() * 230;       // the split's pack keeps to its side
+        const e = this.addEnemy(demon ? 'demon' : this.L.foe, x, pk.d + i * pk.gap, Math.round(pk.hp * (demon ? CFG.enemy.demonHp : 1)));
+        if (pk.split) e.splitSide = this.split.foeSide;
       }
     });
     const [charmRows, charmHp, charmGrow] = this.L.charms;
     charmRows.forEach((row, idx) => {
-      const e = this.addEnemy('charm', 100 + Math.random() * 200, this.gates[row].d - CFG.charm.lead, charmHp + charmGrow * idx);
+      const e = this.addEnemy('charm', 100 + Math.random() * 200, this.L.gates[row].d - CFG.charm.lead, charmHp + charmGrow * idx);
       const glow = this.img(0, 0, 'glow').setBlendMode(Phaser.BlendModes.ADD);
       e.sprite = e.obj;                                      // the cat itself, for hit flashes
       e.obj = this.add.container(e.x, -200, [glow, e.sprite.setPosition(0, 0)]);
@@ -1579,7 +1630,7 @@ class GameScene extends BaseScene {
     });
     const [wallRows, wallHp, wallGrow] = this.L.walls;
     wallRows.forEach((row, idx) => {
-      const gate = this.gates[row], side = gate.left.good ? gate.left : gate.right;
+      const gate = this.gates.find(g => g.d === this.L.gates[row].d), side = gate.left.good ? gate.left : gate.right;
       const e = this.addEnemy('wall', side.x, gate.d - CFG.wall.lead, wallHp + wallGrow * idx);
       e.sprite = e.obj.setOrigin(0.5, 0.62);
       e.label = this.txt(0, -40, '', 26, '#fff', { stroke: '#3a0d14', strokeThickness: 6 });
@@ -1598,6 +1649,31 @@ class GameScene extends BaseScene {
     this.specialMax = Math.max(CFG.specialMax, Math.round(this.enemies.length / CFG.specialsPerLevel));
     this.boss = this.bosses[0] || null;
     this.finaleDone = !this.boss;
+  }
+
+  // The split path: a fence down the middle, logs and a cage on one side, this row's enemies on the other.
+  buildSplit() {
+    const C = CFG.split, d0 = this.L.splitAt, logSide = Math.random() < 0.5 ? -1 : 1, x = W / 2 + logSide * 70;
+    const sp = this.split = { dA: d0 - C.before, dB: d0 - C.before + C.length, logSide, foeSide: -logSide, walls: [], gap: 0, margin: C.margin };
+    for (let d = sp.dA; d <= sp.dB; d += 15) this.decor.push({ d, x: W / 2, obj: this.img(0, -200, 'fence') });
+    sp.mat = this.L.saga > 0 && Save.range >= CFG.weapon.stoneRange ? 'stone' : 'log';
+    const n = C.logs[Math.floor(Math.random() * C.logs.length)];
+    sp.gap = C.span / (n - 1);
+    for (let i = 0; i < n; i++) sp.walls.push(this.addObstacle(x, d0 + C.first + i * sp.gap, sp.mat, false));
+    sp.cage = { d: d0 + C.cage, x, obj: this.img(0, -200, 'cage').setOrigin(0.5, 0.7) };
+    this.decor.push(sp.cage);
+  }
+
+  // A log pile or stone wall whose health follows the army (updateWeapons).
+  addObstacle(x, d, mat, forWeapon) {
+    const e = this.addEnemy('wall', x, d, CFG.weapon.minHp);
+    if (mat === 'log') e.obj.setTexture('log');
+    e.sprite = e.obj.setOrigin(0.5, 0.62);
+    e.label = this.txt(0, -40, '', 26, '#fff', { stroke: '#3a0d14', strokeThickness: 6 });
+    e.obj = this.add.container(e.x, -200, [e.sprite.setPosition(0, 0), e.label]);
+    Object.assign(e, { r: 20, souls: CFG.wall.souls, mat, weaponWall: true, forWeapon, y: CFG.armyY - (e.d - this.dist) });   // y set now: it is checked before the next draw
+    this.wallLabel(e);
+    return e;
   }
 
   makeGate(x, op, good) {
@@ -1723,6 +1799,7 @@ class GameScene extends BaseScene {
   persp(y) { return 0.7 + 0.3 * clamp((y - 60) / 500, 0, 1); }
 
   updateArmy(time, dt) {
+    this.targetX = this.steerClamp(this.targetX);
     this.armyX += (this.targetX - this.armyX) * damp(12, dt);
     const wantForm = !this.started ? 440 : this.fight ? this.boss.y + 92 : CFG.armyY + this.push;   // stands above the upgrade cards until the run begins
     this.formY += (wantForm - this.formY) * damp(5, dt);
@@ -1779,6 +1856,7 @@ class GameScene extends BaseScene {
       let best = null, bestD = reach, wall = null;
       near.forEach(e => {
         if (e.hp <= 0 || e.incoming >= e.hp) return;      // already finished off by a slash in flight
+        if (e.splitSide && this.splitSide === -e.splitSide && !this.split.done) return;      // across the fence
         if (e.kind === 'wall') {       // cut at from a distance, but anything closer comes first
           if (e.y > this.formY - Math.max(CFG.wall.range, reach) && e.y < this.formY && Math.abs(this.armyX - e.x) < CFG.wall.half && (!wall || e.y > wall.y)) wall = e;
           return;
@@ -1874,6 +1952,9 @@ class GameScene extends BaseScene {
     const backRow = this.soldiers.reduce((m, s) => Math.max(m, s.y), 0);
     pack.forEach(e => {
       const k = E[e.kind], run = k.speed * this.L.pace + (this.fight ? E.fightRush : 0);
+      // The split path's pack keeps to its side of the fence, and runs straight on if the army took the other side.
+      const fenced = e.splitSide && this.split && !this.split.done && e.d > this.split.dA;
+      if (fenced && this.splitSide === -e.splitSide) { e.hold = false; e.d -= run * wdt; e.obj.setRotation(0); return; }
       // Once past the back row an enemy gives up and keeps running off the bottom.
       if (e.passed || e.y > backRow + 12) { e.passed = true; e.hold = false; e.d -= run * wdt; e.obj.setRotation(0); return; }
       let near = null, L = Infinity;
@@ -1883,6 +1964,7 @@ class GameScene extends BaseScene {
       if (!e.hold) {
         const v = run * wdt / L;
         e.x = clamp(e.x + (near.x - e.x) * v, CFG.pathLeft + 12, CFG.pathRight - 12);
+        if (fenced) e.x = e.splitSide < 0 ? Math.min(e.x, W / 2 - 16) : Math.max(e.x, W / 2 + 16);
         e.d -= (near.y - e.y) * v;
         e.obj.setRotation(clamp((near.x - e.x) * 0.006, -0.2, 0.2));
         return;
@@ -1927,24 +2009,15 @@ class GameScene extends BaseScene {
       side.obj = this.add.container(side.x, -200, [glow, blade, tag]);
       Object.assign(side, { weapon: true, glow, blade });
       }
-      leads.forEach(lead => {
-        const e = this.addEnemy('wall', side.x, g.d - lead, C.minHp);
-        if (mat === 'log') e.obj.setTexture('log');
-        e.sprite = e.obj.setOrigin(0.5, 0.62);
-        e.label = this.txt(0, -40, '', 26, '#fff', { stroke: '#3a0d14', strokeThickness: 6 });
-        e.obj = this.add.container(e.x, -200, [e.sprite.setPosition(0, 0), e.label]);
-        Object.assign(e, { r: 20, souls: CFG.wall.souls, mat, weaponWall: true, forWeapon: g.weaponRow, y: CFG.armyY - (e.d - this.dist) });   // y set now: it is checked before the next draw
-        side.walls.push(e);
-        this.wallLabel(e);
-      });
+      leads.forEach(lead => side.walls.push(this.addObstacle(side.x, g.d - lead, mat, g.weaponRow)));
     });
     // Health tracks the army until they can cut at it.
     const n = Math.min(this.count, CFG.maxDrawn), dps = n * this.bladeDmg() * 1000 / this.swingMs();
     const speed = CFG.baseSpeed * this.L.pace * (1 + CFG.speedRamp * this.dist / this.L.length) * this.speedMod;
     const cutFrom = Math.max(CFG.wall.range, this.reachNow()) - 26;          // distance over which the first one can be cut before it blocks
-    this.gates.forEach(g => {
-      const side = g.blocked;
-      if (!side || g.used) return;
+    const groups = this.gates.filter(g => g.blocked && !g.used).map(g => g.blocked);
+    if (this.split && !this.split.done) groups.push(this.split);
+    groups.forEach(side => {
       if (side.weapon) {
         const pulse = Math.sin(this.time.now * 0.008);
         side.glow.setScale(S * (1.6 + pulse * 0.2)).setAlpha(0.75 + pulse * 0.2);
@@ -1954,9 +2027,9 @@ class GameScene extends BaseScene {
       const first = side.walls[0];
       if (first.y > this.formY - cutFrom - 50 || side.walls.some(e => e.hp < e.maxHp)) { side.locked = true; return; }
       // Time the army has, less the time it will spend cutting down the enemies that arrive in the meantime.
-      const foes = this.enemies.reduce((sum, e) => sum + (!e.r && !e.gone && e.y > first.y - CFG.weapon.gap - 150 ? Math.max(0, e.hp) : 0), 0);
-      const time = (cutFrom + CFG.weapon.gap * (side.walls.length - 1)) / speed;
-      const total = CFG.weapon.margin[side.mat] * dps * Math.max(0.3 * time, time - foes / Math.max(1, dps));
+      const foes = this.enemies.reduce((sum, e) => sum + (!e.r && !e.gone && !e.splitSide && e.y > first.y - CFG.weapon.gap - 150 ? Math.max(0, e.hp) : 0), 0);
+      const time = (cutFrom + (side.gap || CFG.weapon.gap) * (side.walls.length - 1)) / speed;
+      const total = (side.margin || CFG.weapon.margin[side.mat]) * dps * Math.max(0.3 * time, time - foes / Math.max(1, dps));
       side.walls.forEach(e => { e.hp = e.maxHp = Math.max(CFG.weapon.minHp, Math.round(total / side.walls.length)); this.wallLabel(e); });
     });
   }
@@ -1965,6 +2038,11 @@ class GameScene extends BaseScene {
   pickWeapon(side, other) {
     this.tweens.add({ targets: other.obj, alpha: 0.25, duration: 220 });
     if (side.walls.some(e => e.hp > 0 && !e.gone)) { this.float(this.armyX, this.formY - 40, 'MISSED', '#cfd8dc', 22); return; }
+    this.grantBoost();
+    this.tweens.add({ targets: side.obj, alpha: 0, duration: 260 });
+  }
+
+  grantBoost(note) {
     const C = CFG.weapon;
     const kinds = [['dmg', 'SHARP BLADE', 'damage +' + Math.round(C.dmg * 100) + '% for this run'],
       ['speed', 'SWIFT BLADE', 'swings ' + Math.round(C.speed * 100) + '% faster for this run'],
@@ -1972,14 +2050,44 @@ class GameScene extends BaseScene {
     const [key, title, sub] = kinds[Math.floor(Math.random() * kinds.length)];
     this.boost[key]++;
     this.lastWeapon = key;
-    this.banner(title, sub);
+    this.banner(title, note || sub);
     this.float(this.armyX, this.formY - 40, title, '#ffd54f', 24);
     this.cameras.main.flash(160, 255, 200, 60);
     Sound.play('buy'); this.shake(160, 0.006);
-    this.tweens.add({ targets: side.obj, alpha: 0, duration: 260 });
+  }
+
+  // The split path: keeps the army and that row's enemies on their own sides of the fence, and opens the cage.
+  updateSplit() {
+    const sp = this.split, C = CFG.split;
+    if (!sp || sp.done) return;
+    const nearY = CFG.armyY - (sp.dA - this.dist), farY = CFG.armyY - (sp.dB - this.dist);        // the fence's two ends on screen
+    if (!sp.seen && nearY > 60) { sp.seen = true; this.banner('THE ROAD SPLITS', (sp.mat === 'log' ? 'logs' : 'stone') + ' and a rescue, or the enemies'); }
+    if (farY > this.formY + 40) { sp.done = true; this.splitSide = 0; return; }                // behind the army now
+    const beside = nearY >= this.formY - 36;
+    if (beside && !this.splitSide) this.splitSide = this.armyX < W / 2 ? -1 : 1;
+    if (!beside) return;
+    const cg = sp.cage;
+    if (!sp.freed && this.splitSide === sp.logSide && cg.y >= this.formY - 44 && !sp.walls.some(e => e.hp > 0 && !e.gone)) {
+      sp.freed = true;
+      Save.civilians += C.civilians; Save.save();
+      this.grantBoost('the lock snaps: ' + C.civilians + ' civilians freed!');
+      this.float(cg.x, cg.y - 46, '+' + C.civilians + ' SAVED', '#a5d6a7', 22);
+      Sound.play('wallBreak');
+      this.tweens.add({ targets: cg.obj, alpha: 0.35, duration: 300 });
+      for (let i = 0; i < C.civilians; i++) {                // they run back the way the army came
+        const v = this.img(cg.x + (Math.random() - 0.5) * 70, cg.y - 6 + Math.random() * 14, 'civilian').setScale(S).setDepth(2800).setTint([0xffffff, 0xcfe8ff, 0xffe0b2, 0xd7ffd9][i % 4]);
+        this.tweens.add({ targets: v, x: clamp(v.x + (Math.random() - 0.5) * 60, 80, 320), y: H + 40, delay: i * 70, duration: 1500 + Math.random() * 500, ease: 'Sine.in', onComplete: () => v.destroy() });
+      }
+    }
+  }
+  // Steering limits: the army keeps to its side of the fence.
+  steerClamp(x) {
+    const e = CFG.split.edge;
+    return this.splitSide < 0 ? Math.min(x, e) : this.splitSide > 0 ? Math.max(x, W - e) : x;
   }
 
   updateHazards(wdt) {
+    this.updateSplit();
     this.updateWeapons();
     // Lucky charms slide from side to side and glow.
     this.enemies.forEach(e => {
