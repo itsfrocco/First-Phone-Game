@@ -130,15 +130,20 @@ The stronghold defence (`DefenseScene`, `CFG.fort`, `Save.forts` / `samurai_fort
 pouring down a lane at shooters): a second play style once per saga, required, played after the saga boss. Stage numbers were
 not changed; saga 2 is locked until `Save.forts >= 1`, so players who had already reached saga 2 must defend first (owner: it
 cannot be skipped). Saga 1's is a wooden compound in the grasslands; the owner wants each later saga's fort to suit its terrain.
-A row of archers on the wall follows the finger and fires straight up on its own; arrows hit the first enemy in their column.
-3 archers plus one per two Range levels (max 10); Attack Speed sets the firing rate (`fireMul`), Blade Damage the arrow damage.
-Twelve timed waves (about 3.5 minutes; owner wanted it long) of zombies and demons, with brutes (`Art.oni`, health number
-overhead) in the ranks from wave 3 and a helmeted warlord in the final wave. Enemies that reach the wall strike the gate
-(150 health); at 0 the stage is lost. Supply crates come down in a fixed order (`crates`: +1 archer, fire arrows that pierce,
-gate repair) and must be shot open before they reach the wall. SLOW works as in the run; the ultimate here is Arrow Storm
-(kills ordinary enemies, brutes lose 35%, the warlord 12%). Upgrade cards are on its start screen. Holding it pays 400 coins
-the first time, 100 after. `tools/fort-test.js` plays it: cases are [speed/damage level, Range level, mode]. As tuned: 3 loses at
-wave 5, 4 at waves 9-11, 5 wins about two times in three with the ultimate, 6 wins. Losses come fast once a crowd reaches the wall.
+Owner's follow-up after playing it: make it look like the ad. No grass (the whole screen is the compound's stone yard, `Art.yard`),
+and three lanes split by low walls (`laneL`, `laneR`): the MIDDLE is for the enemies, the LEFT and RIGHT for upgrades.
+Archers (in up to two ranks of `perRow`) follow the finger and fire straight up on their own, so where they stand picks the lane;
+arrows hit the first thing in their column. 3 archers plus one per two Range levels to start, at most 14. Attack Speed sets the
+firing rate (`fireMul`), Blade Damage the arrow damage. Left lane: a blue "+1" box every few seconds, +1 archer each, each one
+opened making later boxes tougher (`box.grow`). Right lane: slow gold chests with a health number and a prize in a fixed order
+(`chest.prizes`: fire arrows that pierce, +3 archers, gate repair, sharp arrows +25%). Boxes and chests that reach the wall are lost;
+the ultimate does not open them. Twelve timed waves (about 3.5 minutes; owner wanted it long) of zombies and demons in a dense
+crowd, brutes (`Art.oni`, health number overhead) in the ranks from wave 3, a helmeted warlord in the final wave. Enemies that
+reach the wall strike the gate (150 health); at 0 the stage is lost. SLOW works as in the run; the ultimate here is Arrow Storm
+(kills ordinary enemies, brutes lose 35%, the warlord 12%). Upgrade cards are on its start screen. Kills pay half the usual
+coins (`coinShare`, there are a lot of them); holding it pays 300 more the first time, 100 after (about 800 in all on a first win).
+`tools/fort-test.js` plays it: cases are [speed/damage level, Range level, mode]; the bot shoots the side lanes while no enemy is
+past mid-road. As tuned: 3 loses at wave 8, 4 at waves 11-12, 5 and up win. The bot always ends with all 14 archers.
 
 ## Testing
 
