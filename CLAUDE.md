@@ -165,6 +165,10 @@ labelled SUPPLIES) now delivers every 8.5s for the whole fight, in the order ban
   enemies in the blast die, brutes lose 40%, the warlord 8%. So the player waits for the crowd to be level with it.
 An idea offered and not built: boxes that build a ballista on the wall. As tuned: 3 loses at wave 8, 4 at wave 11, 5 wins or
 loses in the final wave, 6 and up win. The bot shoots barrels as soon as it can, so a player timing them does better.
+Then (owner: too long): ten waves instead of twelve, each about 15% more crowded, and the warlord has 220 health (was 180).
+Prizes must be caught (owner): a broken chest or "?" box drops its prize, which falls to the wall (`CFG.fort.drop`, `dropPrize`,
+`updateDrops`, `grant`); the archers must be under it when it lands or it is "MISSED". The banner and barrel are unchanged.
+The bot goes for a falling prize unless an enemy is close to the wall. As tuned: 4 loses at waves 7-9, 5 and up win.
 
 ## Testing
 
