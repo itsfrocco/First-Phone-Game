@@ -60,16 +60,25 @@ const CFG = {
       demon: { key: 'demon', hp: 2, speed: 150, hit: 2, ms: 1500, half: 13, tall: 30, stop: 12 },
       brute: { key: 'oni', hp: 30, speed: 52, hit: 4, ms: 1600, half: 26, tall: 60, stop: 26, scale: 1.5, big: true, souls: 6 },
       warlord: { key: 'warlord', hp: 180, speed: 24, hit: 12, ms: 2000, half: 50, tall: 120, stop: 56, scale: 1, big: true, souls: 80 },
-      box: { key: 'box', speed: 46, half: 40, tall: 30, stop: 6, crate: true },        // left lane: +1 archer each
+      banner: { key: 'recruit', speed: 46, half: 40, tall: 44, stop: 6, crate: true },   // left lane: a recruit banner; arrows raise its number, the wall collects it
+      mystery: { key: 'mystery', speed: 46, half: 40, tall: 30, stop: 6, crate: true },  // left lane: a "?" box with a short boost inside
+      barrel: { key: 'barrel', speed: 46, half: 22, tall: 38, stop: 6, crate: true },    // left lane: shot open, it rolls into the road and blows up
       chest: { key: 'chest', speed: 30, half: 40, tall: 36, stop: 6, crate: true },   // right lane: a big prize behind a lot of health
       log: { key: 'log', half: 40, tall: 30, stop: 6, crate: true, scale: 0.62 },     // rolls down a side lane in front of the boxes or the chest behind it
       leaf: { key: 'doorHalf', speed: 0, half: 19, tall: 34, stop: 6, crate: true },  // one open leaf of the main gate, at the edge of the middle road
     },
     // The main gate, half way up the middle road: two leaves standing open, the enemy running between them. Each leaf shot down to
     // 0 swings shut; with both shut the road is closed and the enemy has to break `barHp` of gate before it can go on.
-    door: { y: 290, hp: 250, barHp: 900, open: 34 },
+    door: { y: 290, hp: 1500, barHp: 900, open: 34 },      // 1500 a leaf: the owner's number
     log: { hp: 45, grow: 0.3, chest: 2.2 },       // a log's health, growing with each one broken; the chest's log is `chest` times that
-    box: { everyMs: 9500, n: 2, gap: 44, hp: 12, grow: 1.45 },   // left lane: a log, then `n` boxes behind it; each box opened makes the next tougher
+    // The left lane never stops: one delivery every `everyMs`, in the order of `order`. With the wall full of archers a banner's turn is a "?" box.
+    left: { everyMs: 8500, order: ['banner', 'mystery', 'banner', 'barrel'] },
+    // Recruit banner: starts at +`start`; every `hp` of arrow damage adds one, up to `max`. Each archer recruited makes the next step `grow` times dearer.
+    banner: { start: 1, max: 4, hp: 90, grow: 1.12 },
+    // "?" box behind a log: one of `prizes` at random. rapid = faster shots, twin = two arrows a shot, freeze = the road stands still, coins.
+    mystery: { hp: 30, grow: 0.2, prizes: ['rapid', 'twin', 'freeze', 'coins'], rapid: 0.6, rapidMs: 8000, twinMs: 8000, freezeMs: 2500, coins: 30 },
+    // Powder barrel: kills ordinary enemies within `r` of where it stops in the middle of the road; brutes lose `big`, the warlord `boss` of full health.
+    barrel: { hp: 40, grow: 0.25, r: 95, rollMs: 300, big: 0.4, boss: 0.08 },
     chest: { everyMs: 19000, firstMs: 5000, hp: 110, grow: 0.45, prizes: ['fire', 'archers', 'repair', 'sharp'] },
     fireMs: 12000, firePierce: 2, fireDmg: 1.5, repair: 50, moreArchers: 3, sharp: 0.25,
     ultBig: 0.35, ultBoss: 0.12, specials: 5, ults: 3.2,       // how many times a defence fills each bar
@@ -954,6 +963,30 @@ const Art = {
     c.strokeStyle = '#0d47a1'; c.lineWidth = 2; Art.rr(c, 2, 1, 80, 28, 5); c.stroke();
     Art.rr(c, 6, 4, 72, 8, 3); c.fillStyle = 'rgba(255,255,255,0.28)'; c.fill();
   },
+  recruit(c) {                                                // left lane: a blue war banner on a rolling stand
+    Art.ell(c, 42, 45, 30, 4, 'rgba(0,0,0,0.35)');
+    c.fillStyle = '#5d4037'; c.fillRect(8, 2, 4, 42); c.fillRect(72, 2, 4, 42); c.fillRect(4, 40, 76, 4);
+    Art.rr(c, 12, 4, 60, 32, 3); c.fillStyle = Art.grad(c, 0, 4, 0, 36, [[0, '#64b5f6'], [1, '#1565c0']]); c.fill();
+    c.strokeStyle = '#0d47a1'; c.lineWidth = 2; Art.rr(c, 12, 4, 60, 32, 3); c.stroke();
+    c.fillStyle = '#ffca28'; c.fillRect(12, 4, 60, 3); c.fillRect(6, 0, 8, 4); c.fillRect(70, 0, 8, 4);
+    Art.tri(c, [12, 36], [22, 36], [17, 42], '#1565c0'); Art.tri(c, [62, 36], [72, 36], [67, 42], '#1565c0');
+  },
+  mystery(c) {                                                // left lane: a purple "?" box
+    Art.rr(c, 2, 4, 80, 28, 5); c.fillStyle = 'rgba(0,0,0,0.35)'; c.fill();
+    Art.rr(c, 2, 1, 80, 28, 5); c.fillStyle = Art.grad(c, 0, 1, 0, 29, [[0, '#ba68c8'], [1, '#6a1b9a']]); c.fill();
+    c.strokeStyle = '#38006b'; c.lineWidth = 2; Art.rr(c, 2, 1, 80, 28, 5); c.stroke();
+    Art.rr(c, 6, 4, 72, 8, 3); c.fillStyle = 'rgba(255,255,255,0.28)'; c.fill();
+    c.fillStyle = '#ffd54f'; [[6, 22], [74, 22]].forEach(([x, y]) => c.fillRect(x, y, 4, 4));
+  },
+  barrel(c) {                                                 // left lane: a powder barrel with a lit fuse
+    Art.ell(c, 24, 41, 17, 4, 'rgba(0,0,0,0.35)');
+    Art.rr(c, 6, 8, 36, 32, 8); c.fillStyle = Art.grad(c, 6, 0, 42, 0, [[0, '#5d2a1a'], [0.45, '#c0392b'], [1, '#6d1f14']]); c.fill();
+    c.strokeStyle = '#2b0e08'; c.lineWidth = 2; Art.rr(c, 6, 8, 36, 32, 8); c.stroke();
+    c.fillStyle = '#37474f'; c.fillRect(6, 14, 36, 4); c.fillRect(6, 30, 36, 4);
+    c.fillStyle = '#fff3e0'; c.beginPath(); c.arc(24, 24, 5, 0, 7); c.fill(); c.fillStyle = '#2b0e08'; c.beginPath(); c.arc(24, 24, 2.4, 0, 7); c.fill();
+    c.strokeStyle = '#d7ccc8'; c.lineWidth = 1.6; c.beginPath(); c.moveTo(24, 8); c.quadraticCurveTo(30, 2, 34, 5); c.stroke();
+    c.shadowColor = '#ff9800'; c.shadowBlur = 6; c.fillStyle = '#ffeb3b'; c.beginPath(); c.arc(35, 5, 2.6, 0, 7); c.fill(); c.shadowBlur = 0;
+  },
   chest(c) {                                                  // right lane: a gold prize chest
     Art.rr(c, 2, 5, 80, 34, 5); c.fillStyle = 'rgba(0,0,0,0.35)'; c.fill();
     Art.rr(c, 2, 1, 80, 34, 5); c.fillStyle = Art.grad(c, 0, 1, 0, 35, [[0, '#ffe082'], [1, '#f9a825']]); c.fill();
@@ -1138,7 +1171,7 @@ const Art = {
     Art.make(scene, 'tenguBoss', 130, 120, Art.tengu); m('charm', 40, 44); m('glow', 64, 64);
     m('rockOni', 32, 40); m('rockBoss', 130, 130); m('rockGround', 64, 64); m('stonePath', 280, 128); m('cliff', 72, 80); m('boulder', 30, 24);
     m('spike', 36, 28); m('wall', 132, 60); m('log', 132, 60); m('fence', 16, 36); m('civilian', 20, 28); m('cage', 96, 70); m('rock', 12, 12); m('slash', 48, 48); m('soul', 16, 16); m('dot', 8, 8); m('petal', 8, 6);
-    m('archer', 36, 50); m('arrow', 8, 22); m('crate', 36, 32); m('box', 84, 34); m('doorHalf', 86, 40); m('chest', 84, 42); m('yard', 64, 64); m('divider', 10, 64); m('fort', W, 174); m('oni', 48, 54); m('warlord', 130, 150);
+    m('archer', 36, 50); m('arrow', 8, 22); m('crate', 36, 32); m('box', 84, 34); m('recruit', 84, 48); m('mystery', 84, 34); m('barrel', 48, 46); m('doorHalf', 86, 40); m('chest', 84, 42); m('yard', 64, 64); m('divider', 10, 64); m('fort', W, 174); m('oni', 48, 54); m('warlord', 130, 150);
     m('grass', 64, 64); m('path', 280, 128); m('lantern', 24, 42); m('deadTree', 60, 58); m('rubble', 30, 24); m('crack', 60, 40); m('tree', 60, 58); m('menuBg', W, H);
   },
 };
@@ -2966,7 +2999,8 @@ class DefenseScene extends BaseScene {
       gate: F.gateHp, gateShown: 1, earned: 0,
       charge: 0, slowLeft: 0, timeScale: 1,      // SLOW, as in the run
       ultCharge: 0, ultWave: null, ultUsed: 0,   // the ultimate: Arrow Storm
-      fireLeft: 0, moreArchers: 0, dmgMod: 1,    // crate boosts
+      fireLeft: 0, rapidLeft: 0, twinLeft: 0, freezeLeft: 0, moreArchers: 0, dmgMod: 1,    // crate boosts
+      leftN: 0, recruits: 0, mysteries: 0, barrels: 0, blasts: [],
       waveNo: 0, boxes: 0, chests: 0, logs: 0, boxT: 1500, chestT: F.chest.firstMs, nextWave: 800,
       doorShut: false, doorBroken: false, doorHp: 0, leaves: [], spawns: [], enemies: [], arrows: [], archers: [],
       aimX: W / 2, targetX: W / 2, startUi: null, pauseUi: null, hurt: 0,
@@ -2987,7 +3021,7 @@ class DefenseScene extends BaseScene {
     });
     const fog = this.add.graphics().setDepth(-15);
     fog.fillGradientStyle(0x1a1030, 0x1a1030, 0x1a1030, 0x1a1030, 0.8, 0.8, 0, 0).fillRect(0, 0, W, 170);
-    this.txt(F.laneL / 2, 100, 'ARCHERS', 11, '#bbdefb', { stroke: '#0d1642', strokeThickness: 3 }).setDepth(-14).setAlpha(0.85);
+    this.txt(F.laneL / 2, 100, 'SUPPLIES', 11, '#bbdefb', { stroke: '#0d1642', strokeThickness: 3 }).setDepth(-14).setAlpha(0.85);
     this.txt((W + F.laneR) / 2, 100, 'PRIZES', 11, '#ffe082', { stroke: '#3a2400', strokeThickness: 3 }).setDepth(-14).setAlpha(0.85);
     this.lane = this.add.graphics().setDepth(-12);            // where the archers are aiming
     this.fort = this.img(W / 2, F.wallY - 14, 'fort').setOrigin(0.5, 0).setDepth(F.wallY + 2);
@@ -2999,6 +3033,8 @@ class DefenseScene extends BaseScene {
     this.slowTint = this.add.rectangle(W / 2, H / 2, W, H, 0x5e35b1, 1).setAlpha(0).setDepth(3600);
     this.hurtTint = this.add.rectangle(W / 2, H / 2, W, H, 0xff1744, 1).setAlpha(0).setDepth(3601);
     this.ultG = this.add.graphics().setDepth(2970).setBlendMode(Phaser.BlendModes.ADD);
+    this.iceTint = this.add.rectangle((F.laneL + F.laneR) / 2, F.wallY / 2, F.laneR - F.laneL, F.wallY, 0x4fc3f7, 1).setAlpha(0).setDepth(2960);
+    this.blastG = this.add.graphics().setDepth(2965);
 
     // HUD
     const D = 5000;
@@ -3097,7 +3133,7 @@ class DefenseScene extends BaseScene {
     const g0 = this.add.graphics();
     g0.fillStyle(0x1c1220, 0.94).fillRoundedRect(24, 150, 352, 208, 14).lineStyle(3, 0xffd54f, 0.9).strokeRoundedRect(24, 150, 352, 208, 14);
     this.txt(W / 2, 182, 'DEFEND THE COMPOUND', 24, '#ffd54f', { stroke: '#2a0a14', strokeThickness: 5 });
-    this.txt(W / 2, 258, 'SLIDE to aim your archers. Hold the wall!\n\nLEFT: +1 archer boxes. RIGHT: prize chests.\nBreak the logs in front of them first.\nMIDDLE: shoot both doors of the main gate\nto shut it and hold the enemy back.', 13, '#fff3e0', { align: 'center', fontStyle: 'normal', lineSpacing: 3 });
+    this.txt(W / 2, 258, 'SLIDE to aim your archers. Hold the wall!\n\nLEFT: shoot the blue banner to raise its\nnumber, open ? boxes, blow up barrels.\nRIGHT: prize chests behind logs.\nMIDDLE: shoot both doors to shut the gate.', 13, '#fff3e0', { align: 'center', fontStyle: 'normal', lineSpacing: 3 });
     const hint = this.txt(W / 2, 334, 'touch the road to start', 15, '#fff', { stroke: '#000', strokeThickness: 4 });
     this.tweens.add({ targets: hint, alpha: 0.35, duration: 600, yoyo: true, repeat: -1 });
     this.add.rectangle(W / 2, 618, W, 204, 0x0a0610, 0.75);
@@ -3138,7 +3174,7 @@ class DefenseScene extends BaseScene {
 
   /* ---------- the archers ---------- */
   archerCount() { return Math.min(CFG.fort.maxArchers, CFG.fort.archers + Math.floor((Save.range - 1) * CFG.fort.perRange) + this.moreArchers); }
-  fireMs() { return Stats.attackMs() * CFG.fort.fireMul; }
+  fireMs() { return Stats.attackMs() * CFG.fort.fireMul * (this.rapidLeft > 0 ? CFG.fort.mystery.rapid : 1); }
   arrowDmg() { return Stats.damage() * CFG.fort.arrowDmg * this.dmgMod * (this.fireLeft > 0 ? CFG.fort.fireDmg : 1); }
   syncArchers() {
     const n = this.archerCount();
@@ -3161,9 +3197,11 @@ class DefenseScene extends BaseScene {
       if (a.cd > 0) return;
       a.cd += this.fireMs(); a.kick = 3;
       const fire = this.fireLeft > 0;
-      const obj = this.img(a.obj.x, F.archerY - 26, 'arrow').setDepth(2900).setAlpha(0.95);
-      if (fire) obj.setTint(0xff7043).setScale(S * 1.25);
-      this.arrows.push({ x: a.obj.x, y: F.archerY - 26, obj, dmg: this.arrowDmg(), pierce: fire ? F.firePierce : 0, hit: new Set() });
+      (this.twinLeft > 0 ? [-4, 4] : [0]).forEach(dx => {       // twin arrows: two a shot
+        const obj = this.img(a.obj.x + dx, F.archerY - 26, 'arrow').setDepth(2900).setAlpha(0.95);
+        if (fire) obj.setTint(0xff7043).setScale(S * 1.25);
+        this.arrows.push({ x: a.obj.x + dx, y: F.archerY - 26, obj, dmg: this.arrowDmg(), pierce: fire ? F.firePierce : 0, hit: new Set() });
+      });
       if (Math.random() < 0.2) Sound.play('arrow');
     });
   }
@@ -3186,23 +3224,25 @@ class DefenseScene extends BaseScene {
 
   /* ---------- the enemy ---------- */
   spawn(kind, back = 0) {
-    const F = CFG.fort, K = Object.assign({ speed: kind === 'logR' ? F.kinds.chest.speed : F.kinds.box.speed }, F.kinds[kind.startsWith('log') ? 'log' : kind]);
-    const hp = kind === 'box' ? Math.round(F.box.hp * Math.pow(F.box.grow, this.boxes)) : kind === 'chest' ? Math.round(F.chest.hp * (1 + F.chest.grow * this.chests))
+    const F = CFG.fort, K = Object.assign({ speed: kind === 'logR' ? F.kinds.chest.speed : F.kinds.mystery.speed }, F.kinds[kind.startsWith('log') ? 'log' : kind]);
+    const hp = kind === 'banner' ? 1e9 : kind === 'mystery' ? Math.round(F.mystery.hp * (1 + F.mystery.grow * this.mysteries)) : kind === 'barrel' ? Math.round(F.barrel.hp * (1 + F.barrel.grow * this.barrels)) : kind === 'chest' ? Math.round(F.chest.hp * (1 + F.chest.grow * this.chests))
       : kind === 'logL' || kind === 'logR' ? Math.round(F.log.hp * (1 + F.log.grow * this.logs) * (kind === 'logR' ? F.log.chest : 1))
       : Math.max(1, Math.round(K.hp * F.hp * (1 + F.grow * (this.waveNo - 1))));
     const [r0, r1] = this.roadAt();
     const e = { kind, K, x: r0 + Math.random() * (r1 - r0), y: -40 - back, hp, maxHp: hp, cd: K.ms, seed: Math.random() * 9 };
     if (kind === 'warlord') e.x = W / 2;
-    if (kind === 'box' || kind === 'logL') e.x = F.laneL / 2 - 3;
+    if (kind === 'banner' || kind === 'mystery' || kind === 'barrel' || kind === 'logL') e.x = F.laneL / 2 - 3;
     if (kind === 'chest' || kind === 'logR') e.x = (W + F.laneR) / 2 + 3;
     if (K.key === 'log') e.kind = 'log';
     e.obj = this.img(e.x, e.y, K.key).setOrigin(0.5, 1); if (K.scale) e.obj.setScale(S * K.scale);
     if (K.crate) {
-      e.boost = kind === 'box' ? 'one' : e.kind === 'log' ? 'log' : F.chest.prizes[(this.chestN = (this.chestN || 0) + 1) % F.chest.prizes.length];
+      const left = kind === 'banner' || kind === 'mystery' || kind === 'barrel';
+      if (kind === 'banner') { e.n = F.banner.start; e.acc = 0; }
+      e.boost = left ? kind : e.kind === 'log' ? 'log' : F.chest.prizes[(this.chestN = (this.chestN || 0) + 1) % F.chest.prizes.length];
       if (e.boost === 'archers' && this.archerCount() >= F.maxArchers) e.boost = 'fire';
       if (e.boost === 'repair' && this.gate >= F.gateHp) e.boost = 'sharp';
-      e.name = { one: '+1', log: '', archers: '+' + F.moreArchers + ' ARCHERS', fire: 'FIRE ARROWS', repair: 'REPAIR', sharp: 'SHARP +' + Math.round(F.sharp * 100) + '%' }[e.boost];
-      e.label = this.txt(e.x, e.y, '', kind === 'box' ? 17 : 12, '#fff', { stroke: kind === 'box' ? '#0d1642' : '#5d3a00', strokeThickness: 4, align: 'center', lineSpacing: -3 });
+      e.name = { banner: '', mystery: '?', barrel: 'BOOM', log: '', archers: '+' + F.moreArchers + ' ARCHERS', fire: 'FIRE ARROWS', repair: 'REPAIR', sharp: 'SHARP +' + Math.round(F.sharp * 100) + '%' }[e.boost];
+      e.label = this.txt(e.x, e.y, '', kind === 'banner' ? 20 : 12, '#fff', { stroke: kind === 'banner' ? '#0d1642' : kind === 'mystery' ? '#38006b' : kind === 'barrel' ? '#2b0e08' : '#5d3a00', strokeThickness: 4, align: 'center', lineSpacing: -3 });
     } else if (K.big) e.label = this.txt(e.x, e.y, '', kind === 'warlord' ? 18 : 13, '#fff', { stroke: '#7f0000', strokeThickness: 4 });
     this.enemies.push(e);
     return e;
@@ -3228,7 +3268,12 @@ class DefenseScene extends BaseScene {
       if (s.kind === 'warlord') { Music.set('boss'); Sound.play('gong'); this.shake(400, 0.012); this.banner('THE WARLORD', 'stop him before he reaches the gate'); }
     }
     if (this.waveNo && this.waveNo <= F.waves.length && (this.spawns.length || this.enemies.some(e => !e.gone && !e.K.crate))) {      // the side lanes keep coming while the fight lasts
-      if (this.t >= this.boxT) { this.boxT = this.t + F.box.everyMs; if (this.archerCount() < F.maxArchers) { this.spawn('logL'); for (let i = 1; i <= F.box.n; i++) this.spawn('box', i * F.box.gap); } }
+      if (this.t >= this.boxT) {                              // the left lane: banner, "?" box, banner, barrel, and round again
+        this.boxT = this.t + F.left.everyMs;
+        let k = F.left.order[this.leftN++ % F.left.order.length];
+        if (k === 'banner' && this.archerCount() >= F.maxArchers) k = 'mystery';
+        if (k === 'mystery') { this.spawn('logL'); this.spawn('mystery', 44); } else this.spawn(k);
+      }
       if (this.t >= this.chestT) { this.chestT = this.t + F.chest.everyMs; this.spawn('logR'); this.spawn('chest', 50); }
     }
     const foes = this.enemies.some(e => !e.gone && !e.K.crate);
@@ -3244,19 +3289,23 @@ class DefenseScene extends BaseScene {
       const stopY = F.wallY - e.K.stop + (e.K.big ? 14 : 0), D = F.door;
       const held = !e.K.crate && this.doorShut && e.y <= D.y - 4;                  // the shut gate is in the way
       if (!e.K.crate && e.y < D.y) { const [r0, r1] = this.roadAt(), tx = clamp(e.x, r0, r1); e.x += clamp(tx - e.x, -90 * wdt, 90 * wdt); }
-      if (held && e.y >= D.y - 10 - (e.seed * 3 | 0)) {
+      if (!e.K.crate && this.freezeLeft > 0) { /* frozen where it stands */ }
+      else if (held && e.y >= D.y - 10 - (e.seed * 3 | 0)) {
         e.cd -= wdt * 1000;
         if (e.cd <= 0) { e.cd = e.K.ms; this.hitDoor(e); }
       } else if (e.y < stopY) e.y = Math.min(held ? D.y - 4 : stopY, e.y + e.K.speed * wdt);
-      else if (e.K.crate) { if (e.kind === 'chest') this.float(e.x, e.y - 30, 'LOST', '#cfd8dc', 16); this.remove(e); return false; }
+      else if (e.K.crate) {
+        if (e.kind === 'banner') this.recruit(e); else if (e.kind === 'chest') this.float(e.x, e.y - 30, 'LOST', '#cfd8dc', 16);
+        this.remove(e); return false;
+      }
       else {
         e.cd -= wdt * 1000;
         if (e.cd <= 0) { e.cd = e.K.ms; this.hitGate(e); }
       }
-      const walk = e.y < stopY;
+      const walk = e.y < stopY && !(this.freezeLeft > 0);
       e.obj.setPosition(e.x, e.y + (e.K.big && !walk ? Math.max(0, 1 - e.cd / 220) * 10 : 0)).setDepth(e.y)
         .setRotation(e.K.crate ? 0 : Math.sin(now * (walk ? 0.011 : 0.02) + e.seed) * (e.K.big ? 0.04 : 0.09));
-      if (e.label) e.label.setPosition(e.x, e.y - (e.K.crate ? e.obj.displayHeight / 2 + 1 : e.obj.displayHeight + 8)).setDepth(e.K.crate ? e.y + 1 : 4000).setText(e.kind === 'box' ? e.name : e.kind === 'log' ? String(Math.ceil(e.hp)) : e.K.crate ? e.name + '\n' + Math.ceil(e.hp) : String(Math.ceil(e.hp)));
+      if (e.label) e.label.setPosition(e.x, e.y - (e.K.crate ? e.obj.displayHeight / 2 + 1 : e.obj.displayHeight + 8)).setDepth(e.K.crate ? e.y + 1 : 4000).setText(e.kind === 'banner' ? '+' + e.n + (e.n >= F.banner.max ? '\nMAX' : '') : e.kind === 'log' ? String(Math.ceil(e.hp)) : e.K.crate ? e.name + '\n' + Math.ceil(e.hp) : String(Math.ceil(e.hp)));
       return true;
     });
   }
@@ -3274,13 +3323,54 @@ class DefenseScene extends BaseScene {
 
   strike(e, dmg) {
     if (e.gone) return;
-    e.hp -= dmg;
+    if (e.kind === 'banner') this.raiseBanner(e, dmg); else e.hp -= dmg;
     if (!e.flash) {
       e.flash = true;
-      if (e.K.big) e.obj.setTint(0xff9a9a); else e.obj.setTintFill(0xffffff);
+      if (e.K.big) e.obj.setTint(0xff9a9a); else if (e.kind === 'banner') e.obj.setTint(0xbbdefb); else e.obj.setTintFill(0xffffff);
       this.time.delayedCall(55, () => { if (e.obj.active) e.obj.clearTint(); e.flash = false; });
     }
     if (e.hp <= 0) this.kill(e);
+  }
+
+  // Arrows in a recruit banner raise its number; the wall collects whatever it shows.
+  raiseBanner(e, dmg) {
+    const B = CFG.fort.banner;
+    if (e.n >= B.max) return;
+    e.acc += dmg;
+    for (let step; e.n < B.max && e.acc >= (step = B.hp * Math.pow(B.grow, this.recruits + e.n - B.start)); ) {
+      e.acc -= step; e.n++;
+      Sound.play('gateGood');
+      this.tweens.add({ targets: e.label, scale: 1.5, duration: 90, yoyo: true });
+      this.burst.setParticleTint(0x64b5f6); this.burst.explode(6, e.x, e.y - 24);
+    }
+  }
+  recruit(e) {
+    const F = CFG.fort, n = Math.min(e.n, F.maxArchers - this.archerCount());
+    if (n <= 0) return;
+    this.recruits += n; this.moreArchers += n; this.syncArchers();
+    Sound.play('buy'); this.float(e.x, e.y - 40, '+' + n + (n > 1 ? ' ARCHERS' : ' ARCHER'), '#bbdefb', 17);
+  }
+  // A powder barrel shot open rolls to the middle of the road and goes off there.
+  updateBlasts() {
+    const F = CFG.fort, B = F.barrel;
+    this.blasts = this.blasts.filter(b => {
+      const k = clamp((this.t - b.t0) / B.rollMs, 0, 1);
+      b.obj.setPosition(b.x0 + (W / 2 - b.x0) * k, b.y).setRotation(k * 6.28).setDepth(b.y);
+      if (k < 1) return true;
+      b.obj.destroy();
+      for (const e of [...this.enemies]) {
+        if (e.gone || e.K.crate || Math.hypot(e.x - W / 2, e.y - e.K.tall / 2 - b.y) > B.r + e.K.half) continue;
+        this.strike(e, e.kind === 'warlord' ? e.maxHp * B.boss : e.kind === 'brute' ? e.maxHp * B.big : e.hp);
+      }
+      Sound.play('wallBreak'); Sound.play('slam'); this.shake(380, 0.02); this.cameras.main.flash(140, 255, 190, 90);
+      this.burst.setParticleTint(0xff9800); this.burst.explode(50, W / 2, b.y);
+      const ring = { r: 20, a: 0.85 };
+      this.tweens.add({ targets: ring, r: B.r, a: 0, duration: 380, ease: 'Cubic.out',
+        onUpdate: () => this.blastG.clear().fillStyle(0xffb74d, ring.a * 0.6).fillCircle(W / 2, b.y, ring.r).lineStyle(5, 0xfff3e0, ring.a).strokeCircle(W / 2, b.y, ring.r),
+        onComplete: () => this.blastG.clear() });
+      this.float(W / 2, b.y - 30, 'BOOM!', '#ffcc80', 26);
+      return false;
+    });
   }
 
   remove(e) { e.gone = true; e.obj.destroy(); if (e.label) e.label.destroy(); if (e.glow) e.glow.destroy(); }
@@ -3288,7 +3378,7 @@ class DefenseScene extends BaseScene {
   kill(e) {
     const F = CFG.fort, x = e.x, y = e.y - e.K.tall / 2;
     this.remove(e);
-    this.burst.setParticleTint({ zombie: 0x9ccc65, demon: 0xab47bc, brute: 0xef5350, warlord: 0xef5350, box: 0x64b5f6, chest: 0xffd54f, log: 0x8d6e63, leaf: 0x8d6748 }[e.kind]);
+    this.burst.setParticleTint({ zombie: 0x9ccc65, demon: 0xab47bc, brute: 0xef5350, warlord: 0xef5350, mystery: 0xba68c8, barrel: 0xff7043, chest: 0xffd54f, log: 0x8d6e63, leaf: 0x8d6748 }[e.kind]);
     this.burst.explode(e.K.big ? 40 : 10, x, y);
     if (e.K.crate) { this.openCrate(e, x, y); return; }
     Sound.play('kill');
@@ -3309,9 +3399,18 @@ class DefenseScene extends BaseScene {
     const F = CFG.fort;
     if (e.kind === 'leaf') { this.shutLeaf(e); return; }
     if (e.kind === 'log') { this.logs++; Sound.play('wallBreak'); return; }
-    if (e.kind === 'box') {                                   // +1 archer, quietly: there are a lot of these
-      this.boxes++; this.moreArchers++; this.syncArchers();
-      Sound.play('gateGood'); this.float(x, y - 10, '+1 ARCHER', '#bbdefb', 15);
+    if (e.kind === 'barrel') {
+      this.barrels++; Sound.play('gateGood');
+      this.blasts.push({ obj: this.img(e.x, e.y - 19, 'barrel'), x0: e.x, y: e.y - 19, t0: this.t });
+      return;
+    }
+    if (e.kind === 'mystery') {
+      const M = F.mystery, prize = M.prizes[Math.random() * M.prizes.length | 0];
+      this.mysteries++; Sound.play('buy');
+      if (prize === 'rapid') { this.rapidLeft = M.rapidMs; this.float(x, y - 10, 'RAPID FIRE!', '#e1bee7', 17); }
+      else if (prize === 'twin') { this.twinLeft = M.twinMs; this.float(x, y - 10, 'TWIN ARROWS!', '#e1bee7', 17); }
+      else if (prize === 'freeze') { this.freezeLeft = M.freezeMs; Sound.play('special'); this.float(W / 2, y - 10, 'FROZEN!', '#b3e5fc', 24); }
+      else { this.earned += M.coins; Save.souls += M.coins; Sound.play('soul'); this.float(x, y - 10, '+' + M.coins + ' COINS', '#ffe082', 17); }
       return;
     }
     this.chests++;
@@ -3371,6 +3470,9 @@ class DefenseScene extends BaseScene {
     if (slowing) this.slowLeft = Math.max(0, this.slowLeft - delta);
     this.slowTint.setAlpha((1 - this.timeScale) / (1 - CFG.slowScale) * 0.2);
     this.fireLeft = Math.max(0, this.fireLeft - dt * 1000);
+    this.rapidLeft = Math.max(0, this.rapidLeft - dt * 1000); this.twinLeft = Math.max(0, this.twinLeft - dt * 1000);
+    this.freezeLeft = Math.max(0, this.freezeLeft - wdt * 1000);
+    this.iceTint.setAlpha(Math.min(1, this.freezeLeft / 400) * (0.2 + Math.sin(time * 0.012) * 0.04));
     this.hurt = Math.max(0, this.hurt - dt * 3);
     const low = this.gate / CFG.fort.gateHp < 0.3 ? 0.1 + Math.sin(time * 0.008) * 0.06 : 0;
     this.hurtTint.setAlpha(Math.max(low, this.hurt * 0.18));
@@ -3378,6 +3480,7 @@ class DefenseScene extends BaseScene {
     this.updateWaves();
     if (this.over) return;
     this.updateEnemies(wdt);
+    this.updateBlasts();
     this.updateArrows(dt);
     this.updateUlt(dt);
     this.updateHud(dt);
@@ -3395,7 +3498,8 @@ class DefenseScene extends BaseScene {
     this.soulText.setText(coins(Save.souls));
     this.waveText.setText(this.waveNo ? (this.waveNo === F.waves.length ? 'FINAL WAVE' : 'WAVE ' + this.waveNo + ' / ' + F.waves.length) : '');
     if (this.doorShut) this.doorText.setText('GATE ' + Math.ceil(this.doorHp));
-    this.boostText.setText(this.fireLeft > 0 ? 'FIRE ARROWS ' + (this.fireLeft / 1000).toFixed(0) + 's' : '');
+    this.boostText.setText([['FIRE ARROWS', this.fireLeft], ['RAPID FIRE', this.rapidLeft], ['TWIN ARROWS', this.twinLeft], ['FROZEN', this.freezeLeft]]
+      .filter(b => b[1] > 0).map(b => b[0] + ' ' + Math.ceil(b[1] / 1000) + 's').join('  ·  '));
     if (!this.started) return;
     // special bar + button, and the ultimate bar above it (as in the run)
     const slowing = this.slowLeft > 0;

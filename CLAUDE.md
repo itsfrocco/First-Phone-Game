@@ -153,8 +153,18 @@ Both shut closes the road: enemies pile up behind it and must break `barHp` (900
 once broken it stays down. The owner said "10,000 hp" for scale; the real numbers are sized to arrow damage (250 a leaf).
 Gate (the wall) health is 200. Kills pay `coinShare` 0.4; a first win is about 750 coins in all.
 `tools/fort-test.js` plays it: cases are [speed/damage level, Range level, mode]; "door" in the mode shuts the main gate when
-nothing is close, otherwise the bot works the side lanes. As tuned: 3 loses at wave 5, 4 at wave 9, 5 wins if it shuts the gate
-and loses at waves 9-11 if it ignores it, 6 and up win either way.
+nothing is close, otherwise the bot works the side lanes.
+Then (owner: doors far too easy, and the left lane dried up; wanted "a bunch" of new things there): each door leaf has 1500
+health (owner's number; shutting both is now a long job, though stray arrows over a whole defence often shut them late on).
+The +1 boxes are gone (they stopped at 14 archers and each was 45% tougher than the last). The left lane (`CFG.fort.left`,
+labelled SUPPLIES) now delivers every 8.5s for the whole fight, in the order banner, "?" box, banner, barrel:
+- Recruit banner (`banner`, `raiseBanner`, `recruit`): shows +1, cannot be broken; every `hp` of arrow damage adds one, up to +4,
+  and the wall collects whatever it shows. Each archer recruited makes the next step 12% dearer. With 14 archers its turn is a "?" box.
+- "?" box behind a log (`mystery`): a random short boost: RAPID FIRE, TWIN ARROWS (two a shot), FROZEN (the road stands still 2.5s) or 30 coins.
+- Powder barrel (`barrel`, `updateBlasts`): shot open, it rolls to the middle of the road at its own height and blows up; ordinary
+  enemies in the blast die, brutes lose 40%, the warlord 8%. So the player waits for the crowd to be level with it.
+An idea offered and not built: boxes that build a ballista on the wall. As tuned: 3 loses at wave 8, 4 at wave 11, 5 wins or
+loses in the final wave, 6 and up win. The bot shoots barrels as soon as it can, so a player timing them does better.
 
 ## Testing
 
