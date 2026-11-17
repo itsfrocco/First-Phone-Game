@@ -50,21 +50,24 @@ const CFG = {
   // `waves` are [enemies, share that are demons, brutes, seconds]; the warlord comes with the last one. Enemy health is `hp` times
   // the kind's own, growing `grow` a wave. The wall has `gateHp`; each enemy that reaches it strikes for its `hit`.
   fort: {
-    gateHp: 150, wallY: 560, archerY: 586, archers: 3, perRange: 0.5, maxArchers: 10, spacing: 22, fireMul: 1.6, arrowSpeed: 640,
-    hp: 5, grow: 0.075, gap: 2500,
-    waves: [[14, 0, 0, 11], [18, 0.15, 0, 11], [20, 0.25, 1, 12], [24, 0.3, 0, 12], [26, 0.3, 1, 12], [30, 0.35, 2, 13],
-      [32, 0.4, 1, 13], [36, 0.4, 2, 13], [38, 0.45, 2, 14], [42, 0.5, 3, 14], [46, 0.5, 3, 14], [30, 0.5, 2, 14]],
+    gateHp: 150, wallY: 560, archerY: 586, archers: 3, perRange: 0.5, maxArchers: 14, perRow: 7, spacing: 18, fireMul: 1.6, arrowSpeed: 640,
+    laneL: 116, laneR: 284,                       // the two dividers: boxes left of laneL, chests right of laneR, the enemy between
+    hp: 5, grow: 0.3, gap: 2500, coinShare: 0.5,
+    waves: [[20, 0, 0, 11], [25, 0.15, 0, 11], [28, 0.25, 1, 12], [34, 0.3, 0, 12], [36, 0.3, 1, 12], [42, 0.35, 2, 13],
+      [45, 0.4, 1, 13], [50, 0.4, 2, 13], [53, 0.45, 2, 14], [59, 0.5, 3, 14], [64, 0.5, 3, 14], [42, 0.5, 2, 14]],
     kinds: {
       zombie: { key: 'zombie', hp: 1, speed: 42, hit: 1, ms: 1600, half: 13, tall: 30, stop: 12 },
       demon: { key: 'demon', hp: 2, speed: 58, hit: 2, ms: 1500, half: 13, tall: 30, stop: 12 },
-      brute: { key: 'oni', hp: 22, speed: 27, hit: 4, ms: 1600, half: 26, tall: 60, stop: 26, scale: 1.5, big: true, souls: 12 },
-      warlord: { key: 'warlord', hp: 130, speed: 15, hit: 12, ms: 2000, half: 50, tall: 120, stop: 56, scale: 1, big: true, souls: 150 },
-      crate: { key: 'crate', hp: 9, speed: 36, half: 20, tall: 30, stop: 12, crate: true },
+      brute: { key: 'oni', hp: 30, speed: 27, hit: 4, ms: 1600, half: 26, tall: 60, stop: 26, scale: 1.5, big: true, souls: 6 },
+      warlord: { key: 'warlord', hp: 180, speed: 15, hit: 12, ms: 2000, half: 50, tall: 120, stop: 56, scale: 1, big: true, souls: 80 },
+      box: { key: 'box', speed: 30, half: 40, tall: 30, stop: 6, crate: true },        // left lane: +1 archer each
+      chest: { key: 'chest', speed: 15, half: 40, tall: 36, stop: 6, crate: true },   // right lane: a big prize behind a lot of health
     },
-    crateWaves: [2, 4, 6, 8, 9, 10, 11], crates: ['archers', 'fire', 'archers', 'repair', 'archers', 'fire', 'repair'],          // a supply crate comes down with these waves (counting from 1)
-    fireMs: 12000, firePierce: 2, fireDmg: 1.5, repair: 40, moreArchers: 1,
+    box: { everyMs: 4200, hp: 12, grow: 1.6 },     // each box opened makes the next ones tougher
+    chest: { everyMs: 21000, firstMs: 6000, hp: 110, grow: 0.45, prizes: ['fire', 'archers', 'repair', 'sharp'] },
+    fireMs: 12000, firePierce: 2, fireDmg: 1.5, repair: 40, moreArchers: 3, sharp: 0.25,
     ultBig: 0.35, ultBoss: 0.12, specials: 5, ults: 3.2,       // how many times a defence fills each bar
-    reward: [400, 100],                           // coins for holding it: the first time, then on replays
+    reward: [300, 100],                           // coins for holding it: the first time, then on replays
   },
   charmDamageUp: 1.10,     // each lucky charm broken: +10% blade damage for the rest of the run
   bossSlow: 0.97,          // the run slows 3% once the boss is down
@@ -939,6 +942,31 @@ const Art = {
     c.beginPath(); c.moveTo(3, 11); c.lineTo(33, 11); c.moveTo(3, 20); c.lineTo(33, 20); c.stroke();
     c.fillStyle = '#ffca28'; [[5, 5], [29, 5], [5, 24], [29, 24]].forEach(([x, y]) => c.fillRect(x, y, 2.4, 2.4));
   },
+  box(c) {                                                    // left lane: a blue supply box
+    Art.rr(c, 2, 4, 80, 28, 5); c.fillStyle = 'rgba(0,0,0,0.35)'; c.fill();
+    Art.rr(c, 2, 1, 80, 28, 5); c.fillStyle = Art.grad(c, 0, 1, 0, 29, [[0, '#64b5f6'], [1, '#1565c0']]); c.fill();
+    c.strokeStyle = '#0d47a1'; c.lineWidth = 2; Art.rr(c, 2, 1, 80, 28, 5); c.stroke();
+    Art.rr(c, 6, 4, 72, 8, 3); c.fillStyle = 'rgba(255,255,255,0.28)'; c.fill();
+  },
+  chest(c) {                                                  // right lane: a gold prize chest
+    Art.rr(c, 2, 5, 80, 34, 5); c.fillStyle = 'rgba(0,0,0,0.35)'; c.fill();
+    Art.rr(c, 2, 1, 80, 34, 5); c.fillStyle = Art.grad(c, 0, 1, 0, 35, [[0, '#ffe082'], [1, '#f9a825']]); c.fill();
+    c.strokeStyle = '#8d5f00'; c.lineWidth = 2; Art.rr(c, 2, 1, 80, 34, 5); c.stroke();
+    Art.rr(c, 6, 4, 72, 9, 3); c.fillStyle = 'rgba(255,255,255,0.4)'; c.fill();
+    c.fillStyle = '#8d5f00'; [[6, 28], [74, 28]].forEach(([x, y]) => c.fillRect(x, y, 4, 4));
+  },
+  yard(c, w, h) {                                             // the compound's stone floor (no grass)
+    c.fillStyle = '#8f8676'; c.fillRect(0, 0, w, h);
+    [[0, 0, 32, 20], [32, 0, 32, 20], [-16, 20, 32, 22], [16, 20, 32, 22], [48, 20, 32, 22], [0, 42, 32, 22], [32, 42, 32, 22]].forEach(([x, y, a, b], i) => {
+      c.fillStyle = ['#9a917f', '#8a8171', '#938a79', '#857c6c'][i % 4]; c.fillRect(x + 1, y + 1, a - 2, b - 2);
+      c.fillStyle = 'rgba(255,255,255,0.07)'; c.fillRect(x + 1, y + 1, a - 2, 2);
+    });
+  },
+  divider(c, w, h) {                                          // a low stone wall between lanes
+    c.fillStyle = 'rgba(0,0,0,0.3)'; c.fillRect(2, 0, w, h);
+    c.fillStyle = Art.grad(c, 0, 0, w, 0, [[0, '#b0a898'], [0.5, '#7d7567'], [1, '#5a5348']]); c.fillRect(0, 0, w - 2, h);
+    c.strokeStyle = 'rgba(40,34,28,0.6)'; c.lineWidth = 1; for (let y = 0; y < h; y += 16) { c.beginPath(); c.moveTo(0, y + 0.5); c.lineTo(w - 2, y + 0.5); c.stroke(); }
+  },
   fort(c, w, h) {
     c.fillStyle = Art.grad(c, 0, 30, 0, h, [[0, '#7a6450'], [1, '#4a3b2e']]); c.fillRect(0, 30, w, h - 30);          // the yard
     c.fillStyle = 'rgba(0,0,0,0.12)'; for (let i = 0; i < 60; i++) c.fillRect((i * 97) % w, 52 + (i * 53) % (h - 56), 5, 2);
@@ -1096,7 +1124,7 @@ const Art = {
     Art.make(scene, 'tenguBoss', 130, 120, Art.tengu); m('charm', 40, 44); m('glow', 64, 64);
     m('rockOni', 32, 40); m('rockBoss', 130, 130); m('rockGround', 64, 64); m('stonePath', 280, 128); m('cliff', 72, 80); m('boulder', 30, 24);
     m('spike', 36, 28); m('wall', 132, 60); m('log', 132, 60); m('fence', 16, 36); m('civilian', 20, 28); m('cage', 96, 70); m('rock', 12, 12); m('slash', 48, 48); m('soul', 16, 16); m('dot', 8, 8); m('petal', 8, 6);
-    m('archer', 36, 50); m('arrow', 8, 22); m('crate', 36, 32); m('fort', W, 174); m('oni', 48, 54); m('warlord', 130, 150);
+    m('archer', 36, 50); m('arrow', 8, 22); m('crate', 36, 32); m('box', 84, 34); m('chest', 84, 42); m('yard', 64, 64); m('divider', 10, 64); m('fort', W, 174); m('oni', 48, 54); m('warlord', 130, 150);
     m('grass', 64, 64); m('path', 280, 128); m('lantern', 24, 42); m('deadTree', 60, 58); m('rubble', 30, 24); m('crack', 60, 40); m('tree', 60, 58); m('menuBg', W, H);
   },
 };
@@ -2925,7 +2953,7 @@ class DefenseScene extends BaseScene {
       charge: 0, slowLeft: 0, timeScale: 1,      // SLOW, as in the run
       ultCharge: 0, ultWave: null, ultUsed: 0,   // the ultimate: Arrow Storm
       fireLeft: 0, moreArchers: 0, dmgMod: 1,    // crate boosts
-      waveNo: 0, crateNo: 0, nextWave: 800, spawns: [], enemies: [], arrows: [], archers: [],
+      waveNo: 0, boxes: 0, chests: 0, boxT: 2500, chestT: F.chest.firstMs, nextWave: 800, spawns: [], enemies: [], arrows: [], archers: [],
       aimX: W / 2, targetX: W / 2, startUi: null, pauseUi: null, hurt: 0,
     });
     this.time.paused = false;
@@ -2933,15 +2961,19 @@ class DefenseScene extends BaseScene {
     const total = F.waves.reduce((n, w) => n + w[0] + w[2], 0);
     this.specialMax = Math.round(total / F.specials); this.ultMax = Math.round(total / F.ults);
 
-    // The grasslands, the road, the compound across the bottom.
-    this.add.tileSprite(W / 2, H / 2, W, H, 'grass').setTileScale(S).setDepth(-20);
-    this.add.tileSprite(W / 2, H / 2, CFG.pathRight - CFG.pathLeft, H, 'path').setTileScale(S).setDepth(-19);
-    const fog = this.add.graphics().setDepth(-18);
-    fog.fillGradientStyle(0x1a1030, 0x1a1030, 0x1a1030, 0x1a1030, 0.75, 0.75, 0, 0).fillRect(0, 0, W, 200);
-    for (let y = 60; y < F.wallY - 40; y += 92) [0, 1].forEach(right => {
-      const x = 26 + Math.random() * 10;
-      this.img(right ? W - x : x, y + Math.random() * 30, Math.random() < 0.6 ? 'tree' : 'lantern').setDepth(-15);
+    // The compound's yard: stone from edge to edge, two low walls making three lanes.
+    this.add.tileSprite(W / 2, H / 2, W, H, 'yard').setTileScale(S).setDepth(-20);
+    const lanes = this.add.graphics().setDepth(-19);
+    lanes.fillStyle(0x1565c0, 0.22).fillRect(0, 0, F.laneL, F.wallY).fillStyle(0xf9a825, 0.22).fillRect(F.laneR, 0, W - F.laneR, F.wallY);
+    lanes.fillStyle(0x3e2723, 0.16).fillRect(F.laneL, 0, F.laneR - F.laneL, F.wallY);
+    [F.laneL, F.laneR].forEach(x => {
+      this.add.tileSprite(x, F.wallY / 2, 10, F.wallY, 'divider').setTileScale(S).setDepth(-17);
+      for (let y = 90; y < F.wallY - 60; y += 150) this.img(x, y, 'lantern').setScale(S * 0.8).setDepth(-16);
     });
+    const fog = this.add.graphics().setDepth(-15);
+    fog.fillGradientStyle(0x1a1030, 0x1a1030, 0x1a1030, 0x1a1030, 0.8, 0.8, 0, 0).fillRect(0, 0, W, 170);
+    this.txt(F.laneL / 2, 100, 'ARCHERS', 11, '#bbdefb', { stroke: '#0d1642', strokeThickness: 3 }).setDepth(-14).setAlpha(0.85);
+    this.txt((W + F.laneR) / 2, 100, 'PRIZES', 11, '#ffe082', { stroke: '#3a2400', strokeThickness: 3 }).setDepth(-14).setAlpha(0.85);
     this.lane = this.add.graphics().setDepth(-12);            // where the archers are aiming
     this.fort = this.img(W / 2, F.wallY - 14, 'fort').setOrigin(0.5, 0).setDepth(F.wallY + 2);
     this.burst = this.add.particles(0, 0, 'dot', { speed: { min: 40, max: 150 }, lifespan: { min: 250, max: 480 }, scale: { start: S, end: 0 }, emitting: false }).setDepth(3000);
@@ -3002,7 +3034,7 @@ class DefenseScene extends BaseScene {
     const g0 = this.add.graphics();
     g0.fillStyle(0x1c1220, 0.94).fillRoundedRect(24, 150, 352, 208, 14).lineStyle(3, 0xffd54f, 0.9).strokeRoundedRect(24, 150, 352, 208, 14);
     this.txt(W / 2, 182, 'DEFEND THE COMPOUND', 24, '#ffd54f', { stroke: '#2a0a14', strokeThickness: 5 });
-    this.txt(W / 2, 258, 'The boss is dead and this land is yours.\nHis army wants it back.\n\nSLIDE to aim your archers.\nDo not let them break the gate!\nShoot supply crates for help.', 14, '#fff3e0', { align: 'center', fontStyle: 'normal', lineSpacing: 3 });
+    this.txt(W / 2, 258, 'This land is yours. His army wants it back.\nSLIDE to aim your archers.\n\nMIDDLE: the enemy. Guard the gate!\nLEFT: blue boxes, +1 archer each.\nRIGHT: gold chests, big prizes.', 14, '#fff3e0', { align: 'center', fontStyle: 'normal', lineSpacing: 3 });
     const hint = this.txt(W / 2, 334, 'touch the road to start', 15, '#fff', { stroke: '#000', strokeThickness: 4 });
     this.tweens.add({ targets: hint, alpha: 0.35, duration: 600, yoyo: true, repeat: -1 });
     this.add.rectangle(W / 2, 618, W, 204, 0x0a0610, 0.75);
@@ -3010,7 +3042,7 @@ class DefenseScene extends BaseScene {
     const cards = [
       ['fire', 'ATTACK\nSPEED', 0x2e7d32, (this.fireMs() / 1000).toFixed(2) + 's a shot'],
       ['damage', 'BLADE\nDAMAGE', 0x1565c0, fmt(Stats.damage()) + ' per arrow'],
-      ['range', 'RANGE', 0xc62828, n + ' archers', n >= CFG.fort.maxArchers && Stats.rangeMaxed()],
+      ['range', 'RANGE', 0xc62828, n + ' archers', Stats.rangeMaxed()],
       ['revenue', 'COIN\nREWARD', 0x6a1b9a, fmt(Stats.soulsPerKill()) + ' per kill'],
     ];
     cards.forEach(([key, title, color, stat, maxed], i) => {
@@ -3052,19 +3084,21 @@ class DefenseScene extends BaseScene {
   }
 
   updateArchers(dt) {
-    const F = CFG.fort, n = this.archers.length, half = (n - 1) / 2 * F.spacing;
-    this.targetX = clamp(this.targetX, CFG.pathLeft + 12 + half, CFG.pathRight - 12 - half);
+    const F = CFG.fort, n = this.archers.length, front = Math.min(n, F.perRow), half = (front - 1) / 2 * F.spacing;
+    this.targetX = clamp(this.targetX, 14 + half, W - 14 - half);
     this.aimX += (this.targetX - this.aimX) * damp(18, dt);
     this.lane.clear().fillStyle(0xfff59d, 0.07).fillRect(this.aimX - half - 9, 0, half * 2 + 18, F.wallY);
     this.archers.forEach((a, i) => {
-      a.obj.x = this.aimX + (i - (n - 1) / 2) * F.spacing;
-      a.obj.y = F.archerY + (a.kick || 0); a.kick = Math.max(0, (a.kick || 0) - 30 * dt);
+      const back = i >= F.perRow, k = back ? i - F.perRow : i, m = back ? n - F.perRow : front;      // a second rank stands behind the first
+      a.obj.x = this.aimX + (k - (m - 1) / 2) * F.spacing;
+      a.obj.y = F.archerY + (back ? 20 : 0) + (a.kick || 0); a.kick = Math.max(0, (a.kick || 0) - 30 * dt);
+      a.obj.setDepth(F.wallY + 10 + (back ? 1 : 0));
       if (!this.started) return;
       a.cd -= dt * 1000;
       if (a.cd > 0) return;
       a.cd += this.fireMs(); a.kick = 3;
       const fire = this.fireLeft > 0;
-      const obj = this.img(a.obj.x, F.archerY - 26, 'arrow').setDepth(2900);
+      const obj = this.img(a.obj.x, F.archerY - 26, 'arrow').setDepth(2900).setAlpha(0.95);
       if (fire) obj.setTint(0xff7043).setScale(S * 1.25);
       this.arrows.push({ x: a.obj.x, y: F.archerY - 26, obj, dmg: this.arrowDmg(), pierce: fire ? F.firePierce : 0, hit: new Set() });
       if (Math.random() < 0.5) Sound.play('arrow');
@@ -3090,17 +3124,20 @@ class DefenseScene extends BaseScene {
   /* ---------- the enemy ---------- */
   spawn(kind, x) {
     const F = CFG.fort, K = F.kinds[kind];
-    const hp = Math.max(1, Math.round(K.hp * F.hp * (1 + F.grow * (this.waveNo - 1))));
-    const e = { kind, K, x: x || 76 + Math.random() * 248, y: -40, hp, maxHp: hp, cd: K.ms, seed: Math.random() * 9 };
-    if (K.big) e.x = clamp(e.x, 110, 290);
+    const hp = kind === 'box' ? Math.round(F.box.hp * Math.pow(F.box.grow, this.boxes)) : kind === 'chest' ? Math.round(F.chest.hp * (1 + F.chest.grow * this.chests))
+      : Math.max(1, Math.round(K.hp * F.hp * (1 + F.grow * (this.waveNo - 1))));
+    const e = { kind, K, x: F.laneL + 18 + Math.random() * (F.laneR - F.laneL - 36), y: -40, hp, maxHp: hp, cd: K.ms, seed: Math.random() * 9 };
+    if (K.big) e.x = clamp(e.x, F.laneL + 34, F.laneR - 34);
     if (kind === 'warlord') e.x = W / 2;
+    if (kind === 'box') e.x = F.laneL / 2 - 3;
+    if (kind === 'chest') e.x = (W + F.laneR) / 2 + 3;
     e.obj = this.img(e.x, e.y, K.key).setOrigin(0.5, 1); if (K.scale) e.obj.setScale(S * K.scale);
     if (K.crate) {
-      e.boost = F.crates[this.crateNo++ % F.crates.length];
+      e.boost = kind === 'box' ? 'one' : F.chest.prizes[(this.chestN = (this.chestN || 0) + 1) % F.chest.prizes.length];
       if (e.boost === 'archers' && this.archerCount() >= F.maxArchers) e.boost = 'fire';
-      if (e.boost === 'repair' && this.gate >= F.gateHp) e.boost = 'fire';
-      e.glow = this.img(e.x, e.y, 'glow').setScale(S * 1.3).setTint(0xffd54f).setBlendMode(Phaser.BlendModes.ADD);
-      e.label = this.txt(e.x, e.y, { archers: '+' + F.moreArchers + ' ARCHERS', fire: 'FIRE ARROWS', repair: 'REPAIR' }[e.boost], 11, '#ffe082', { stroke: '#000', strokeThickness: 3 });
+      if (e.boost === 'repair' && this.gate >= F.gateHp) e.boost = 'sharp';
+      e.name = { one: '+1', archers: '+' + F.moreArchers + ' ARCHERS', fire: 'FIRE ARROWS', repair: 'REPAIR', sharp: 'SHARP +' + Math.round(F.sharp * 100) + '%' }[e.boost];
+      e.label = this.txt(e.x, e.y, '', kind === 'box' ? 17 : 12, '#fff', { stroke: kind === 'box' ? '#0d1642' : '#5d3a00', strokeThickness: 4, align: 'center', lineSpacing: -3 });
     } else if (K.big) e.label = this.txt(e.x, e.y, '', kind === 'warlord' ? 18 : 13, '#fff', { stroke: '#7f0000', strokeThickness: 4 });
     this.enemies.push(e);
     return e;
@@ -3112,7 +3149,6 @@ class DefenseScene extends BaseScene {
     const last = this.waveNo === F.waves.length, ms = secs * 1000;
     for (let i = 0; i < count; i++) this.spawns.push({ at: this.t + Math.random() * ms, kind: Math.random() < demons ? 'demon' : 'zombie' });
     for (let i = 0; i < brutes; i++) this.spawns.push({ at: this.t + ms * (i + 0.6) / (brutes + 0.4), kind: 'brute' });
-    if (F.crateWaves.includes(this.waveNo)) this.spawns.push({ at: this.t + ms * 0.3, kind: 'crate' });
     if (last) this.spawns.push({ at: this.t + ms * 0.45, kind: 'warlord' });
     this.spawns.sort((a, b) => a.at - b.at);
     this.nextWave = this.t + ms + F.gap;
@@ -3125,7 +3161,10 @@ class DefenseScene extends BaseScene {
     while (this.spawns.length && this.spawns[0].at <= this.t) {
       const s = this.spawns.shift(), e = this.spawn(s.kind);
       if (s.kind === 'warlord') { Music.set('boss'); Sound.play('gong'); this.shake(400, 0.012); this.banner('THE WARLORD', 'stop him before he reaches the gate'); }
-      else if (s.kind === 'crate') this.float(e.x, 60, 'SUPPLIES!', '#ffe082', 16);
+    }
+    if (this.waveNo && this.waveNo <= F.waves.length && (this.spawns.length || this.enemies.some(e => !e.gone && !e.K.crate))) {      // the side lanes keep coming while the fight lasts
+      if (this.t >= this.boxT) { this.boxT = this.t + F.box.everyMs; if (this.archerCount() < F.maxArchers) this.spawn('box'); }
+      if (this.t >= this.chestT) { this.chestT = this.t + F.chest.everyMs; this.spawn('chest'); }
     }
     const foes = this.enemies.some(e => !e.gone && !e.K.crate);
     if (this.waveNo < F.waves.length) {
@@ -3139,7 +3178,7 @@ class DefenseScene extends BaseScene {
       if (e.gone) return false;
       const stopY = F.wallY - e.K.stop + (e.K.big ? 14 : 0);
       if (e.y < stopY) e.y = Math.min(stopY, e.y + e.K.speed * wdt);
-      else if (e.K.crate) { this.float(e.x, e.y - 30, 'LOST', '#cfd8dc', 16); this.remove(e); return false; }
+      else if (e.K.crate) { if (e.kind === 'chest') this.float(e.x, e.y - 30, 'LOST', '#cfd8dc', 16); this.remove(e); return false; }
       else {
         e.cd -= wdt * 1000;
         if (e.cd <= 0) { e.cd = e.K.ms; this.hitGate(e); }
@@ -3147,8 +3186,7 @@ class DefenseScene extends BaseScene {
       const walk = e.y < stopY;
       e.obj.setPosition(e.x, e.y + (e.K.big && !walk ? Math.max(0, 1 - e.cd / 220) * 10 : 0)).setDepth(e.y)
         .setRotation(e.K.crate ? 0 : Math.sin(now * (walk ? 0.011 : 0.02) + e.seed) * (e.K.big ? 0.04 : 0.09));
-      if (e.glow) e.glow.setPosition(e.x, e.y - 14).setDepth(e.y - 1).setAlpha(0.7 + Math.sin(now * 0.008) * 0.25);
-      if (e.label) e.label.setPosition(e.x, e.y - (e.K.crate ? 42 : e.obj.displayHeight + 8)).setDepth(4000).setText(e.K.crate ? e.label.text : String(Math.ceil(e.hp)));
+      if (e.label) e.label.setPosition(e.x, e.y - (e.K.crate ? e.obj.displayHeight / 2 + 1 : e.obj.displayHeight + 8)).setDepth(e.K.crate ? e.y + 1 : 4000).setText(e.kind === 'box' ? e.name : e.K.crate ? e.name + '\n' + Math.ceil(e.hp) : String(Math.ceil(e.hp)));
       return true;
     });
   }
@@ -3180,11 +3218,11 @@ class DefenseScene extends BaseScene {
   kill(e) {
     const F = CFG.fort, x = e.x, y = e.y - e.K.tall / 2;
     this.remove(e);
-    this.burst.setParticleTint({ zombie: 0x9ccc65, demon: 0xab47bc, brute: 0xef5350, warlord: 0xef5350, crate: 0xbc9a7a }[e.kind]);
+    this.burst.setParticleTint({ zombie: 0x9ccc65, demon: 0xab47bc, brute: 0xef5350, warlord: 0xef5350, box: 0x64b5f6, chest: 0xffd54f }[e.kind]);
     this.burst.explode(e.K.big ? 40 : 10, x, y);
     if (e.K.crate) { this.openCrate(e, x, y); return; }
     Sound.play('kill');
-    const raw = e.K.souls || Stats.soulsPerKill(), gain = Math.floor(raw) + (Math.random() < raw % 1 ? 1 : 0);
+    const raw = e.K.souls || Stats.soulsPerKill() * F.coinShare, gain = Math.floor(raw) + (Math.random() < raw % 1 ? 1 : 0);
     this.earned += gain; Save.souls += gain;
     this.charge = Math.min(this.specialMax, this.charge + (e.K.big ? this.specialMax / 5 : 1));
     if (!this.ultWave) {
@@ -3199,9 +3237,16 @@ class DefenseScene extends BaseScene {
 
   openCrate(e, x, y) {
     const F = CFG.fort;
+    if (e.kind === 'box') {                                   // +1 archer, quietly: there are a lot of these
+      this.boxes++; this.moreArchers++; this.syncArchers();
+      Sound.play('gateGood'); this.float(x, y - 10, '+1 ARCHER', '#bbdefb', 15);
+      return;
+    }
+    this.chests++;
     Sound.play('buy'); this.cameras.main.flash(160, 255, 200, 60);
     if (e.boost === 'archers') { this.moreArchers += F.moreArchers; this.syncArchers(); this.banner('REINFORCEMENTS', '+' + F.moreArchers + ' archers on the wall'); }
     else if (e.boost === 'fire') { this.fireLeft = F.fireMs; this.banner('FIRE ARROWS', 'they burn through the ranks'); }
+    else if (e.boost === 'sharp') { this.dmgMod += F.sharp; this.banner('SHARP ARROWS', 'arrow damage +' + Math.round(F.sharp * 100) + '%'); }
     else { this.gate = Math.min(F.gateHp, this.gate + F.repair); this.banner('GATE REPAIRED', '+' + F.repair); }
   }
 
@@ -3227,7 +3272,7 @@ class DefenseScene extends BaseScene {
     g.clear();
     w.y -= CFG.ult.speed * dt; w.tail += dt;
     for (const e of [...this.enemies]) {
-      if (e.gone || w.hit.has(e) || e.y < w.y || e.y < -20) continue;
+      if (e.gone || e.K.crate || w.hit.has(e) || e.y < w.y || e.y < -20) continue;
       w.hit.add(e);
       this.strike(e, e.kind === 'warlord' ? e.maxHp * F.ultBoss : e.kind === 'brute' ? e.maxHp * F.ultBig : e.hp);
       if (e.K.big && !e.gone) this.float(e.x, e.y - e.K.tall - 20, 'ARROW STORM!', '#ffe082', 16);

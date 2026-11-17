@@ -2,7 +2,7 @@ const { chromium } = require('playwright');
 // Bot playtest for the stronghold defence. Same set-up as bot-test.js:
 //   PHASER=/path/to/phaser.min.js node tools/fort-test.js '[[5,3,"ult"],[6,5,""]]'
 // Each case is [upgradeLevel (attack speed and blade damage), Range level, mode]. The bot aims at the enemy nearest the wall
-// (a crate if one is on the road and nothing is close), uses SLOW when ready and, with "ult" in the mode, the ultimate.
+// (a chest or box in the side lanes while no enemy is past the middle of the road; "greedy" stays on the sides longer), uses SLOW when ready and, with "ult" in the mode, the ultimate.
 const path = require('path');
 const CASES = JSON.parse(process.argv[2]);
 (async () => {
@@ -25,8 +25,9 @@ const CASES = JSON.parse(process.argv[2]);
       let f = 0, low = 999, lastW = 0; const gates = [];
       while (!sc.over && f < 40000) {
         const foes = sc.enemies.filter(e => !e.gone && e.y > 0);
-        const near = foes.filter(e => !e.K.crate).sort((a, b) => b.y - a.y)[0], crate = foes.find(e => e.K.crate);
-        const pick = near && near.y > 300 ? near : crate || near;
+        const near = foes.filter(e => !e.K.crate).sort((a, b) => b.y - a.y)[0];
+        const side = foes.filter(e => e.K.crate && e.y > 60).sort((a, b) => (a.kind === 'chest' ? 0 : 1) - (b.kind === 'chest' ? 0 : 1) || b.y - a.y)[0];
+        const pick = near && near.y > (mode.includes('greedy') ? 430 : 300) ? near : side || near;      // the middle first once it is close; otherwise the side lanes
         if (pick) sc.targetX = pick.x;
         if (sc.charge >= sc.specialMax && foes.some(e => e.y > 420)) sc.activateSpecial();
         if (mode.includes('ult') && (foes.filter(e => e.y > 150).length >= 10 || foes.some(e => e.K.big && e.y > 380))) sc.activateUlt();
