@@ -32,13 +32,14 @@ const CASES = JSON.parse(process.argv[2]);
         const sides = foes.filter(e => e.K.crate && e.kind !== 'leaf' && e.y > 40 && !(e.kind === 'banner' && e.n >= CFG.fort.banner.max));
         const side = sides.filter(e => e.kind === 'chest' || e.x > 200).sort((a, b) => b.y - a.y)[0] || sides.sort((a, b) => b.y - a.y)[0];
         const pick = urgent ? near : leaf || side || near || foes.find(e => !e.K.crate);       // the road first once they are close; then the gate, then the side lanes
-        if (pick) sc.targetX = pick.x;
+        const drop = sc.drops.filter(d => d.y > 380).sort((a, b) => b.y - a.y)[0];     // a falling prize: go and catch it unless the road is about to hit the wall
+        if (drop && !(near && near.y > 470)) sc.targetX = drop.x; else if (pick) sc.targetX = pick.x;
         if (sc.charge >= sc.specialMax && foes.some(e => e.y > 420)) sc.activateSpecial();
         if (mode.includes('ult') && (foes.filter(e => !e.K.crate && e.y > 150).length >= 10 || foes.some(e => e.K.big && e.y > 380))) sc.activateUlt();
         low = Math.min(low, sc.gate); if (sc.waveNo !== lastW) { lastW = sc.waveNo; gates.push(Math.ceil(sc.gate)); }
         step(); f++;
       }
-      out.push(['up' + up + ' R' + range, mode, sc.won ? 'WIN ' : 'lose', 'gate ' + Math.ceil(sc.gate) + ' (lowest ' + Math.ceil(low) + ')', 'wave ' + sc.waveNo, Math.round(f / 60) + 's', 'archers ' + sc.archers.length, sc.doorBroken ? 'gate shut then broken' : sc.doorShut ? 'gate shut' : 'gate ' + sc.leaves.filter(l => l.shut).length + '/2 shut', 'ult ' + sc.ultUsed, 'coins ' + sc.earned, 'gate at each wave ' + gates.join(',')].join(' | '));
+      out.push(['up' + up + ' R' + range, mode, sc.won ? 'WIN ' : 'lose', 'gate ' + Math.ceil(sc.gate) + ' (lowest ' + Math.ceil(low) + ')', 'wave ' + sc.waveNo, Math.round(f / 60) + 's', 'archers ' + sc.archers.length, sc.doorBroken ? 'gate shut then broken' : sc.doorShut ? 'gate shut' : 'gate ' + sc.leaves.filter(l => l.shut).length + '/2 shut', 'ult ' + sc.ultUsed, 'caught ' + (sc.mysteries + sc.chests - sc.missed), 'coins ' + sc.earned, 'gate at each wave ' + gates.join(',')].join(' | '));
     }
     return out;
   }, CASES);

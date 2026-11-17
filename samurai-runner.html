@@ -53,13 +53,14 @@ const CFG = {
     gateHp: 200, wallY: 560, archerY: 586, archers: 4, perRange: 0.5, maxArchers: 14, perRow: 7, spacing: 18, fireMul: 0.8, arrowDmg: 0.5, arrowSpeed: 700,
     laneL: 116, laneR: 284,                       // the two dividers: boxes left of laneL, chests right of laneR, the enemy between
     hp: 2.5, grow: 0.18, gap: 1800, coinShare: 0.4,
-    waves: [[14, 0, 0, 8], [18, 0.15, 0, 8], [22, 0.25, 1, 9], [28, 0.3, 0, 9], [34, 0.3, 1, 9], [40, 0.35, 2, 10],
-      [46, 0.4, 1, 10], [52, 0.4, 2, 10], [58, 0.45, 2, 11], [64, 0.5, 3, 11], [70, 0.5, 3, 11], [54, 0.5, 2, 12]],
+    // Ten waves (owner: twelve was too long), each a little more crowded than before. [enemies, share of demons, brutes, seconds]
+    waves: [[17, 0, 0, 8], [23, 0.15, 0, 8], [30, 0.25, 1, 9], [38, 0.3, 1, 9], [46, 0.35, 1, 10], [54, 0.4, 2, 10],
+      [62, 0.4, 2, 10], [70, 0.45, 2, 11], [78, 0.5, 3, 11], [64, 0.5, 2, 12]],
     kinds: {
       zombie: { key: 'zombie', hp: 1, speed: 118, hit: 1, ms: 1600, half: 13, tall: 30, stop: 12 },
       demon: { key: 'demon', hp: 2, speed: 150, hit: 2, ms: 1500, half: 13, tall: 30, stop: 12 },
       brute: { key: 'oni', hp: 30, speed: 52, hit: 4, ms: 1600, half: 26, tall: 60, stop: 26, scale: 1.5, big: true, souls: 6 },
-      warlord: { key: 'warlord', hp: 180, speed: 24, hit: 12, ms: 2000, half: 50, tall: 120, stop: 56, scale: 1, big: true, souls: 80 },
+      warlord: { key: 'warlord', hp: 220, speed: 24, hit: 12, ms: 2000, half: 50, tall: 120, stop: 56, scale: 1, big: true, souls: 80 },
       banner: { key: 'recruit', speed: 46, half: 40, tall: 44, stop: 6, crate: true },   // left lane: a recruit banner; arrows raise its number, the wall collects it
       mystery: { key: 'mystery', speed: 46, half: 40, tall: 30, stop: 6, crate: true },  // left lane: a "?" box with a short boost inside
       barrel: { key: 'barrel', speed: 46, half: 22, tall: 38, stop: 6, crate: true },    // left lane: shot open, it rolls into the road and blows up
@@ -80,6 +81,8 @@ const CFG = {
     // Powder barrel: kills ordinary enemies within `r` of where it stops in the middle of the road; brutes lose `big`, the warlord `boss` of full health.
     barrel: { hp: 40, grow: 0.25, r: 95, rollMs: 300, big: 0.4, boss: 0.08 },
     chest: { everyMs: 19000, firstMs: 5000, hp: 110, grow: 0.45, prizes: ['fire', 'archers', 'repair', 'sharp'] },
+    // A broken chest or "?" box drops its prize, which falls to the wall: slide the archers under it to catch it, or it is lost.
+    drop: { speed: 120, reach: 22 },
     fireMs: 12000, firePierce: 2, fireDmg: 1.5, repair: 50, moreArchers: 3, sharp: 0.25,
     ultBig: 0.35, ultBoss: 0.12, specials: 5, ults: 3.2,       // how many times a defence fills each bar
     reward: [300, 100],                           // coins for holding it: the first time, then on replays
@@ -3000,7 +3003,7 @@ class DefenseScene extends BaseScene {
       charge: 0, slowLeft: 0, timeScale: 1,      // SLOW, as in the run
       ultCharge: 0, ultWave: null, ultUsed: 0,   // the ultimate: Arrow Storm
       fireLeft: 0, rapidLeft: 0, twinLeft: 0, freezeLeft: 0, moreArchers: 0, dmgMod: 1,    // crate boosts
-      leftN: 0, recruits: 0, mysteries: 0, barrels: 0, blasts: [],
+      leftN: 0, recruits: 0, mysteries: 0, barrels: 0, blasts: [], drops: [], missed: 0, caughtHint: false,
       waveNo: 0, boxes: 0, chests: 0, logs: 0, boxT: 1500, chestT: F.chest.firstMs, nextWave: 800,
       doorShut: false, doorBroken: false, doorHp: 0, leaves: [], spawns: [], enemies: [], arrows: [], archers: [],
       aimX: W / 2, targetX: W / 2, startUi: null, pauseUi: null, hurt: 0,
@@ -3133,7 +3136,7 @@ class DefenseScene extends BaseScene {
     const g0 = this.add.graphics();
     g0.fillStyle(0x1c1220, 0.94).fillRoundedRect(24, 150, 352, 208, 14).lineStyle(3, 0xffd54f, 0.9).strokeRoundedRect(24, 150, 352, 208, 14);
     this.txt(W / 2, 182, 'DEFEND THE COMPOUND', 24, '#ffd54f', { stroke: '#2a0a14', strokeThickness: 5 });
-    this.txt(W / 2, 258, 'SLIDE to aim your archers. Hold the wall!\n\nLEFT: shoot the blue banner to raise its\nnumber, open ? boxes, blow up barrels.\nRIGHT: prize chests behind logs.\nMIDDLE: shoot both doors to shut the gate.', 13, '#fff3e0', { align: 'center', fontStyle: 'normal', lineSpacing: 3 });
+    this.txt(W / 2, 258, 'SLIDE to aim your archers. Hold the wall!\nBroken prizes fall: slide under to CATCH.\nLEFT: shoot the blue banner to raise its\nnumber, open ? boxes, blow up barrels.\nRIGHT: prize chests behind logs.\nMIDDLE: shoot both doors to shut the gate.', 13, '#fff3e0', { align: 'center', fontStyle: 'normal', lineSpacing: 3 });
     const hint = this.txt(W / 2, 334, 'touch the road to start', 15, '#fff', { stroke: '#000', strokeThickness: 4 });
     this.tweens.add({ targets: hint, alpha: 0.35, duration: 600, yoyo: true, repeat: -1 });
     this.add.rectangle(W / 2, 618, W, 204, 0x0a0610, 0.75);
@@ -3404,20 +3407,49 @@ class DefenseScene extends BaseScene {
       this.blasts.push({ obj: this.img(e.x, e.y - 19, 'barrel'), x0: e.x, y: e.y - 19, t0: this.t });
       return;
     }
-    if (e.kind === 'mystery') {
+    if (e.kind === 'mystery') this.mysteries++; else this.chests++;
+    this.dropPrize(e, x, y);
+  }
+  // The prize falls toward the wall; the archers have to be under it when it arrives.
+  dropPrize(e, x, y) {
+    const box = e.kind === 'mystery';
+    const obj = this.img(x, y, box ? 'mystery' : 'chest').setScale(S * 0.55).setDepth(2950);
+    const label = this.txt(x, y, box ? '?' : e.name, box ? 16 : 11, '#fff', { stroke: box ? '#38006b' : '#5d3a00', strokeThickness: 4, align: 'center' }).setDepth(2951);
+    const ring = this.add.graphics().setDepth(2949);
+    this.drops.push({ kind: e.kind, boost: e.boost, x, y, obj, label, ring });
+    Sound.play('gateGood');
+    if (!this.caughtHint) { this.caughtHint = true; this.banner('CATCH IT!', 'slide your archers under the prize'); }
+  }
+  updateDrops(wdt) {
+    const F = CFG.fort, n = this.archers.length, half = (Math.min(n, F.perRow) - 1) / 2 * F.spacing;
+    this.drops = this.drops.filter(d => {
+      d.y += F.drop.speed * wdt;
+      const p = 1 + Math.sin(this.time.now * 0.015) * 0.08;
+      d.obj.setPosition(d.x, d.y).setScale(S * 0.55 * p); d.label.setPosition(d.x, d.y - 1);
+      d.ring.clear().lineStyle(3, d.kind === 'mystery' ? 0xe1bee7 : 0xffe082, 0.5 + Math.sin(this.time.now * 0.015) * 0.3).strokeCircle(d.x, d.y, 30 * p);
+      if (d.y < F.archerY - 30) return true;
+      d.obj.destroy(); d.label.destroy(); d.ring.destroy();
+      if (Math.abs(d.x - this.aimX) <= half + F.drop.reach) this.grant(d.kind, d.boost, d.x, d.y);
+      else { this.missed++; this.float(d.x, d.y - 20, 'MISSED', '#cfd8dc', 16); Sound.play('deny'); }
+      return false;
+    });
+  }
+  grant(kind, boost, x, y) {
+    const F = CFG.fort;
+    if (kind === 'mystery') {
       const M = F.mystery, prize = M.prizes[Math.random() * M.prizes.length | 0];
-      this.mysteries++; Sound.play('buy');
+      Sound.play('buy');
       if (prize === 'rapid') { this.rapidLeft = M.rapidMs; this.float(x, y - 10, 'RAPID FIRE!', '#e1bee7', 17); }
       else if (prize === 'twin') { this.twinLeft = M.twinMs; this.float(x, y - 10, 'TWIN ARROWS!', '#e1bee7', 17); }
       else if (prize === 'freeze') { this.freezeLeft = M.freezeMs; Sound.play('special'); this.float(W / 2, y - 10, 'FROZEN!', '#b3e5fc', 24); }
       else { this.earned += M.coins; Save.souls += M.coins; Sound.play('soul'); this.float(x, y - 10, '+' + M.coins + ' COINS', '#ffe082', 17); }
       return;
     }
-    this.chests++;
+    if (boost === 'archers' && this.archerCount() >= F.maxArchers) boost = 'fire';
     Sound.play('buy'); this.cameras.main.flash(160, 255, 200, 60);
-    if (e.boost === 'archers') { this.moreArchers += F.moreArchers; this.syncArchers(); this.banner('REINFORCEMENTS', '+' + F.moreArchers + ' archers on the wall'); }
-    else if (e.boost === 'fire') { this.fireLeft = F.fireMs; this.banner('FIRE ARROWS', 'they burn through the ranks'); }
-    else if (e.boost === 'sharp') { this.dmgMod += F.sharp; this.banner('SHARP ARROWS', 'arrow damage +' + Math.round(F.sharp * 100) + '%'); }
+    if (boost === 'archers') { this.moreArchers += F.moreArchers; this.syncArchers(); this.banner('REINFORCEMENTS', '+' + F.moreArchers + ' archers on the wall'); }
+    else if (boost === 'fire') { this.fireLeft = F.fireMs; this.banner('FIRE ARROWS', 'they burn through the ranks'); }
+    else if (boost === 'sharp') { this.dmgMod += F.sharp; this.banner('SHARP ARROWS', 'arrow damage +' + Math.round(F.sharp * 100) + '%'); }
     else { this.gate = Math.min(F.gateHp, this.gate + F.repair); this.banner('GATE REPAIRED', '+' + F.repair); }
   }
 
@@ -3481,6 +3513,7 @@ class DefenseScene extends BaseScene {
     if (this.over) return;
     this.updateEnemies(wdt);
     this.updateBlasts();
+    this.updateDrops(wdt);
     this.updateArrows(dt);
     this.updateUlt(dt);
     this.updateHud(dt);

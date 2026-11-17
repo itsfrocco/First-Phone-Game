@@ -18,9 +18,9 @@ Only open or merge a pull request yourself if they ask for it in that message.
 Always resend the game link with a fresh cache-busting number on the end, one higher than
 the last one used, so their phone downloads the new copy:
 
-    https://itsfrocco.github.io/First-Phone-Game/samurai-runner.html?v=34
+    https://itsfrocco.github.io/First-Phone-Game/samurai-runner.html?v=36
 
-Last number sent: `?v=33`. Update this line each time a new link is sent.
+Last number sent: `?v=35`. Update this line each time a new link is sent.
 
 Before sending the link, check that the "pages build and deployment" run for the merge commit has
 finished (GitHub MCP `actions_list`); a link opened earlier caches the old game for about ten minutes.
@@ -165,6 +165,10 @@ labelled SUPPLIES) now delivers every 8.5s for the whole fight, in the order ban
   enemies in the blast die, brutes lose 40%, the warlord 8%. So the player waits for the crowd to be level with it.
 An idea offered and not built: boxes that build a ballista on the wall. As tuned: 3 loses at wave 8, 4 at wave 11, 5 wins or
 loses in the final wave, 6 and up win. The bot shoots barrels as soon as it can, so a player timing them does better.
+Then (owner: too long): ten waves instead of twelve, each about 15% more crowded, and the warlord has 220 health (was 180).
+Prizes must be caught (owner): a broken chest or "?" box drops its prize, which falls to the wall (`CFG.fort.drop`, `dropPrize`,
+`updateDrops`, `grant`); the archers must be under it when it lands or it is "MISSED". The banner and barrel are unchanged.
+The bot goes for a falling prize unless an enemy is close to the wall. As tuned: 4 loses at waves 7-9, 5 and up win.
 
 ## Testing
 
