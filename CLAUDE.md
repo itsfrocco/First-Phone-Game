@@ -39,7 +39,7 @@ Also say one visible thing that tells them they have the new version.
 | `Save`, `Stats` | localStorage keys (`samurai_*`) and upgrade formulas. Four upgrade cards: attack speed (`fire`), blade damage, range, coin reward (`revenue`). The currency is shown as coins but is still called `souls` in the code and the save, so old saves carry over |
 | `Sound`, `Music` | Web Audio synth. Music modes: menu (arcade theme), run, boss, storm, stormBoss |
 | `Art` | Every texture, drawn with Canvas 2D at device resolution. The only image file is `menu.jpg`, loaded in `BootScene`; its PLAY and SETTINGS buttons are painted in, with invisible touch areas over them in `MenuScene`. `Art.menuBg` and plain buttons are the fallback if it does not load (always the case from `file://`) |
-| Scenes | `MenuScene`, `SagaScene`, `SettingsScene`, `TutorialScene`, `GameScene` |
+| Scenes | `MenuScene`, `SagaScene`, `SettingsScene`, `TutorialScene`, `GameScene`, `DefenseScene` (the stronghold) |
 
 Tutorial: `TutorialScene.PAGES` are ten picture pages (steer, gates, fight, red/orange circles, safe lanes, SLOW,
 the ultimate, lucky charm, upgrade cards, gear and store) with SKIP on every page. Tapping level 1 opens them while
@@ -126,6 +126,20 @@ Owner's follow-up (after playing the ultimate):
   half of the way to the line (up to 67 of 116px) and never crushed; a real player cuts less well, so do not raise these without testing.
   The bot output shows `pushed n/116`; it takes Blade Damage at the free upgrade and then resets it.
 
+The stronghold defence (`DefenseScene`, `CFG.fort`, `Save.forts` / `samurai_forts`), inspired by an ad the owner liked (crowds
+pouring down a lane at shooters): a second play style once per saga, required, played after the saga boss. Stage numbers were
+not changed; saga 2 is locked until `Save.forts >= 1`, so players who had already reached saga 2 must defend first (owner: it
+cannot be skipped). Saga 1's is a wooden compound in the grasslands; the owner wants each later saga's fort to suit its terrain.
+A row of archers on the wall follows the finger and fires straight up on its own; arrows hit the first enemy in their column.
+3 archers plus one per two Range levels (max 10); Attack Speed sets the firing rate (`fireMul`), Blade Damage the arrow damage.
+Twelve timed waves (about 3.5 minutes; owner wanted it long) of zombies and demons, with brutes (`Art.oni`, health number
+overhead) in the ranks from wave 3 and a helmeted warlord in the final wave. Enemies that reach the wall strike the gate
+(150 health); at 0 the stage is lost. Supply crates come down in a fixed order (`crates`: +1 archer, fire arrows that pierce,
+gate repair) and must be shot open before they reach the wall. SLOW works as in the run; the ultimate here is Arrow Storm
+(kills ordinary enemies, brutes lose 35%, the warlord 12%). Upgrade cards are on its start screen. Holding it pays 400 coins
+the first time, 100 after. `tools/fort-test.js` plays it: cases are [speed/damage level, Range level, mode]. As tuned: 3 loses at
+wave 5, 4 at waves 9-11, 5 wins about two times in three with the ultimate, 6 wins. Losses come fast once a crowd reaches the wall.
+
 ## Testing
 
 There is no test suite. Use `tools/bot-test.js` (instructions at the top of that file) to play
@@ -184,6 +198,7 @@ Still waiting on the owner: what the shop should sell.
 - Rewards for civilians saved (100, 200, 300 and so on): the owner will design them later. The total is already kept
   (`Save.civilians`, `samurai_civilians`) and shown on the sagas screen.
 
+- Strongholds for later sagas (a mountain fort for saga 2 and so on), each after that saga's boss, with that saga's enemies.
 - More ultimates: the owner called Dragon Slash "the first ultimate", so expect others to choose between later.
   An idea not built: the wave flipping a red gate it passes.
 - Control discussed with the owner, not built yet: flick down for a guard stance (crossed blades or planted wooden
