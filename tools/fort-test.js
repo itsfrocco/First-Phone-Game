@@ -29,7 +29,7 @@ const CASES = JSON.parse(process.argv[2]);
         const near = foes.filter(e => !e.K.crate && !held(e)).sort((a, b) => b.y - a.y)[0];
         const urgent = near && near.y > (mode.includes('greedy') ? 330 : 190);
         const leaf = mode.includes('door') && sc.leaves.filter(l => !l.shut).sort((a, b) => a.hp - b.hp)[0];
-        const sides = foes.filter(e => e.K.crate && e.kind !== 'leaf' && e.y > 40);
+        const sides = foes.filter(e => e.K.crate && e.kind !== 'leaf' && e.y > 40 && !(e.kind === 'banner' && e.n >= CFG.fort.banner.max));
         const side = sides.filter(e => e.kind === 'chest' || e.x > 200).sort((a, b) => b.y - a.y)[0] || sides.sort((a, b) => b.y - a.y)[0];
         const pick = urgent ? near : leaf || side || near || foes.find(e => !e.K.crate);       // the road first once they are close; then the gate, then the side lanes
         if (pick) sc.targetX = pick.x;
