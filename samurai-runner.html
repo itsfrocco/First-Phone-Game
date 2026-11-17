@@ -46,6 +46,26 @@ const CFG = {
   // The ultimate (flick up): a wave of wind that sweeps up the whole screen. It cuts down every ordinary enemy it passes,
   // breaks walls and logs, and takes `bossShare` of a boss's full health. Its bar fills with kills, about `perLevel` times a level.
   ult: { perLevel: 2.55, walls: 2, min: 40, bossShare: 0.12, speed: 950, flickPx: 70, flickMs: 350 },
+  // The stronghold defence, the stage after a saga's boss: archers on the compound wall shoot up the road at waves of enemies.
+  // `waves` are [enemies, share that are demons, brutes, seconds]; the warlord comes with the last one. Enemy health is `hp` times
+  // the kind's own, growing `grow` a wave. The wall has `gateHp`; each enemy that reaches it strikes for its `hit`.
+  fort: {
+    gateHp: 150, wallY: 560, archerY: 586, archers: 3, perRange: 0.5, maxArchers: 10, spacing: 22, fireMul: 1.6, arrowSpeed: 640,
+    hp: 5, grow: 0.075, gap: 2500,
+    waves: [[14, 0, 0, 11], [18, 0.15, 0, 11], [20, 0.25, 1, 12], [24, 0.3, 0, 12], [26, 0.3, 1, 12], [30, 0.35, 2, 13],
+      [32, 0.4, 1, 13], [36, 0.4, 2, 13], [38, 0.45, 2, 14], [42, 0.5, 3, 14], [46, 0.5, 3, 14], [30, 0.5, 2, 14]],
+    kinds: {
+      zombie: { key: 'zombie', hp: 1, speed: 42, hit: 1, ms: 1600, half: 13, tall: 30, stop: 12 },
+      demon: { key: 'demon', hp: 2, speed: 58, hit: 2, ms: 1500, half: 13, tall: 30, stop: 12 },
+      brute: { key: 'oni', hp: 22, speed: 27, hit: 4, ms: 1600, half: 26, tall: 60, stop: 26, scale: 1.5, big: true, souls: 12 },
+      warlord: { key: 'warlord', hp: 130, speed: 15, hit: 12, ms: 2000, half: 50, tall: 120, stop: 56, scale: 1, big: true, souls: 150 },
+      crate: { key: 'crate', hp: 9, speed: 36, half: 20, tall: 30, stop: 12, crate: true },
+    },
+    crateWaves: [2, 4, 6, 8, 9, 10, 11], crates: ['archers', 'fire', 'archers', 'repair', 'archers', 'fire', 'repair'],          // a supply crate comes down with these waves (counting from 1)
+    fireMs: 12000, firePierce: 2, fireDmg: 1.5, repair: 40, moreArchers: 1,
+    ultBig: 0.35, ultBoss: 0.12, specials: 5, ults: 3.2,       // how many times a defence fills each bar
+    reward: [400, 100],                           // coins for holding it: the first time, then on replays
+  },
   charmDamageUp: 1.10,     // each lucky charm broken: +10% blade damage for the rest of the run
   bossSlow: 0.97,          // the run slows 3% once the boss is down
   shake: 0.4,              // screen-shake strength multiplier (0 = off)
@@ -214,6 +234,7 @@ const Save = {
   music: true, sfx: true, shake: true,
   armor: '', weapon: '', necklace: '',   // equipped gear ids
   tutorial: false,               // true once the how-to-play pages have been seen or skipped
+  forts: 0,                      // strongholds held: 1 once saga 1's compound has been defended (saga 2 needs it)
   civilians: 0,                  // civilians freed from cages, all runs together (rewards at 100, 200... are planned)
   load() {
     const num = (k, def) => {
@@ -231,6 +252,7 @@ const Save = {
     this.shake = num('samurai_shake', 1) === 1;
     this.tutorial = num('samurai_tutorial', 0) === 1;
     this.civilians = num('samurai_civilians', 0);
+    this.forts = num('samurai_forts', 0);
     try { this.armor = localStorage.getItem('samurai_armor') || ''; this.weapon = localStorage.getItem('samurai_weapon') || ''; this.necklace = localStorage.getItem('samurai_necklace') || ''; } catch (e) {}
   },
   save() {
@@ -246,12 +268,13 @@ const Save = {
       localStorage.setItem('samurai_shake', this.shake ? 1 : 0);
       localStorage.setItem('samurai_tutorial', this.tutorial ? 1 : 0);
       localStorage.setItem('samurai_civilians', this.civilians);
+      localStorage.setItem('samurai_forts', this.forts);
       localStorage.setItem('samurai_armor', this.armor);
       localStorage.setItem('samurai_weapon', this.weapon);
       localStorage.setItem('samurai_necklace', this.necklace);
     } catch (e) {}
   },
-  resetProgress() { this.souls = 0; this.fire = this.damage = this.range = this.revenue = this.level = 1; this.armor = this.weapon = this.necklace = ''; this.tutorial = false; this.civilians = 0; this.save(); },
+  resetProgress() { this.souls = 0; this.fire = this.damage = this.range = this.revenue = this.level = 1; this.armor = this.weapon = this.necklace = ''; this.tutorial = false; this.civilians = 0; this.forts = 0; this.save(); },
 };
 Save.load();
 window.addEventListener('pagehide', () => Save.save());
@@ -355,6 +378,8 @@ const Sound = {
     ultimate: (S, r, t) => { S.noise({ f: 300, to: 5200, dur: 0.75, vol: 0.5, q: 0.7 }); S.tone({ type: 'sawtooth', f: 110, to: 660, dur: 0.6, vol: 0.25, attack: 0.05 });
       [392, 587, 784].forEach((f, i) => S.tone({ type: 'triangle', f, dur: 0.5, vol: 0.3, at: t + 0.12 + i * 0.07 })); },
     ultReady: (S, r, t) => [659, 880, 1319].forEach((f, i) => S.tone({ type: 'triangle', f, dur: 0.18, vol: 0.3, at: t + i * 0.08 })),
+    arrow: (S, r) => S.noise({ type: 'highpass', f: 2600 * r, dur: 0.035, vol: 0.05 }),
+    gateHit: (S, r) => { S.tone({ f: 120 * r, to: 48, dur: 0.22, vol: 0.5 }); S.noise({ type: 'lowpass', f: 800, dur: 0.12, vol: 0.3 }); },
     gong: (S) => [[98, 0.5], [147, 0.3], [233, 0.2], [311, 0.12]].forEach(([f, v]) => S.tone({ f, dur: 1.8, vol: v, attack: 0.01 })),
     warn: (S) => S.tone({ type: 'square', f: 220, to: 440, dur: 0.3, vol: 0.14 }),
     warnPower: (S) => S.tone({ type: 'sawtooth', f: 130, to: 620, dur: 0.7, vol: 0.18, attack: 0.3 }),
@@ -894,6 +919,50 @@ const Art = {
     c.strokeStyle = '#cfd8dc'; c.lineWidth = 2.2; c.beginPath(); c.arc(48, 30, 4, Math.PI, 0); c.stroke();
     c.fillStyle = '#5d4000'; c.fillRect(47, 33.5, 2, 4);
   },
+  // The stronghold: an archer (the samurai with a drawn bow), an arrow, a supply crate, the compound wall, the warlord.
+  archer(c) {
+    Art.samurai(c);
+    c.strokeStyle = '#6d3f14'; c.lineWidth = 2.2; c.beginPath(); c.arc(18, 24, 17, Math.PI * 1.14, Math.PI * 1.86); c.stroke();
+    c.strokeStyle = '#f5f5f5'; c.lineWidth = 0.7; c.beginPath(); c.moveTo(2.2, 16.8); c.lineTo(18, 21); c.lineTo(33.8, 16.8); c.stroke();
+    c.strokeStyle = '#d7ccc8'; c.lineWidth = 1.2; c.beginPath(); c.moveTo(18, 21); c.lineTo(18, 3); c.stroke();
+    Art.tri(c, [18, -1], [15.6, 4], [20.4, 4], '#eceff1');
+  },
+  arrow(c) {
+    c.strokeStyle = '#d7ccc8'; c.lineWidth = 1.5; c.beginPath(); c.moveTo(4, 5); c.lineTo(4, 20); c.stroke();
+    Art.tri(c, [4, 0], [1, 7], [7, 7], '#fafafa');
+    Art.tri(c, [4, 15], [0.6, 22], [4, 20], '#42a5f5'); Art.tri(c, [4, 15], [7.4, 22], [4, 20], '#42a5f5');
+  },
+  crate(c) {
+    Art.shadow(c, 18, 29, 16);
+    Art.rr(c, 3, 3, 30, 25, 3); c.fillStyle = Art.grad(c, 0, 3, 0, 28, [[0, '#bc9a7a'], [1, '#7a5638']]); c.fill();
+    c.strokeStyle = '#4e342e'; c.lineWidth = 1.4; Art.rr(c, 3, 3, 30, 25, 3); c.stroke();
+    c.beginPath(); c.moveTo(3, 11); c.lineTo(33, 11); c.moveTo(3, 20); c.lineTo(33, 20); c.stroke();
+    c.fillStyle = '#ffca28'; [[5, 5], [29, 5], [5, 24], [29, 24]].forEach(([x, y]) => c.fillRect(x, y, 2.4, 2.4));
+  },
+  fort(c, w, h) {
+    c.fillStyle = Art.grad(c, 0, 30, 0, h, [[0, '#7a6450'], [1, '#4a3b2e']]); c.fillRect(0, 30, w, h - 30);          // the yard
+    c.fillStyle = 'rgba(0,0,0,0.12)'; for (let i = 0; i < 60; i++) c.fillRect((i * 97) % w, 52 + (i * 53) % (h - 56), 5, 2);
+    c.fillStyle = '#9c7a5b'; c.fillRect(0, 34, w, 16);                                                                  // the walkway the archers stand on
+    c.strokeStyle = 'rgba(60,35,20,0.55)'; c.lineWidth = 1; for (let x = 0; x < w; x += 20) { c.beginPath(); c.moveTo(x, 34); c.lineTo(x, 50); c.stroke(); }
+    c.fillStyle = 'rgba(0,0,0,0.3)'; c.fillRect(0, 50, w, 4);
+    for (let x = 0; x < w; x += 16) {                                                                                  // palisade of sharpened logs
+      c.fillStyle = Art.grad(c, x, 0, x + 16, 0, [[0, '#5d4037'], [0.45, '#a1785a'], [1, '#4e342e']]); c.fillRect(x + 0.5, 12, 15, 26);
+      Art.tri(c, [x + 0.5, 12.5], [x + 8, 0], [x + 15.5, 12.5], '#8d6748'); Art.tri(c, [x + 8, 0], [x + 15.5, 12.5], [x + 9, 12.5], '#5d4037');
+    }
+    c.fillStyle = '#3e2723'; c.fillRect(0, 26, w, 3); c.fillStyle = '#d7b98a'; c.fillRect(0, 25, w, 1);                 // the rope binding
+    Art.rr(c, 156, 2, 88, 38, 3); c.fillStyle = '#2b1a14'; c.fill();                                                    // the gate
+    Art.rr(c, 160, 6, 39, 32, 2); c.fillStyle = Art.grad(c, 0, 6, 0, 38, [[0, '#6d4c41'], [1, '#3e2723']]); c.fill();
+    Art.rr(c, 201, 6, 39, 32, 2); c.fill();
+    c.fillStyle = '#263238'; [12, 28].forEach(y => { c.fillRect(160, y, 39, 3); c.fillRect(201, y, 39, 3); });
+    c.fillStyle = '#ffca28'; [164, 178, 192, 205, 219, 233].forEach(x => [12.5, 28.5].forEach(y => c.fillRect(x, y, 2, 2)));
+    c.fillStyle = '#1565c0'; c.fillRect(150, 0, 6, 30); c.fillRect(244, 0, 6, 30); Art.ell(c, 153, 12, 2.2, 2.2, '#fff'); Art.ell(c, 247, 12, 2.2, 2.2, '#fff');   // clan banners
+  },
+  warlord(c) {                                                 // the oni, larger, in a black war helmet
+    c.scale(2.7, 2.7); Art.oni(c);
+    c.beginPath(); c.arc(24, 11, 11.6, Math.PI, 0); c.closePath(); c.fillStyle = Art.grad(c, 12, 0, 36, 11, [[0, '#3a3a52'], [1, '#0d0d16']]); c.fill();
+    c.fillStyle = '#0d0d16'; c.fillRect(11, 10, 26, 2.2); c.fillStyle = '#ffca28'; c.fillRect(12, 11.8, 24, 0.7);
+    c.beginPath(); c.arc(24, 1.5, 7, 0.08 * Math.PI, 0.92 * Math.PI); c.arc(24, -1.2, 7.2, 0.84 * Math.PI, 0.16 * Math.PI, true); c.closePath(); c.fillStyle = '#ffd54f'; c.fill();
+  },
   rock(c) { Art.ell(c, 6, 6, 6, 5, '#2e3238'); Art.ell(c, 6, 5.6, 4.6, 3.8, '#7d848d'); Art.ell(c, 5, 4.4, 2.6, 1.6, '#a9b0b8'); },
   slash(c) {
     c.beginPath(); c.arc(24, 24, 20, -1.2, 1.2); c.arc(15, 24, 21, 1.0, -1.0, true); c.closePath();
@@ -1027,6 +1096,7 @@ const Art = {
     Art.make(scene, 'tenguBoss', 130, 120, Art.tengu); m('charm', 40, 44); m('glow', 64, 64);
     m('rockOni', 32, 40); m('rockBoss', 130, 130); m('rockGround', 64, 64); m('stonePath', 280, 128); m('cliff', 72, 80); m('boulder', 30, 24);
     m('spike', 36, 28); m('wall', 132, 60); m('log', 132, 60); m('fence', 16, 36); m('civilian', 20, 28); m('cage', 96, 70); m('rock', 12, 12); m('slash', 48, 48); m('soul', 16, 16); m('dot', 8, 8); m('petal', 8, 6);
+    m('archer', 36, 50); m('arrow', 8, 22); m('crate', 36, 32); m('fort', W, 174); m('oni', 48, 54); m('warlord', 130, 150);
     m('grass', 64, 64); m('path', 280, 128); m('lantern', 24, 42); m('deadTree', 60, 58); m('rubble', 30, 24); m('crack', 60, 40); m('tree', 60, 58); m('menuBg', W, H);
   },
 };
@@ -1135,7 +1205,7 @@ class SagaScene extends MenuBase {
     // How to play: replays the tutorial pages.
     this.button(W / 2, 92, 368, 34, 0x00695c, '?  HOW TO PLAY', 14, () => this.scene.start('Tutorial', {}));
     // Saga 1: open, with its three levels.
-    this.panel(W / 2, 254, 368, 264);
+    this.panel(W / 2, 258, 368, 272);
     this.txt(34, 146, numerals[0] + ' · ' + SAGAS[0].toUpperCase(), 17, '#ffd54f').setOrigin(0, 0.5);
     if (Save.civilians > 0) this.txt(W - 34, 146, 'Civilians saved: ' + Save.civilians, 12, '#a5d6a7', { fontStyle: 'normal' }).setOrigin(1, 0.5);
     this.txt(34, 168, Save.level > SAGA_LEVELS + 1 ? 'saga cleared' : Save.level > SAGA_LEVELS ? 'the saga boss awaits' : 'level ' + Save.level + ' of ' + SAGA_LEVELS, 12, '#cfc3d6', { fontStyle: 'normal' }).setOrigin(0, 0.5);
@@ -1152,30 +1222,38 @@ class SagaScene extends MenuBase {
     });
     // The saga's major boss, fought after level 3.
     const bossOpen = Save.level > SAGA_LEVELS, bossDone = Save.level > SAGA_LEVELS + 1;
-    const boss = this.button(W / 2, 344, 340, 46, bossDone ? 0x2e7d32 : bossOpen ? 0x6a1b9a : 0x3a3444,
+    const boss = this.button(W / 2, 322, 340, 40, bossDone ? 0x2e7d32 : bossOpen ? 0x6a1b9a : 0x3a3444,
       bossOpen ? 'SAGA BOSS · ' + LEVELS[SAGA_LEVELS].name.toUpperCase() + (bossDone ? '  ✓' : '') : 'SAGA BOSS · LOCKED', 14, () => {
         if (!bossOpen) { Sound.play('deny'); return; }
         this.scene.start('Game', { level: SAGA_LEVELS + 1 });
       });
     if (!bossOpen) boss.t.setColor('#8a8094');
+    // Then the land has to be held: the stronghold defence. Saga 2 stays shut until it is.
+    const fortDone = Save.forts >= 1;
+    const fort = this.button(W / 2, 368, 340, 40, !bossDone ? 0x3a3444 : fortDone ? 0x2e7d32 : 0xb26a00,
+      !bossDone ? 'DEFEND THE COMPOUND · LOCKED' : 'DEFEND THE COMPOUND' + (fortDone ? '  ✓' : ''), 14, () => {
+        if (!bossDone) { Sound.play('deny'); return; }
+        this.scene.start('Defense', { saga: 0 });
+      });
+    if (!bossDone) fort.t.setColor('#8a8094');
     // Saga 2: opens once the first saga's boss is beaten. Only its first level exists so far.
-    const first2 = SAGA_LEVELS + 2, open2 = Save.level >= first2;          // stage number of saga 2, level 1
-    this.panel(W / 2, 472, 368, 156, open2 ? 0.92 : 0.7);
-    this.txt(34, 412, numerals[1] + ' · ' + SAGAS[1].toUpperCase(), 17, open2 ? '#ffd54f' : '#8a8094').setOrigin(0, 0.5);
-    this.txt(34, 432, !open2 ? 'defeat the saga boss to unlock' : Save.level > first2 ? 'level 1 cleared · more coming soon' : 'level 1 of ' + SAGA_LEVELS, 12, open2 ? '#cfc3d6' : '#6f6678', { fontStyle: 'normal' }).setOrigin(0, 0.5);
+    const first2 = SAGA_LEVELS + 2, open2 = Save.level >= first2 && fortDone;          // stage number of saga 2, level 1
+    this.panel(W / 2, 478, 368, 156, open2 ? 0.92 : 0.7);
+    this.txt(34, 418, numerals[1] + ' · ' + SAGAS[1].toUpperCase(), 17, open2 ? '#ffd54f' : '#8a8094').setOrigin(0, 0.5);
+    this.txt(34, 438, !open2 ? (bossDone ? 'defend the compound to unlock' : 'defeat the saga boss to unlock') : Save.level > first2 ? 'level 1 cleared · more coming soon' : 'level 1 of ' + SAGA_LEVELS, 12, open2 ? '#cfc3d6' : '#6f6678', { fontStyle: 'normal' }).setOrigin(0, 0.5);
     for (let k = 0; k < SAGA_LEVELS; k++) {
-      const n = first2 + k, L = LEVELS[n - 1], x = 82 + k * 118, open = !!L && Save.level >= n, done = open && Save.level > n;
-      const b = this.button(x, 492, 104, 76, open ? (done ? 0x2e7d32 : 0xc62828) : 0x3a3444, open ? String(k + 1) : '—', 28, () => {
+      const n = first2 + k, L = LEVELS[n - 1], x = 82 + k * 118, open = !!L && open2 && Save.level >= n, done = open && Save.level > n;
+      const b = this.button(x, 498, 104, 76, open ? (done ? 0x2e7d32 : 0xc62828) : 0x3a3444, open ? String(k + 1) : '—', 28, () => {
         if (!open) { Sound.play('deny'); return; }
         this.scene.start('Game', { level: n });
       });
       b.t.y -= 10; if (!open) b.t.setColor('#8a8094');
-      this.txt(x, 514, open ? L.name : L ? 'LOCKED' : 'COMING SOON', 10, open ? '#fff' : '#8a8094');
-      if (done) this.txt(x + 38, 466, '✓', 16, '#fff59d');
+      this.txt(x, 520, open ? L.name : L ? 'LOCKED' : 'COMING SOON', 10, open ? '#fff' : '#8a8094');
+      if (done) this.txt(x + 38, 472, '✓', 16, '#fff59d');
     }
     // Sagas 3-5: locked.
     for (let i = 2; i < SAGAS.length; i++) {
-      const y = 588 + (i - 2) * 46;
+      const y = 590 + (i - 2) * 45;
       this.panel(W / 2, y, 368, 40, 0.7);
       this.txt(34, y, numerals[i] + ' · ' + SAGAS[i].toUpperCase(), 15, '#8a8094').setOrigin(0, 0.5);
       this.txt(250, y, 'coming soon', 11, '#6f6678', { fontStyle: 'normal' });
@@ -2817,7 +2895,7 @@ class GameScene extends BaseScene {
     this.img(W / 2 - 62, 346, 'soul').setScale(S * 1.6).setDepth(D + 1);
     this.txt(W / 2 + 6, 346, '+' + coins(this.earned) + ' coins', 24, '#ffe082').setDepth(D + 1);
     const hasNext = this.levelNo < LEVELS.length, nextSaga = SAGAS[Math.floor(this.levelNo / (SAGA_LEVELS + 1))];
-    if (unlocked) this.txt(W / 2, 390, !hasNext ? 'MORE LEVELS COMING SOON' : this.isSagaBoss ? nextSaga.toUpperCase() + ' UNLOCKED' : this.sagaPos === SAGA_LEVELS - 1 ? 'SAGA BOSS UNLOCKED' : 'LEVEL ' + (this.sagaPos + 2) + ' UNLOCKED', 16, '#fff59d').setDepth(D + 1);
+    if (unlocked) this.txt(W / 2, 390, !hasNext ? 'MORE LEVELS COMING SOON' : this.isSagaBoss ? (Save.forts > Math.floor((this.levelNo - 1) / (SAGA_LEVELS + 1)) ? nextSaga.toUpperCase() + ' UNLOCKED' : 'NOW DEFEND THE COMPOUND') : this.sagaPos === SAGA_LEVELS - 1 ? 'SAGA BOSS UNLOCKED' : 'LEVEL ' + (this.sagaPos + 2) + ' UNLOCKED', 16, '#fff59d').setDepth(D + 1);
     if (gearWon) this.txt(W / 2, 418, 'WON: THUNDER ARMOR  ·  FUTSU-NO-MITAMA', 13, '#d1c4e9').setDepth(D + 1);
     const tap = this.txt(W / 2, 452, 'tap to continue', 16, '#bbb', { fontStyle: 'normal' }).setDepth(D + 1).setAlpha(0);
     this.time.delayedCall(700, () => {
@@ -2826,6 +2904,464 @@ class GameScene extends BaseScene {
         if (win && (this.sagaPos >= SAGA_LEVELS - 1 || !hasNext)) this.scene.start('Sagas');   // level 3, a saga boss or the newest level beaten: back to the map
         else this.scene.start('Game', { level: this.levelNo + (win ? 1 : 0) });         // on to the next level, or retry this one
       });
+    });
+  }
+}
+
+/* ============================================================
+   STRONGHOLD DEFENCE — the stage after a saga's boss. The clan's archers hold the compound wall.
+   ============================================================ */
+class DefenseScene extends BaseScene {
+  constructor() { super('Defense'); }
+  init(data) { this.saga = (data && data.saga) || 0; }
+
+  create() {
+    this.setupCamera();
+    const F = CFG.fort;
+    Object.assign(this, {
+      started: false, paused: false, over: false, won: false,
+      t: 0,                          // world time, ms
+      gate: F.gateHp, gateShown: 1, earned: 0,
+      charge: 0, slowLeft: 0, timeScale: 1,      // SLOW, as in the run
+      ultCharge: 0, ultWave: null, ultUsed: 0,   // the ultimate: Arrow Storm
+      fireLeft: 0, moreArchers: 0, dmgMod: 1,    // crate boosts
+      waveNo: 0, crateNo: 0, nextWave: 800, spawns: [], enemies: [], arrows: [], archers: [],
+      aimX: W / 2, targetX: W / 2, startUi: null, pauseUi: null, hurt: 0,
+    });
+    this.time.paused = false;
+    Music.set('run');
+    const total = F.waves.reduce((n, w) => n + w[0] + w[2], 0);
+    this.specialMax = Math.round(total / F.specials); this.ultMax = Math.round(total / F.ults);
+
+    // The grasslands, the road, the compound across the bottom.
+    this.add.tileSprite(W / 2, H / 2, W, H, 'grass').setTileScale(S).setDepth(-20);
+    this.add.tileSprite(W / 2, H / 2, CFG.pathRight - CFG.pathLeft, H, 'path').setTileScale(S).setDepth(-19);
+    const fog = this.add.graphics().setDepth(-18);
+    fog.fillGradientStyle(0x1a1030, 0x1a1030, 0x1a1030, 0x1a1030, 0.75, 0.75, 0, 0).fillRect(0, 0, W, 200);
+    for (let y = 60; y < F.wallY - 40; y += 92) [0, 1].forEach(right => {
+      const x = 26 + Math.random() * 10;
+      this.img(right ? W - x : x, y + Math.random() * 30, Math.random() < 0.6 ? 'tree' : 'lantern').setDepth(-15);
+    });
+    this.lane = this.add.graphics().setDepth(-12);            // where the archers are aiming
+    this.fort = this.img(W / 2, F.wallY - 14, 'fort').setOrigin(0.5, 0).setDepth(F.wallY + 2);
+    this.burst = this.add.particles(0, 0, 'dot', { speed: { min: 40, max: 150 }, lifespan: { min: 250, max: 480 }, scale: { start: S, end: 0 }, emitting: false }).setDepth(3000);
+    this.add.particles(0, 0, 'petal', {
+      x: { min: 0, max: W }, y: -10, lifespan: 8000, speedY: { min: 35, max: 80 }, speedX: { min: -25, max: 10 },
+      scale: S, rotate: { start: 0, end: 360 }, frequency: 500, alpha: 0.8,
+    }).setDepth(3500);
+    this.slowTint = this.add.rectangle(W / 2, H / 2, W, H, 0x5e35b1, 1).setAlpha(0).setDepth(3600);
+    this.hurtTint = this.add.rectangle(W / 2, H / 2, W, H, 0xff1744, 1).setAlpha(0).setDepth(3601);
+    this.ultG = this.add.graphics().setDepth(2970).setBlendMode(Phaser.BlendModes.ADD);
+
+    // HUD
+    const D = 5000;
+    this.hud = this.add.graphics().setDepth(D);
+    this.soulIcon = this.img(22, 56, 'soul').setScale(S * 1.2).setDepth(D);
+    this.soulText = this.txt(34, 56, '', 16, '#ffe082', { stroke: '#1a0a20', strokeThickness: 3 }).setOrigin(0, 0.5).setDepth(D);
+    this.gateText = this.txt(W / 2, 29, '', 11, '#fff', { stroke: '#000', strokeThickness: 3 }).setDepth(D + 1);
+    this.waveText = this.txt(W / 2, 57, '', 13, '#fff3e0', { stroke: '#1a0a20', strokeThickness: 3 }).setDepth(D);
+    this.boostText = this.txt(W / 2, 76, '', 12, '#ffab91', { stroke: '#1a0a20', strokeThickness: 3 }).setDepth(D);
+    this.specialText = this.txt(336, 676, 'SLOW', 13).setDepth(D + 1).setVisible(false);
+    this.specialHint = this.txt(130, 662, 'SPECIAL', 10, '#b39ddb').setDepth(D).setVisible(false);
+    this.ultHint = this.txt(130, 634, 'ULTIMATE', 10, '#ffe082').setDepth(D).setVisible(false);
+    this.add.zone(336, 676, 84, 76).setInteractive().on('pointerdown', () => this.activateSpecial());
+    const pg = this.add.graphics().setDepth(5100);
+    pg.fillStyle(0x000000, 0.45).fillCircle(372, 58, 17).fillStyle(0xffffff, 1).fillRoundedRect(365, 50, 5, 16, 1.5).fillRoundedRect(374, 50, 5, 16, 1.5);
+    this.add.zone(372, 58, 48, 48).setDepth(5100).setInteractive({ useHandCursor: true }).on('pointerdown', () => { Sound.unlock(); if (this.started) this.setPaused(true); });
+
+    this.syncArchers();
+    this.showStartUi();
+
+    // Touch: slide to aim the row of archers; a quick flick up looses the ultimate.
+    let trail = [];
+    this.input.on('pointerdown', p => {
+      trail = [];
+      if (!this.started && !this.paused && p.worldY > 120 && p.worldY < 505 && !(p.worldX < 124 && p.worldY < 198)) this.beginRun();
+    });
+    const steer = p => {
+      if (!this.started || this.paused) return;
+      if ((p.worldY > 636 && p.worldX > 280) || (p.worldY < 84 && p.worldX > 345)) return;       // the SLOW and pause buttons
+      this.targetX = p.worldX;
+    };
+    this.input.on('pointerdown', steer);
+    this.input.on('pointermove', p => {
+      steer(p);
+      if (!this.started || this.paused || !p.isDown) return;
+      const now = performance.now();
+      trail.push({ x: p.worldX, y: p.worldY, t: now });
+      while (now - trail[0].t > CFG.ult.flickMs) trail.shift();
+      const up = trail[0].y - p.worldY;
+      if (up >= CFG.ult.flickPx && Math.abs(p.worldX - trail[0].x) < up * 0.6) { trail = []; this.activateUlt(); }
+    });
+  }
+
+  /* ---------- before the fight ---------- */
+  showStartUi() {
+    if (this.startUi) this.startUi.forEach(o => o.destroy());
+    const before = new Set(this.children.list);
+    const g0 = this.add.graphics();
+    g0.fillStyle(0x1c1220, 0.94).fillRoundedRect(24, 150, 352, 208, 14).lineStyle(3, 0xffd54f, 0.9).strokeRoundedRect(24, 150, 352, 208, 14);
+    this.txt(W / 2, 182, 'DEFEND THE COMPOUND', 24, '#ffd54f', { stroke: '#2a0a14', strokeThickness: 5 });
+    this.txt(W / 2, 258, 'The boss is dead and this land is yours.\nHis army wants it back.\n\nSLIDE to aim your archers.\nDo not let them break the gate!\nShoot supply crates for help.', 14, '#fff3e0', { align: 'center', fontStyle: 'normal', lineSpacing: 3 });
+    const hint = this.txt(W / 2, 334, 'touch the road to start', 15, '#fff', { stroke: '#000', strokeThickness: 4 });
+    this.tweens.add({ targets: hint, alpha: 0.35, duration: 600, yoyo: true, repeat: -1 });
+    this.add.rectangle(W / 2, 618, W, 204, 0x0a0610, 0.75);
+    const n = this.archerCount();
+    const cards = [
+      ['fire', 'ATTACK\nSPEED', 0x2e7d32, (this.fireMs() / 1000).toFixed(2) + 's a shot'],
+      ['damage', 'BLADE\nDAMAGE', 0x1565c0, fmt(Stats.damage()) + ' per arrow'],
+      ['range', 'RANGE', 0xc62828, n + ' archers', n >= CFG.fort.maxArchers && Stats.rangeMaxed()],
+      ['revenue', 'COIN\nREWARD', 0x6a1b9a, fmt(Stats.soulsPerKill()) + ' per kill'],
+    ];
+    cards.forEach(([key, title, color, stat, maxed], i) => {
+      const x = 52 + i * 98.7, y = 616, w = 92, h = 150, cost = Stats.cost(Save[key], key), can = !maxed && Save.souls >= cost;
+      const g = this.add.graphics();
+      g.fillStyle(0x1c1220, 0.96).fillRoundedRect(x - w / 2, y - h / 2, w, h, 12);
+      g.fillStyle(color, 1).fillRoundedRect(x - w / 2, y - h / 2, w, 34, { tl: 12, tr: 12, bl: 0, br: 0 });
+      g.lineStyle(2, 0xffffff, 0.25).strokeRoundedRect(x - w / 2, y - h / 2, w, h, 12);
+      this.txt(x, y - h / 2 + 17, title, 11, '#fff', { align: 'center', lineSpacing: -2 });
+      this.txt(x, y - 24, 'Lv ' + Save[key], 20);
+      this.txt(x, y - 2, stat, 10, '#cfc3d6', { fontStyle: 'normal' });
+      const b = this.button(x, y + 42, 80, 40, can ? color : 0x4a4250, maxed ? 'MAX' : coins(cost), 15, () => {
+        if (maxed || Save.souls < cost) { Sound.play('deny'); return; }
+        Save.souls -= cost; Save[key]++; Save.save(); Sound.play('buy');
+        this.time.delayedCall(0, () => { if (!this.started) { this.syncArchers(); this.showStartUi(); } });
+      });
+      if (!can) b.t.setColor('#9a90a0');
+    });
+    this.button(54, 96, 84, 34, 0x3a3050, '‹ SAGAS', 13, () => this.scene.start('Sagas'));
+    this.startUi = this.children.list.filter(o => !before.has(o));
+    this.startUi.forEach((o, i) => o.setDepth(6000 + i));
+  }
+
+  beginRun() {
+    if (this.started) return;
+    this.started = true;
+    this.startUi.forEach(o => o.destroy()); this.startUi = null;
+    this.specialText.setVisible(true); this.specialHint.setVisible(true); this.ultHint.setVisible(true);
+  }
+
+  /* ---------- the archers ---------- */
+  archerCount() { return Math.min(CFG.fort.maxArchers, CFG.fort.archers + Math.floor((Save.range - 1) * CFG.fort.perRange) + this.moreArchers); }
+  fireMs() { return Stats.attackMs() * CFG.fort.fireMul; }
+  arrowDmg() { return Stats.damage() * this.dmgMod * (this.fireLeft > 0 ? CFG.fort.fireDmg : 1); }
+  syncArchers() {
+    const n = this.archerCount();
+    while (this.archers.length < n) this.archers.push({ obj: this.img(W / 2, CFG.fort.archerY, 'archer').setDepth(CFG.fort.wallY + 10), cd: Math.random() * this.fireMs() });
+    while (this.archers.length > n) this.archers.pop().obj.destroy();
+  }
+
+  updateArchers(dt) {
+    const F = CFG.fort, n = this.archers.length, half = (n - 1) / 2 * F.spacing;
+    this.targetX = clamp(this.targetX, CFG.pathLeft + 12 + half, CFG.pathRight - 12 - half);
+    this.aimX += (this.targetX - this.aimX) * damp(18, dt);
+    this.lane.clear().fillStyle(0xfff59d, 0.07).fillRect(this.aimX - half - 9, 0, half * 2 + 18, F.wallY);
+    this.archers.forEach((a, i) => {
+      a.obj.x = this.aimX + (i - (n - 1) / 2) * F.spacing;
+      a.obj.y = F.archerY + (a.kick || 0); a.kick = Math.max(0, (a.kick || 0) - 30 * dt);
+      if (!this.started) return;
+      a.cd -= dt * 1000;
+      if (a.cd > 0) return;
+      a.cd += this.fireMs(); a.kick = 3;
+      const fire = this.fireLeft > 0;
+      const obj = this.img(a.obj.x, F.archerY - 26, 'arrow').setDepth(2900);
+      if (fire) obj.setTint(0xff7043).setScale(S * 1.25);
+      this.arrows.push({ x: a.obj.x, y: F.archerY - 26, obj, dmg: this.arrowDmg(), pierce: fire ? F.firePierce : 0, hit: new Set() });
+      if (Math.random() < 0.5) Sound.play('arrow');
+    });
+  }
+
+  updateArrows(dt) {
+    const sp = CFG.fort.arrowSpeed * dt;
+    this.arrows = this.arrows.filter(a => {
+      a.y -= sp;
+      for (const e of this.enemies) {
+        if (e.gone || a.hit.has(e) || Math.abs(e.x - a.x) > e.K.half || a.y > e.y + 4 || a.y < e.y - e.K.tall - sp) continue;
+        a.hit.add(e);
+        this.strike(e, a.dmg);
+        if (a.pierce-- <= 0) { a.obj.destroy(); return false; }
+      }
+      if (a.y < -30) { a.obj.destroy(); return false; }
+      a.obj.y = a.y;
+      return true;
+    });
+  }
+
+  /* ---------- the enemy ---------- */
+  spawn(kind, x) {
+    const F = CFG.fort, K = F.kinds[kind];
+    const hp = Math.max(1, Math.round(K.hp * F.hp * (1 + F.grow * (this.waveNo - 1))));
+    const e = { kind, K, x: x || 76 + Math.random() * 248, y: -40, hp, maxHp: hp, cd: K.ms, seed: Math.random() * 9 };
+    if (K.big) e.x = clamp(e.x, 110, 290);
+    if (kind === 'warlord') e.x = W / 2;
+    e.obj = this.img(e.x, e.y, K.key).setOrigin(0.5, 1); if (K.scale) e.obj.setScale(S * K.scale);
+    if (K.crate) {
+      e.boost = F.crates[this.crateNo++ % F.crates.length];
+      if (e.boost === 'archers' && this.archerCount() >= F.maxArchers) e.boost = 'fire';
+      if (e.boost === 'repair' && this.gate >= F.gateHp) e.boost = 'fire';
+      e.glow = this.img(e.x, e.y, 'glow').setScale(S * 1.3).setTint(0xffd54f).setBlendMode(Phaser.BlendModes.ADD);
+      e.label = this.txt(e.x, e.y, { archers: '+' + F.moreArchers + ' ARCHERS', fire: 'FIRE ARROWS', repair: 'REPAIR' }[e.boost], 11, '#ffe082', { stroke: '#000', strokeThickness: 3 });
+    } else if (K.big) e.label = this.txt(e.x, e.y, '', kind === 'warlord' ? 18 : 13, '#fff', { stroke: '#7f0000', strokeThickness: 4 });
+    this.enemies.push(e);
+    return e;
+  }
+
+  startWave() {
+    const F = CFG.fort, [count, demons, brutes, secs] = F.waves[this.waveNo];
+    this.waveNo++;
+    const last = this.waveNo === F.waves.length, ms = secs * 1000;
+    for (let i = 0; i < count; i++) this.spawns.push({ at: this.t + Math.random() * ms, kind: Math.random() < demons ? 'demon' : 'zombie' });
+    for (let i = 0; i < brutes; i++) this.spawns.push({ at: this.t + ms * (i + 0.6) / (brutes + 0.4), kind: 'brute' });
+    if (F.crateWaves.includes(this.waveNo)) this.spawns.push({ at: this.t + ms * 0.3, kind: 'crate' });
+    if (last) this.spawns.push({ at: this.t + ms * 0.45, kind: 'warlord' });
+    this.spawns.sort((a, b) => a.at - b.at);
+    this.nextWave = this.t + ms + F.gap;
+    this.banner(last ? 'FINAL WAVE' : 'WAVE ' + this.waveNo, last ? 'the warlord is coming' : brutes ? (brutes > 1 ? brutes + ' brutes' : 'a brute') + ' in the ranks' : '');
+    if (brutes || last) Sound.play('warnPower');
+  }
+
+  updateWaves() {
+    const F = CFG.fort;
+    while (this.spawns.length && this.spawns[0].at <= this.t) {
+      const s = this.spawns.shift(), e = this.spawn(s.kind);
+      if (s.kind === 'warlord') { Music.set('boss'); Sound.play('gong'); this.shake(400, 0.012); this.banner('THE WARLORD', 'stop him before he reaches the gate'); }
+      else if (s.kind === 'crate') this.float(e.x, 60, 'SUPPLIES!', '#ffe082', 16);
+    }
+    const foes = this.enemies.some(e => !e.gone && !e.K.crate);
+    if (this.waveNo < F.waves.length) {
+      if (this.t >= this.nextWave || (this.waveNo && !this.spawns.length && !foes && this.t >= this.nextWave - F.gap - 3000)) this.startWave();
+    } else if (!this.spawns.length && !foes) this.finish(true);
+  }
+
+  updateEnemies(wdt) {
+    const F = CFG.fort, now = this.time.now;
+    this.enemies = this.enemies.filter(e => {
+      if (e.gone) return false;
+      const stopY = F.wallY - e.K.stop + (e.K.big ? 14 : 0);
+      if (e.y < stopY) e.y = Math.min(stopY, e.y + e.K.speed * wdt);
+      else if (e.K.crate) { this.float(e.x, e.y - 30, 'LOST', '#cfd8dc', 16); this.remove(e); return false; }
+      else {
+        e.cd -= wdt * 1000;
+        if (e.cd <= 0) { e.cd = e.K.ms; this.hitGate(e); }
+      }
+      const walk = e.y < stopY;
+      e.obj.setPosition(e.x, e.y + (e.K.big && !walk ? Math.max(0, 1 - e.cd / 220) * 10 : 0)).setDepth(e.y)
+        .setRotation(e.K.crate ? 0 : Math.sin(now * (walk ? 0.011 : 0.02) + e.seed) * (e.K.big ? 0.04 : 0.09));
+      if (e.glow) e.glow.setPosition(e.x, e.y - 14).setDepth(e.y - 1).setAlpha(0.7 + Math.sin(now * 0.008) * 0.25);
+      if (e.label) e.label.setPosition(e.x, e.y - (e.K.crate ? 42 : e.obj.displayHeight + 8)).setDepth(4000).setText(e.K.crate ? e.label.text : String(Math.ceil(e.hp)));
+      return true;
+    });
+  }
+
+  hitGate(e) {
+    if (this.over) return;
+    this.gate = Math.max(0, this.gate - e.K.hit);
+    this.hurt = 1;
+    Sound.play(e.K.big ? 'slam' : 'gateHit');
+    this.shake(e.K.big ? 320 : 90, e.K.big ? 0.016 : 0.004);
+    if (e.K.big || Math.random() < 0.5) this.float(e.x, CFG.fort.wallY - 14, '−' + e.K.hit, '#ff5252', e.K.big ? 24 : 15);
+    this.fort.setTint(0xff9a9a); this.time.delayedCall(90, () => { if (this.fort.active) this.fort.clearTint(); });
+    if (this.gate <= 0) this.finish(false);
+  }
+
+  strike(e, dmg) {
+    if (e.gone) return;
+    e.hp -= dmg;
+    if (!e.flash) {
+      e.flash = true;
+      if (e.K.big) e.obj.setTint(0xff9a9a); else e.obj.setTintFill(0xffffff);
+      this.time.delayedCall(55, () => { if (e.obj.active) e.obj.clearTint(); e.flash = false; });
+    }
+    if (e.hp <= 0) this.kill(e);
+  }
+
+  remove(e) { e.gone = true; e.obj.destroy(); if (e.label) e.label.destroy(); if (e.glow) e.glow.destroy(); }
+
+  kill(e) {
+    const F = CFG.fort, x = e.x, y = e.y - e.K.tall / 2;
+    this.remove(e);
+    this.burst.setParticleTint({ zombie: 0x9ccc65, demon: 0xab47bc, brute: 0xef5350, warlord: 0xef5350, crate: 0xbc9a7a }[e.kind]);
+    this.burst.explode(e.K.big ? 40 : 10, x, y);
+    if (e.K.crate) { this.openCrate(e, x, y); return; }
+    Sound.play('kill');
+    const raw = e.K.souls || Stats.soulsPerKill(), gain = Math.floor(raw) + (Math.random() < raw % 1 ? 1 : 0);
+    this.earned += gain; Save.souls += gain;
+    this.charge = Math.min(this.specialMax, this.charge + (e.K.big ? this.specialMax / 5 : 1));
+    if (!this.ultWave) {
+      const was = this.ultCharge;
+      this.ultCharge = Math.min(this.ultMax, was + (e.K.big ? this.ultMax / 8 : 1));
+      if (was < this.ultMax && this.ultCharge >= this.ultMax) { Sound.play('ultReady'); this.float(130, 628, 'ULTIMATE READY!', '#ffe082', 15); }
+    }
+    if (e.K.big) { this.shake(300, 0.012); this.banner(e.kind === 'warlord' ? 'WARLORD SLAIN' : 'BRUTE DOWN', '+' + gain + ' coins'); if (e.kind === 'warlord') { Sound.play('gong'); this.cameras.main.flash(250, 255, 240, 200); } }
+    const orb = this.img(x, y, 'soul').setDepth(5001).setScale(S * (e.K.big ? 2 : 1.2));
+    this.tweens.add({ targets: orb, x: 22, y: 56, duration: 520, ease: 'Cubic.in', onComplete: () => { orb.destroy(); Sound.play('soul'); } });
+  }
+
+  openCrate(e, x, y) {
+    const F = CFG.fort;
+    Sound.play('buy'); this.cameras.main.flash(160, 255, 200, 60);
+    if (e.boost === 'archers') { this.moreArchers += F.moreArchers; this.syncArchers(); this.banner('REINFORCEMENTS', '+' + F.moreArchers + ' archers on the wall'); }
+    else if (e.boost === 'fire') { this.fireLeft = F.fireMs; this.banner('FIRE ARROWS', 'they burn through the ranks'); }
+    else { this.gate = Math.min(F.gateHp, this.gate + F.repair); this.banner('GATE REPAIRED', '+' + F.repair); }
+  }
+
+  /* ---------- SLOW and the ultimate ---------- */
+  activateSpecial() {
+    if (!this.started || this.over || this.paused || this.slowLeft > 0 || this.charge < this.specialMax) return;
+    this.charge = 0; this.slowLeft = CFG.slowMs;
+    Sound.play('special'); this.cameras.main.flash(180, 150, 110, 255); this.banner('SLOW MOTION', '');
+  }
+
+  // Arrow Storm: every archer looses at once and a wave of golden arrows sweeps the whole road.
+  activateUlt() {
+    if (!this.started || this.over || this.paused || this.ultWave || this.ultCharge < this.ultMax) return;
+    this.ultCharge = 0; this.ultUsed++;
+    this.ultWave = { y: CFG.fort.wallY, hit: new Set(), tail: 0 };
+    Sound.play('ultimate'); this.cameras.main.flash(260, 255, 214, 110); this.shake(450, 0.012);
+    this.banner('ARROW STORM', '');
+  }
+
+  updateUlt(dt) {
+    const w = this.ultWave, g = this.ultG, F = CFG.fort;
+    if (!w) return;
+    g.clear();
+    w.y -= CFG.ult.speed * dt; w.tail += dt;
+    for (const e of [...this.enemies]) {
+      if (e.gone || w.hit.has(e) || e.y < w.y || e.y < -20) continue;
+      w.hit.add(e);
+      this.strike(e, e.kind === 'warlord' ? e.maxHp * F.ultBoss : e.kind === 'brute' ? e.maxHp * F.ultBig : e.hp);
+      if (e.K.big && !e.gone) this.float(e.x, e.y - e.K.tall - 20, 'ARROW STORM!', '#ffe082', 16);
+    }
+    if (w.y < -140) { this.ultWave = null; return; }
+    for (let i = 1; i <= 5; i++) g.fillStyle(0xffb300, 0.05).fillRect(0, w.y, W, i * 34);
+    for (let x = 6; x < W; x += 13) {                         // a wall of arrows
+      const y = w.y + Math.sin(x * 0.9 + w.tail * 30) * 9 + ((x * 7) % 23);
+      g.lineStyle(2.4, 0xffe082, 0.95).lineBetween(x, y, x, y + 26).lineStyle(6, 0xff8f00, 0.3).lineBetween(x, y + 6, x, y + 60);
+      g.fillStyle(0xffffff, 1).fillTriangle(x - 3, y + 2, x, y - 7, x + 3, y + 2);
+    }
+  }
+
+  /* ---------- main loop ---------- */
+  update(time, delta) {
+    if (this.over || this.paused) return;
+    const dt = Math.min(delta, 50) / 1000;
+    this.updateArchers(dt);
+    if (!this.started) { this.updateHud(dt); return; }
+    const slowing = this.slowLeft > 0;
+    this.timeScale += ((slowing ? CFG.slowScale : 1) - this.timeScale) * damp(10, dt);
+    const wdt = dt * this.timeScale;
+    Music.rate = this.timeScale;
+    if (slowing) this.slowLeft = Math.max(0, this.slowLeft - delta);
+    this.slowTint.setAlpha((1 - this.timeScale) / (1 - CFG.slowScale) * 0.2);
+    this.fireLeft = Math.max(0, this.fireLeft - dt * 1000);
+    this.hurt = Math.max(0, this.hurt - dt * 3);
+    const low = this.gate / CFG.fort.gateHp < 0.3 ? 0.1 + Math.sin(time * 0.008) * 0.06 : 0;
+    this.hurtTint.setAlpha(Math.max(low, this.hurt * 0.18));
+    this.t += wdt * 1000;
+    this.updateWaves();
+    if (this.over) return;
+    this.updateEnemies(wdt);
+    this.updateArrows(dt);
+    this.updateUlt(dt);
+    this.updateHud(dt);
+  }
+
+  updateHud(dt) {
+    const g = this.hud, F = CFG.fort; g.clear();
+    // the gate's health
+    const px = 70, pw = 260, r = this.gate / F.gateHp;
+    this.gateShown += (r - this.gateShown) * damp(5, dt);
+    g.fillStyle(0x000000, 0.55).fillRoundedRect(px - 3, 20, pw + 6, 18, 8);
+    if (this.gateShown > 0.01) g.fillStyle(0xffffff, 0.7).fillRoundedRect(px, 23, pw * this.gateShown, 12, 5);
+    if (r > 0.01) g.fillStyle(r > 0.5 ? 0x43a047 : r > 0.25 ? 0xffa000 : 0xe53935, 1).fillRoundedRect(px, 23, pw * r, 12, Math.min(5, pw * r / 2));
+    this.gateText.setText('GATE  ' + Math.ceil(this.gate) + ' / ' + F.gateHp);
+    this.soulText.setText(coins(Save.souls));
+    this.waveText.setText(this.waveNo ? (this.waveNo === F.waves.length ? 'FINAL WAVE' : 'WAVE ' + this.waveNo + ' / ' + F.waves.length) : '');
+    this.boostText.setText(this.fireLeft > 0 ? 'FIRE ARROWS ' + (this.fireLeft / 1000).toFixed(0) + 's' : '');
+    if (!this.started) return;
+    // special bar + button, and the ultimate bar above it (as in the run)
+    const slowing = this.slowLeft > 0;
+    const fill = slowing ? this.slowLeft / CFG.slowMs : this.charge / this.specialMax;
+    const ready = !slowing && this.charge >= this.specialMax;
+    g.fillStyle(0x000000, 0.5).fillRoundedRect(27, 673, 206, 16, 8);
+    if (fill > 0.005) g.fillStyle(slowing ? 0xb388ff : 0x7c4dff, 1).fillRoundedRect(30, 676, 200 * fill, 10, Math.min(5, 100 * fill));
+    const pulse = ready ? 1 + Math.sin(this.time.now * 0.008) * 0.07 : 1;
+    g.fillStyle(0x000000, 0.4).fillCircle(336, 679, 33 * pulse);
+    g.fillStyle(ready ? 0x7c4dff : slowing ? 0x311b92 : 0x3a3050, 1).fillCircle(336, 676, 32 * pulse);
+    g.lineStyle(3, ready ? 0xffffff : 0x8c80a8, ready ? 1 : 0.5).strokeCircle(336, 676, 32 * pulse);
+    this.specialText.setText(slowing ? (this.slowLeft / 1000).toFixed(1) : 'SLOW').setAlpha(ready || slowing ? 1 : 0.45);
+    this.specialHint.setText(ready ? 'SPECIAL READY' : slowing ? 'SLOW MOTION' : 'SPECIAL');
+    const uf = this.ultCharge / this.ultMax, uReady = uf >= 1, glow = 0.5 + Math.sin(this.time.now * 0.01) * 0.5;
+    g.fillStyle(0x000000, 0.5).fillRoundedRect(27, 643, 206, 16, 8);
+    if (uReady) g.lineStyle(2, 0xffffff, 0.4 + glow * 0.6).strokeRoundedRect(27, 643, 206, 16, 8);
+    if (uf > 0.005) g.fillStyle(uReady ? (glow > 0.5 ? 0xffd54f : 0xffb300) : 0xc77800, 1).fillRoundedRect(30, 646, 200 * uf, 10, Math.min(5, 100 * uf));
+    this.ultHint.setText(uReady ? 'ULTIMATE READY  ▲ FLICK UP' : 'ULTIMATE').setAlpha(uReady ? 0.7 + glow * 0.3 : 0.8);
+  }
+
+  /* ---------- fx, pause, end ---------- */
+  shake(ms, amount) { if (Save.shake && CFG.shake > 0) this.cameras.main.shake(ms, amount * CFG.shake); }
+  float(x, y, str, color, size) {
+    const t = this.txt(x, y, str, size, color, { stroke: '#000', strokeThickness: 3 }).setDepth(4000);
+    this.tweens.add({ targets: t, y: y - 30, alpha: 0, duration: 550, ease: 'Cubic.out', onComplete: () => t.destroy() });
+  }
+  banner(title, sub) {
+    const t = this.txt(W / 2, 250, title, 30, '#ffd54f', { stroke: '#2a0a14', strokeThickness: 6 }).setDepth(5200).setScale(0.4);
+    const s = this.txt(W / 2, 282, sub, 14, '#fff', { stroke: '#2a0a14', strokeThickness: 4 }).setDepth(5200).setAlpha(0);
+    this.tweens.add({ targets: t, scale: 1, duration: 220, ease: 'Back.out' });
+    this.tweens.add({ targets: s, alpha: 1, duration: 220 });
+    this.tweens.add({ targets: [t, s], alpha: 0, delay: 1300, duration: 400, onComplete: () => { t.destroy(); s.destroy(); } });
+  }
+
+  setPaused(on) {
+    if (this.over || (on && this.paused)) return;
+    this.paused = on; this.time.paused = on;
+    if (on) this.tweens.pauseAll(); else this.tweens.resumeAll();
+    if (this.pauseUi) this.pauseUi.forEach(o => o.destroy());
+    this.pauseUi = null;
+    if (!on) return;
+    const before = new Set(this.children.list);
+    this.add.rectangle(W / 2, H / 2, W, H, 0x05020c, 0.7).setInteractive();
+    const g = this.add.graphics();
+    g.fillStyle(0x1c1220, 0.97).fillRoundedRect(30, 130, 340, 440, 14).lineStyle(2, 0xffffff, 0.25).strokeRoundedRect(30, 130, 340, 440, 14);
+    this.txt(W / 2, 162, 'PAUSED', 24, '#ffd54f');
+    [['Music', 'music'], ['Sound effects', 'sfx'], ['Screen shake', 'shake']].forEach(([label, key], i) => {
+      const y = 222 + i * 64;
+      this.txt(56, y, label, 18).setOrigin(0, 0.5);
+      this.button(296, y, 92, 44, Save[key] ? 0x2e7d32 : 0x4a4250, Save[key] ? 'ON' : 'OFF', 17, () => {
+        Save[key] = !Save[key]; Save.save(); Sound.applyOptions();
+        this.paused = false; this.setPaused(true);
+      });
+    });
+    this.button(W / 2, 434, 260, 58, 0x3f9b1f, 'RESUME', 24, () => this.setPaused(false));
+    this.button(W / 2, 510, 260, 46, 0x4a3f63, 'QUIT TO SAGAS', 15, () => { Save.save(); this.time.paused = false; this.scene.start('Sagas'); });
+    this.pauseUi = this.children.list.filter(o => !before.has(o));
+    this.pauseUi.forEach((o, i) => o.setDepth(7000 + i));
+  }
+
+  finish(win) {
+    if (this.over) return;
+    this.over = true; this.won = win;
+    const F = CFG.fort, first = win && Save.forts <= this.saga;
+    const bonus = win ? F.reward[first ? 0 : 1] : 0;
+    if (first) Save.forts = this.saga + 1;
+    this.earned += bonus; Save.souls += bonus;
+    Save.save();
+    Music.rate = 1; Music.set('off'); Sound.play(win ? 'win' : 'defeat');
+    this.ultG.clear();
+    const D = 6000;
+    const shade = this.add.rectangle(W / 2, H / 2, W, H, 0x0a0610, 1).setAlpha(0).setDepth(D);
+    this.tweens.add({ targets: shade, alpha: 0.78, duration: 350 });
+    const title = this.txt(W / 2, 270, win ? 'COMPOUND HELD' : 'THE GATE HAS FALLEN', win ? 36 : 30, win ? '#ffd54f' : '#ff5252', { stroke: '#000', strokeThickness: 6 }).setDepth(D + 1).setScale(0.3);
+    this.tweens.add({ targets: title, scale: 1, duration: 350, ease: 'Back.out' });
+    this.img(W / 2 - 62, 336, 'soul').setScale(S * 1.6).setDepth(D + 1);
+    this.txt(W / 2 + 6, 336, '+' + coins(this.earned) + ' coins', 24, '#ffe082').setDepth(D + 1);
+    if (win) this.txt(W / 2, 368, 'includes ' + bonus + ' for holding the land', 12, '#cfc3d6', { fontStyle: 'normal' }).setDepth(D + 1);
+    if (first) this.txt(W / 2, 400, (SAGAS[this.saga + 1] || 'the next saga').toUpperCase() + ' UNLOCKED', 16, '#fff59d').setDepth(D + 1);
+    if (!win) this.txt(W / 2, 384, 'reached wave ' + this.waveNo + ' of ' + F.waves.length + '\nupgrade your clan and try again', 14, '#cfc3d6', { align: 'center', fontStyle: 'normal' }).setDepth(D + 1);
+    const tap = this.txt(W / 2, 452, 'tap to continue', 16, '#bbb', { fontStyle: 'normal' }).setDepth(D + 1).setAlpha(0);
+    this.time.delayedCall(700, () => {
+      this.tweens.add({ targets: tap, alpha: 1, duration: 500, yoyo: true, repeat: -1 });
+      this.input.once('pointerdown', () => { if (win) this.scene.start('Sagas'); else this.scene.start('Defense', { saga: this.saga }); });
     });
   }
 }
@@ -2840,7 +3376,7 @@ window.samuraiGame = new Phaser.Game({
   height: H * R,
   backgroundColor: '#120c14',
   scale: { mode: Phaser.Scale.FIT, autoCenter: Phaser.Scale.CENTER_BOTH },
-  scene: [BootScene, MenuScene, SagaScene, SettingsScene, TutorialScene, GameScene],
+  scene: [BootScene, MenuScene, SagaScene, SettingsScene, TutorialScene, GameScene, DefenseScene],
 });
 </script>
 </body>
