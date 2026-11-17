@@ -142,8 +142,19 @@ crowd, brutes (`Art.oni`, health number overhead) in the ranks from wave 3, a he
 reach the wall strike the gate (150 health); at 0 the stage is lost. SLOW works as in the run; the ultimate here is Arrow Storm
 (kills ordinary enemies, brutes lose 35%, the warlord 12%). Upgrade cards are on its start screen. Kills pay half the usual
 coins (`coinShare`, there are a lot of them); holding it pays 300 more the first time, 100 after (about 800 in all on a first win).
-`tools/fort-test.js` plays it: cases are [speed/damage level, Range level, mode]; the bot shoots the side lanes while no enemy is
-past mid-road. As tuned: 3 loses at wave 8, 4 at waves 11-12, 5 and up win. The bot always ends with all 14 archers.
+Then (owner: far too slow and boring, common enemies should be about 3 times faster, wants strategy): everything is faster
+(zombies 118, demons 150, brutes 52, the warlord 24; waves 8-12s apart; the whole defence about 2.5 minutes), enemies are weaker
+and more numerous, and archers fire twice as often for half the damage (`fireMul` 0.8, `arrowDmg` 0.5). Start with 4 archers.
+Logs (`kinds.log`, `CFG.fort.log`): each side-lane delivery is a log with the prizes behind it (left: a log then two +1 boxes
+every 9.5s; right: a log then the chest), and arrows hit the log first. The main gate (`CFG.fort.door`, `buildDoor`, `roadAt`,
+`shutLeaf`, `hitDoor`), the owner's idea: two door leaves stand open at the edges of the middle road half way up, the enemy
+funnelling between them. Each leaf has a health number; shot to 0 it swings shut (one shut narrows the road to the other half).
+Both shut closes the road: enemies pile up behind it and must break `barHp` (900) before going on, arrows still fly over, and
+once broken it stays down. The owner said "10,000 hp" for scale; the real numbers are sized to arrow damage (250 a leaf).
+Gate (the wall) health is 200. Kills pay `coinShare` 0.4; a first win is about 750 coins in all.
+`tools/fort-test.js` plays it: cases are [speed/damage level, Range level, mode]; "door" in the mode shuts the main gate when
+nothing is close, otherwise the bot works the side lanes. As tuned: 3 loses at wave 5, 4 at wave 9, 5 wins if it shuts the gate
+and loses at waves 9-11 if it ignores it, 6 and up win either way.
 
 ## Testing
 

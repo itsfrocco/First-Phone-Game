@@ -2,7 +2,7 @@ const { chromium } = require('playwright');
 // Bot playtest for the stronghold defence. Same set-up as bot-test.js:
 //   PHASER=/path/to/phaser.min.js node tools/fort-test.js '[[5,3,"ult"],[6,5,""]]'
 // Each case is [upgradeLevel (attack speed and blade damage), Range level, mode]. The bot aims at the enemy nearest the wall
-// (a chest or box in the side lanes while no enemy is past the middle of the road; "greedy" stays on the sides longer), uses SLOW when ready and, with "ult" in the mode, the ultimate.
+// (a chest or box in the side lanes while no enemy is past the middle of the road; "greedy" stays on the sides longer; "door" shoots the main gate's leaves shut first), uses SLOW when ready and, with "ult" in the mode, the ultimate.
 const path = require('path');
 const CASES = JSON.parse(process.argv[2]);
 (async () => {
@@ -25,16 +25,20 @@ const CASES = JSON.parse(process.argv[2]);
       let f = 0, low = 999, lastW = 0; const gates = [];
       while (!sc.over && f < 40000) {
         const foes = sc.enemies.filter(e => !e.gone && e.y > 0);
-        const near = foes.filter(e => !e.K.crate).sort((a, b) => b.y - a.y)[0];
-        const side = foes.filter(e => e.K.crate && e.y > 60).sort((a, b) => (a.kind === 'chest' ? 0 : 1) - (b.kind === 'chest' ? 0 : 1) || b.y - a.y)[0];
-        const pick = near && near.y > (mode.includes('greedy') ? 430 : 300) ? near : side || near;      // the middle first once it is close; otherwise the side lanes
+        const D = CFG.fort.door.y, held = e => sc.doorShut && e.y <= D;
+        const near = foes.filter(e => !e.K.crate && !held(e)).sort((a, b) => b.y - a.y)[0];
+        const urgent = near && near.y > (mode.includes('greedy') ? 330 : 190);
+        const leaf = mode.includes('door') && sc.leaves.filter(l => !l.shut).sort((a, b) => a.hp - b.hp)[0];
+        const sides = foes.filter(e => e.K.crate && e.kind !== 'leaf' && e.y > 40);
+        const side = sides.filter(e => e.kind === 'chest' || e.x > 200).sort((a, b) => b.y - a.y)[0] || sides.sort((a, b) => b.y - a.y)[0];
+        const pick = urgent ? near : leaf || side || near || foes.find(e => !e.K.crate);       // the road first once they are close; then the gate, then the side lanes
         if (pick) sc.targetX = pick.x;
         if (sc.charge >= sc.specialMax && foes.some(e => e.y > 420)) sc.activateSpecial();
-        if (mode.includes('ult') && (foes.filter(e => e.y > 150).length >= 10 || foes.some(e => e.K.big && e.y > 380))) sc.activateUlt();
+        if (mode.includes('ult') && (foes.filter(e => !e.K.crate && e.y > 150).length >= 10 || foes.some(e => e.K.big && e.y > 380))) sc.activateUlt();
         low = Math.min(low, sc.gate); if (sc.waveNo !== lastW) { lastW = sc.waveNo; gates.push(Math.ceil(sc.gate)); }
         step(); f++;
       }
-      out.push(['up' + up + ' R' + range, mode, sc.won ? 'WIN ' : 'lose', 'gate ' + Math.ceil(sc.gate) + ' (lowest ' + Math.ceil(low) + ')', 'wave ' + sc.waveNo, Math.round(f / 60) + 's', 'archers ' + sc.archers.length, 'ult ' + sc.ultUsed, 'coins ' + sc.earned, 'gate at each wave ' + gates.join(',')].join(' | '));
+      out.push(['up' + up + ' R' + range, mode, sc.won ? 'WIN ' : 'lose', 'gate ' + Math.ceil(sc.gate) + ' (lowest ' + Math.ceil(low) + ')', 'wave ' + sc.waveNo, Math.round(f / 60) + 's', 'archers ' + sc.archers.length, sc.doorBroken ? 'gate shut then broken' : sc.doorShut ? 'gate shut' : 'gate ' + sc.leaves.filter(l => l.shut).length + '/2 shut', 'ult ' + sc.ultUsed, 'coins ' + sc.earned, 'gate at each wave ' + gates.join(',')].join(' | '));
     }
     return out;
   }, CASES);

@@ -50,22 +50,28 @@ const CFG = {
   // `waves` are [enemies, share that are demons, brutes, seconds]; the warlord comes with the last one. Enemy health is `hp` times
   // the kind's own, growing `grow` a wave. The wall has `gateHp`; each enemy that reaches it strikes for its `hit`.
   fort: {
-    gateHp: 150, wallY: 560, archerY: 586, archers: 3, perRange: 0.5, maxArchers: 14, perRow: 7, spacing: 18, fireMul: 1.6, arrowSpeed: 640,
+    gateHp: 200, wallY: 560, archerY: 586, archers: 4, perRange: 0.5, maxArchers: 14, perRow: 7, spacing: 18, fireMul: 0.8, arrowDmg: 0.5, arrowSpeed: 700,
     laneL: 116, laneR: 284,                       // the two dividers: boxes left of laneL, chests right of laneR, the enemy between
-    hp: 5, grow: 0.3, gap: 2500, coinShare: 0.5,
-    waves: [[20, 0, 0, 11], [25, 0.15, 0, 11], [28, 0.25, 1, 12], [34, 0.3, 0, 12], [36, 0.3, 1, 12], [42, 0.35, 2, 13],
-      [45, 0.4, 1, 13], [50, 0.4, 2, 13], [53, 0.45, 2, 14], [59, 0.5, 3, 14], [64, 0.5, 3, 14], [42, 0.5, 2, 14]],
+    hp: 2.5, grow: 0.18, gap: 1800, coinShare: 0.4,
+    waves: [[14, 0, 0, 8], [18, 0.15, 0, 8], [22, 0.25, 1, 9], [28, 0.3, 0, 9], [34, 0.3, 1, 9], [40, 0.35, 2, 10],
+      [46, 0.4, 1, 10], [52, 0.4, 2, 10], [58, 0.45, 2, 11], [64, 0.5, 3, 11], [70, 0.5, 3, 11], [54, 0.5, 2, 12]],
     kinds: {
-      zombie: { key: 'zombie', hp: 1, speed: 42, hit: 1, ms: 1600, half: 13, tall: 30, stop: 12 },
-      demon: { key: 'demon', hp: 2, speed: 58, hit: 2, ms: 1500, half: 13, tall: 30, stop: 12 },
-      brute: { key: 'oni', hp: 30, speed: 27, hit: 4, ms: 1600, half: 26, tall: 60, stop: 26, scale: 1.5, big: true, souls: 6 },
-      warlord: { key: 'warlord', hp: 180, speed: 15, hit: 12, ms: 2000, half: 50, tall: 120, stop: 56, scale: 1, big: true, souls: 80 },
-      box: { key: 'box', speed: 30, half: 40, tall: 30, stop: 6, crate: true },        // left lane: +1 archer each
-      chest: { key: 'chest', speed: 15, half: 40, tall: 36, stop: 6, crate: true },   // right lane: a big prize behind a lot of health
+      zombie: { key: 'zombie', hp: 1, speed: 118, hit: 1, ms: 1600, half: 13, tall: 30, stop: 12 },
+      demon: { key: 'demon', hp: 2, speed: 150, hit: 2, ms: 1500, half: 13, tall: 30, stop: 12 },
+      brute: { key: 'oni', hp: 30, speed: 52, hit: 4, ms: 1600, half: 26, tall: 60, stop: 26, scale: 1.5, big: true, souls: 6 },
+      warlord: { key: 'warlord', hp: 180, speed: 24, hit: 12, ms: 2000, half: 50, tall: 120, stop: 56, scale: 1, big: true, souls: 80 },
+      box: { key: 'box', speed: 46, half: 40, tall: 30, stop: 6, crate: true },        // left lane: +1 archer each
+      chest: { key: 'chest', speed: 30, half: 40, tall: 36, stop: 6, crate: true },   // right lane: a big prize behind a lot of health
+      log: { key: 'log', half: 40, tall: 30, stop: 6, crate: true, scale: 0.62 },     // rolls down a side lane in front of the boxes or the chest behind it
+      leaf: { key: 'doorHalf', speed: 0, half: 19, tall: 34, stop: 6, crate: true },  // one open leaf of the main gate, at the edge of the middle road
     },
-    box: { everyMs: 4200, hp: 12, grow: 1.6 },     // each box opened makes the next ones tougher
-    chest: { everyMs: 21000, firstMs: 6000, hp: 110, grow: 0.45, prizes: ['fire', 'archers', 'repair', 'sharp'] },
-    fireMs: 12000, firePierce: 2, fireDmg: 1.5, repair: 40, moreArchers: 3, sharp: 0.25,
+    // The main gate, half way up the middle road: two leaves standing open, the enemy running between them. Each leaf shot down to
+    // 0 swings shut; with both shut the road is closed and the enemy has to break `barHp` of gate before it can go on.
+    door: { y: 290, hp: 250, barHp: 900, open: 34 },
+    log: { hp: 45, grow: 0.3, chest: 2.2 },       // a log's health, growing with each one broken; the chest's log is `chest` times that
+    box: { everyMs: 9500, n: 2, gap: 44, hp: 12, grow: 1.45 },   // left lane: a log, then `n` boxes behind it; each box opened makes the next tougher
+    chest: { everyMs: 19000, firstMs: 5000, hp: 110, grow: 0.45, prizes: ['fire', 'archers', 'repair', 'sharp'] },
+    fireMs: 12000, firePierce: 2, fireDmg: 1.5, repair: 50, moreArchers: 3, sharp: 0.25,
     ultBig: 0.35, ultBoss: 0.12, specials: 5, ults: 3.2,       // how many times a defence fills each bar
     reward: [300, 100],                           // coins for holding it: the first time, then on replays
   },
@@ -955,6 +961,14 @@ const Art = {
     Art.rr(c, 6, 4, 72, 9, 3); c.fillStyle = 'rgba(255,255,255,0.4)'; c.fill();
     c.fillStyle = '#8d5f00'; [[6, 28], [74, 28]].forEach(([x, y]) => c.fillRect(x, y, 4, 4));
   },
+  doorHalf(c, w, h) {                                         // one leaf of the main gate
+    Art.rr(c, 1, 5, w - 2, h - 6, 3); c.fillStyle = 'rgba(0,0,0,0.4)'; c.fill();
+    Art.rr(c, 1, 1, w - 2, h - 6, 3); c.fillStyle = Art.grad(c, 0, 1, 0, h - 5, [[0, '#8d6748'], [1, '#4e342e']]); c.fill();
+    c.strokeStyle = '#2b1a14'; c.lineWidth = 2; Art.rr(c, 1, 1, w - 2, h - 6, 3); c.stroke();
+    c.lineWidth = 1; for (let x = 12; x < w - 4; x += 12) { c.beginPath(); c.moveTo(x, 2); c.lineTo(x, h - 6); c.stroke(); }
+    c.fillStyle = '#37474f'; c.fillRect(2, 7, w - 4, 4); c.fillRect(2, h - 16, w - 4, 4);
+    c.fillStyle = '#ffca28'; for (let x = 7; x < w - 4; x += 12) { c.fillRect(x, 8, 2, 2); c.fillRect(x, h - 15, 2, 2); }
+  },
   yard(c, w, h) {                                             // the compound's stone floor (no grass)
     c.fillStyle = '#8f8676'; c.fillRect(0, 0, w, h);
     [[0, 0, 32, 20], [32, 0, 32, 20], [-16, 20, 32, 22], [16, 20, 32, 22], [48, 20, 32, 22], [0, 42, 32, 22], [32, 42, 32, 22]].forEach(([x, y, a, b], i) => {
@@ -1124,7 +1138,7 @@ const Art = {
     Art.make(scene, 'tenguBoss', 130, 120, Art.tengu); m('charm', 40, 44); m('glow', 64, 64);
     m('rockOni', 32, 40); m('rockBoss', 130, 130); m('rockGround', 64, 64); m('stonePath', 280, 128); m('cliff', 72, 80); m('boulder', 30, 24);
     m('spike', 36, 28); m('wall', 132, 60); m('log', 132, 60); m('fence', 16, 36); m('civilian', 20, 28); m('cage', 96, 70); m('rock', 12, 12); m('slash', 48, 48); m('soul', 16, 16); m('dot', 8, 8); m('petal', 8, 6);
-    m('archer', 36, 50); m('arrow', 8, 22); m('crate', 36, 32); m('box', 84, 34); m('chest', 84, 42); m('yard', 64, 64); m('divider', 10, 64); m('fort', W, 174); m('oni', 48, 54); m('warlord', 130, 150);
+    m('archer', 36, 50); m('arrow', 8, 22); m('crate', 36, 32); m('box', 84, 34); m('doorHalf', 86, 40); m('chest', 84, 42); m('yard', 64, 64); m('divider', 10, 64); m('fort', W, 174); m('oni', 48, 54); m('warlord', 130, 150);
     m('grass', 64, 64); m('path', 280, 128); m('lantern', 24, 42); m('deadTree', 60, 58); m('rubble', 30, 24); m('crack', 60, 40); m('tree', 60, 58); m('menuBg', W, H);
   },
 };
@@ -2953,7 +2967,8 @@ class DefenseScene extends BaseScene {
       charge: 0, slowLeft: 0, timeScale: 1,      // SLOW, as in the run
       ultCharge: 0, ultWave: null, ultUsed: 0,   // the ultimate: Arrow Storm
       fireLeft: 0, moreArchers: 0, dmgMod: 1,    // crate boosts
-      waveNo: 0, boxes: 0, chests: 0, boxT: 2500, chestT: F.chest.firstMs, nextWave: 800, spawns: [], enemies: [], arrows: [], archers: [],
+      waveNo: 0, boxes: 0, chests: 0, logs: 0, boxT: 1500, chestT: F.chest.firstMs, nextWave: 800,
+      doorShut: false, doorBroken: false, doorHp: 0, leaves: [], spawns: [], enemies: [], arrows: [], archers: [],
       aimX: W / 2, targetX: W / 2, startUi: null, pauseUi: null, hurt: 0,
     });
     this.time.paused = false;
@@ -3001,6 +3016,7 @@ class DefenseScene extends BaseScene {
     pg.fillStyle(0x000000, 0.45).fillCircle(372, 58, 17).fillStyle(0xffffff, 1).fillRoundedRect(365, 50, 5, 16, 1.5).fillRoundedRect(374, 50, 5, 16, 1.5);
     this.add.zone(372, 58, 48, 48).setDepth(5100).setInteractive({ useHandCursor: true }).on('pointerdown', () => { Sound.unlock(); if (this.started) this.setPaused(true); });
 
+    this.buildDoor();
     this.syncArchers();
     this.showStartUi();
 
@@ -3027,6 +3043,53 @@ class DefenseScene extends BaseScene {
     });
   }
 
+  /* ---------- the main gate ---------- */
+  buildDoor() {
+    const F = CFG.fort, D = F.door, K = F.kinds.leaf;
+    [F.laneL, F.laneR].forEach(x => this.add.rectangle(x, D.y - 16, 16, 44, 0x5a5348).setStrokeStyle(2, 0x2b2620).setDepth(D.y + 3));   // gate posts
+    [-1, 1].forEach(side => {
+      const x = side < 0 ? F.laneL + 8 + K.half : F.laneR - 8 - K.half;
+      const e = { kind: 'leaf', K, side, x, y: D.y, hp: D.hp, maxHp: D.hp, cd: 0, seed: 0, name: 'DOOR' };
+      e.obj = this.img(x, D.y, K.key).setOrigin(0.5, 1).setScale(S * 0.46, S);       // seen edge-on while it stands open
+      e.label = this.txt(x, D.y, '', 12, '#fff', { stroke: '#2b1a14', strokeThickness: 4, align: 'center', lineSpacing: -3 });
+      this.enemies.push(e); this.leaves.push(e);
+    });
+    this.doorText = this.txt(W / 2, D.y - 20, '', 18, '#fff', { stroke: '#2b1a14', strokeThickness: 5 }).setDepth(4001).setVisible(false);
+  }
+  // The road the enemy can use at the gate: narrower with a leaf shut, the whole lane once the gate is broken.
+  roadAt() {
+    const F = CFG.fort, mid = W / 2, o = F.door.open;
+    if (this.doorBroken) return [F.laneL + 18, F.laneR - 18];
+    const shut = side => this.leaves.find(l => l.side === side).shut;
+    return [shut(-1) ? mid + 4 : mid - o, shut(1) ? mid - 4 : mid + o];
+  }
+  shutLeaf(e) {
+    const F = CFG.fort, D = F.door;
+    e.shut = true;
+    e.door = this.img(e.x, D.y, 'doorHalf').setOrigin(0.5, 1).setScale(S * 0.46, S).setDepth(D.y + 2);
+    this.tweens.add({ targets: e.door, x: W / 2 + e.side * 42, scaleX: S, duration: 260, ease: 'Cubic.in' });
+    Sound.play('slam'); this.shake(260, 0.012);
+    if (this.leaves.every(l => l.shut)) {
+      this.doorShut = true; this.doorHp = D.barHp;
+      this.doorText.setVisible(true);
+      this.banner('MAIN GATE SHUT', 'they must break it down first'); Sound.play('gong');
+    } else this.banner('ONE DOOR SHUT', 'now the other one');
+  }
+  hitDoor(e) {
+    const D = CFG.fort.door;
+    this.doorHp -= e.K.hit;
+    if (e.K.big) { Sound.play('slam'); this.shake(200, 0.01); } else if (Math.random() < 0.3) Sound.play('gateHit');
+    this.leaves.forEach(l => { l.door.setTint(0xff9a9a); });
+    this.time.delayedCall(80, () => this.leaves.forEach(l => { if (l.door && l.door.active) l.door.clearTint(); }));
+    if (this.doorHp > 0) return;
+    this.doorShut = false; this.doorBroken = true;
+    this.doorText.setVisible(false);
+    this.leaves.forEach(l => { this.tweens.add({ targets: l.door, y: D.y + 30, alpha: 0, rotation: l.side * 0.6, duration: 350, onComplete: () => l.door.destroy() }); });
+    this.burst.setParticleTint(0x8d6748); this.burst.explode(40, W / 2, D.y - 16);
+    Sound.play('wallBreak'); this.shake(400, 0.016);
+    this.banner('THE GATE IS DOWN', 'here they come');
+  }
+
   /* ---------- before the fight ---------- */
   showStartUi() {
     if (this.startUi) this.startUi.forEach(o => o.destroy());
@@ -3034,14 +3097,14 @@ class DefenseScene extends BaseScene {
     const g0 = this.add.graphics();
     g0.fillStyle(0x1c1220, 0.94).fillRoundedRect(24, 150, 352, 208, 14).lineStyle(3, 0xffd54f, 0.9).strokeRoundedRect(24, 150, 352, 208, 14);
     this.txt(W / 2, 182, 'DEFEND THE COMPOUND', 24, '#ffd54f', { stroke: '#2a0a14', strokeThickness: 5 });
-    this.txt(W / 2, 258, 'This land is yours. His army wants it back.\nSLIDE to aim your archers.\n\nMIDDLE: the enemy. Guard the gate!\nLEFT: blue boxes, +1 archer each.\nRIGHT: gold chests, big prizes.', 14, '#fff3e0', { align: 'center', fontStyle: 'normal', lineSpacing: 3 });
+    this.txt(W / 2, 258, 'SLIDE to aim your archers. Hold the wall!\n\nLEFT: +1 archer boxes. RIGHT: prize chests.\nBreak the logs in front of them first.\nMIDDLE: shoot both doors of the main gate\nto shut it and hold the enemy back.', 13, '#fff3e0', { align: 'center', fontStyle: 'normal', lineSpacing: 3 });
     const hint = this.txt(W / 2, 334, 'touch the road to start', 15, '#fff', { stroke: '#000', strokeThickness: 4 });
     this.tweens.add({ targets: hint, alpha: 0.35, duration: 600, yoyo: true, repeat: -1 });
     this.add.rectangle(W / 2, 618, W, 204, 0x0a0610, 0.75);
     const n = this.archerCount();
     const cards = [
       ['fire', 'ATTACK\nSPEED', 0x2e7d32, (this.fireMs() / 1000).toFixed(2) + 's a shot'],
-      ['damage', 'BLADE\nDAMAGE', 0x1565c0, fmt(Stats.damage()) + ' per arrow'],
+      ['damage', 'BLADE\nDAMAGE', 0x1565c0, fmt(Stats.damage() * CFG.fort.arrowDmg) + ' per arrow'],
       ['range', 'RANGE', 0xc62828, n + ' archers', Stats.rangeMaxed()],
       ['revenue', 'COIN\nREWARD', 0x6a1b9a, fmt(Stats.soulsPerKill()) + ' per kill'],
     ];
@@ -3076,7 +3139,7 @@ class DefenseScene extends BaseScene {
   /* ---------- the archers ---------- */
   archerCount() { return Math.min(CFG.fort.maxArchers, CFG.fort.archers + Math.floor((Save.range - 1) * CFG.fort.perRange) + this.moreArchers); }
   fireMs() { return Stats.attackMs() * CFG.fort.fireMul; }
-  arrowDmg() { return Stats.damage() * this.dmgMod * (this.fireLeft > 0 ? CFG.fort.fireDmg : 1); }
+  arrowDmg() { return Stats.damage() * CFG.fort.arrowDmg * this.dmgMod * (this.fireLeft > 0 ? CFG.fort.fireDmg : 1); }
   syncArchers() {
     const n = this.archerCount();
     while (this.archers.length < n) this.archers.push({ obj: this.img(W / 2, CFG.fort.archerY, 'archer').setDepth(CFG.fort.wallY + 10), cd: Math.random() * this.fireMs() });
@@ -3101,7 +3164,7 @@ class DefenseScene extends BaseScene {
       const obj = this.img(a.obj.x, F.archerY - 26, 'arrow').setDepth(2900).setAlpha(0.95);
       if (fire) obj.setTint(0xff7043).setScale(S * 1.25);
       this.arrows.push({ x: a.obj.x, y: F.archerY - 26, obj, dmg: this.arrowDmg(), pierce: fire ? F.firePierce : 0, hit: new Set() });
-      if (Math.random() < 0.5) Sound.play('arrow');
+      if (Math.random() < 0.2) Sound.play('arrow');
     });
   }
 
@@ -3122,21 +3185,23 @@ class DefenseScene extends BaseScene {
   }
 
   /* ---------- the enemy ---------- */
-  spawn(kind, x) {
-    const F = CFG.fort, K = F.kinds[kind];
+  spawn(kind, back = 0) {
+    const F = CFG.fort, K = Object.assign({ speed: kind === 'logR' ? F.kinds.chest.speed : F.kinds.box.speed }, F.kinds[kind.startsWith('log') ? 'log' : kind]);
     const hp = kind === 'box' ? Math.round(F.box.hp * Math.pow(F.box.grow, this.boxes)) : kind === 'chest' ? Math.round(F.chest.hp * (1 + F.chest.grow * this.chests))
+      : kind === 'logL' || kind === 'logR' ? Math.round(F.log.hp * (1 + F.log.grow * this.logs) * (kind === 'logR' ? F.log.chest : 1))
       : Math.max(1, Math.round(K.hp * F.hp * (1 + F.grow * (this.waveNo - 1))));
-    const e = { kind, K, x: F.laneL + 18 + Math.random() * (F.laneR - F.laneL - 36), y: -40, hp, maxHp: hp, cd: K.ms, seed: Math.random() * 9 };
-    if (K.big) e.x = clamp(e.x, F.laneL + 34, F.laneR - 34);
+    const [r0, r1] = this.roadAt();
+    const e = { kind, K, x: r0 + Math.random() * (r1 - r0), y: -40 - back, hp, maxHp: hp, cd: K.ms, seed: Math.random() * 9 };
     if (kind === 'warlord') e.x = W / 2;
-    if (kind === 'box') e.x = F.laneL / 2 - 3;
-    if (kind === 'chest') e.x = (W + F.laneR) / 2 + 3;
+    if (kind === 'box' || kind === 'logL') e.x = F.laneL / 2 - 3;
+    if (kind === 'chest' || kind === 'logR') e.x = (W + F.laneR) / 2 + 3;
+    if (K.key === 'log') e.kind = 'log';
     e.obj = this.img(e.x, e.y, K.key).setOrigin(0.5, 1); if (K.scale) e.obj.setScale(S * K.scale);
     if (K.crate) {
-      e.boost = kind === 'box' ? 'one' : F.chest.prizes[(this.chestN = (this.chestN || 0) + 1) % F.chest.prizes.length];
+      e.boost = kind === 'box' ? 'one' : e.kind === 'log' ? 'log' : F.chest.prizes[(this.chestN = (this.chestN || 0) + 1) % F.chest.prizes.length];
       if (e.boost === 'archers' && this.archerCount() >= F.maxArchers) e.boost = 'fire';
       if (e.boost === 'repair' && this.gate >= F.gateHp) e.boost = 'sharp';
-      e.name = { one: '+1', archers: '+' + F.moreArchers + ' ARCHERS', fire: 'FIRE ARROWS', repair: 'REPAIR', sharp: 'SHARP +' + Math.round(F.sharp * 100) + '%' }[e.boost];
+      e.name = { one: '+1', log: '', archers: '+' + F.moreArchers + ' ARCHERS', fire: 'FIRE ARROWS', repair: 'REPAIR', sharp: 'SHARP +' + Math.round(F.sharp * 100) + '%' }[e.boost];
       e.label = this.txt(e.x, e.y, '', kind === 'box' ? 17 : 12, '#fff', { stroke: kind === 'box' ? '#0d1642' : '#5d3a00', strokeThickness: 4, align: 'center', lineSpacing: -3 });
     } else if (K.big) e.label = this.txt(e.x, e.y, '', kind === 'warlord' ? 18 : 13, '#fff', { stroke: '#7f0000', strokeThickness: 4 });
     this.enemies.push(e);
@@ -3163,8 +3228,8 @@ class DefenseScene extends BaseScene {
       if (s.kind === 'warlord') { Music.set('boss'); Sound.play('gong'); this.shake(400, 0.012); this.banner('THE WARLORD', 'stop him before he reaches the gate'); }
     }
     if (this.waveNo && this.waveNo <= F.waves.length && (this.spawns.length || this.enemies.some(e => !e.gone && !e.K.crate))) {      // the side lanes keep coming while the fight lasts
-      if (this.t >= this.boxT) { this.boxT = this.t + F.box.everyMs; if (this.archerCount() < F.maxArchers) this.spawn('box'); }
-      if (this.t >= this.chestT) { this.chestT = this.t + F.chest.everyMs; this.spawn('chest'); }
+      if (this.t >= this.boxT) { this.boxT = this.t + F.box.everyMs; if (this.archerCount() < F.maxArchers) { this.spawn('logL'); for (let i = 1; i <= F.box.n; i++) this.spawn('box', i * F.box.gap); } }
+      if (this.t >= this.chestT) { this.chestT = this.t + F.chest.everyMs; this.spawn('logR'); this.spawn('chest', 50); }
     }
     const foes = this.enemies.some(e => !e.gone && !e.K.crate);
     if (this.waveNo < F.waves.length) {
@@ -3176,8 +3241,13 @@ class DefenseScene extends BaseScene {
     const F = CFG.fort, now = this.time.now;
     this.enemies = this.enemies.filter(e => {
       if (e.gone) return false;
-      const stopY = F.wallY - e.K.stop + (e.K.big ? 14 : 0);
-      if (e.y < stopY) e.y = Math.min(stopY, e.y + e.K.speed * wdt);
+      const stopY = F.wallY - e.K.stop + (e.K.big ? 14 : 0), D = F.door;
+      const held = !e.K.crate && this.doorShut && e.y <= D.y - 4;                  // the shut gate is in the way
+      if (!e.K.crate && e.y < D.y) { const [r0, r1] = this.roadAt(), tx = clamp(e.x, r0, r1); e.x += clamp(tx - e.x, -90 * wdt, 90 * wdt); }
+      if (held && e.y >= D.y - 10 - (e.seed * 3 | 0)) {
+        e.cd -= wdt * 1000;
+        if (e.cd <= 0) { e.cd = e.K.ms; this.hitDoor(e); }
+      } else if (e.y < stopY) e.y = Math.min(held ? D.y - 4 : stopY, e.y + e.K.speed * wdt);
       else if (e.K.crate) { if (e.kind === 'chest') this.float(e.x, e.y - 30, 'LOST', '#cfd8dc', 16); this.remove(e); return false; }
       else {
         e.cd -= wdt * 1000;
@@ -3186,7 +3256,7 @@ class DefenseScene extends BaseScene {
       const walk = e.y < stopY;
       e.obj.setPosition(e.x, e.y + (e.K.big && !walk ? Math.max(0, 1 - e.cd / 220) * 10 : 0)).setDepth(e.y)
         .setRotation(e.K.crate ? 0 : Math.sin(now * (walk ? 0.011 : 0.02) + e.seed) * (e.K.big ? 0.04 : 0.09));
-      if (e.label) e.label.setPosition(e.x, e.y - (e.K.crate ? e.obj.displayHeight / 2 + 1 : e.obj.displayHeight + 8)).setDepth(e.K.crate ? e.y + 1 : 4000).setText(e.kind === 'box' ? e.name : e.K.crate ? e.name + '\n' + Math.ceil(e.hp) : String(Math.ceil(e.hp)));
+      if (e.label) e.label.setPosition(e.x, e.y - (e.K.crate ? e.obj.displayHeight / 2 + 1 : e.obj.displayHeight + 8)).setDepth(e.K.crate ? e.y + 1 : 4000).setText(e.kind === 'box' ? e.name : e.kind === 'log' ? String(Math.ceil(e.hp)) : e.K.crate ? e.name + '\n' + Math.ceil(e.hp) : String(Math.ceil(e.hp)));
       return true;
     });
   }
@@ -3218,7 +3288,7 @@ class DefenseScene extends BaseScene {
   kill(e) {
     const F = CFG.fort, x = e.x, y = e.y - e.K.tall / 2;
     this.remove(e);
-    this.burst.setParticleTint({ zombie: 0x9ccc65, demon: 0xab47bc, brute: 0xef5350, warlord: 0xef5350, box: 0x64b5f6, chest: 0xffd54f }[e.kind]);
+    this.burst.setParticleTint({ zombie: 0x9ccc65, demon: 0xab47bc, brute: 0xef5350, warlord: 0xef5350, box: 0x64b5f6, chest: 0xffd54f, log: 0x8d6e63, leaf: 0x8d6748 }[e.kind]);
     this.burst.explode(e.K.big ? 40 : 10, x, y);
     if (e.K.crate) { this.openCrate(e, x, y); return; }
     Sound.play('kill');
@@ -3237,6 +3307,8 @@ class DefenseScene extends BaseScene {
 
   openCrate(e, x, y) {
     const F = CFG.fort;
+    if (e.kind === 'leaf') { this.shutLeaf(e); return; }
+    if (e.kind === 'log') { this.logs++; Sound.play('wallBreak'); return; }
     if (e.kind === 'box') {                                   // +1 archer, quietly: there are a lot of these
       this.boxes++; this.moreArchers++; this.syncArchers();
       Sound.play('gateGood'); this.float(x, y - 10, '+1 ARCHER', '#bbdefb', 15);
@@ -3322,6 +3394,7 @@ class DefenseScene extends BaseScene {
     this.gateText.setText('GATE  ' + Math.ceil(this.gate) + ' / ' + F.gateHp);
     this.soulText.setText(coins(Save.souls));
     this.waveText.setText(this.waveNo ? (this.waveNo === F.waves.length ? 'FINAL WAVE' : 'WAVE ' + this.waveNo + ' / ' + F.waves.length) : '');
+    if (this.doorShut) this.doorText.setText('GATE ' + Math.ceil(this.doorHp));
     this.boostText.setText(this.fireLeft > 0 ? 'FIRE ARROWS ' + (this.fireLeft / 1000).toFixed(0) + 's' : '');
     if (!this.started) return;
     // special bar + button, and the ultimate bar above it (as in the run)
