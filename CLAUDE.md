@@ -217,7 +217,10 @@ players to progress fast. At 1.5 the bot at level 3 with speed/damage 2 wins or 
 - They play on a phone and are not a programmer. Explain changes in plain words, no code.
 - For anything beyond a small tweak they like the request read back before building.
 - Enemy and boss ideas usually come with a reference picture: draw an original version in the
-  game's style.
+  game's style. Save every picture they send into `art-reference/` (named `sagaN-<name>`), commit it
+  with the work, and tell them it is saved. Pictures from earlier sessions can be recovered with
+  `list_events` (kinds `user`) on that session: user-sent images are base64 blocks outside tool results.
+  The game never loads these files. Saved so far: Saga 2's Iwagame, Koke Oni and Genbu.
 
 ## Plan: App Store release with in-app purchases
 
