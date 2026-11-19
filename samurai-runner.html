@@ -133,6 +133,11 @@ const CFG = {
     // Saga 2, level 1. Slow and heavy: long wind-ups that are easy to read, but a club that takes a big bite, and a wider ground-pound.
     rock: { key: 'rockBoss', name: 'ROCK ONI', slain: 'ROCK ONI SLAIN', r: 50, souls: 60, speed: 46, chaseMs: 1300, windMs: 950, recoverMs: 600,
       reach: 90, cleave: 5, cleaveShare: 0.12, powerChance: 0.3, powerWindMs: 1300, powerReach: 120, powerMult: 2, powerStyle: 'jump' },
+    // Saga 2, level 2 (owner: cool but not too complex; the saga 2 level 3 boss gets the fancy moves). Two-swing club combos,
+    // a leaping ground-pound, and Rockslide: boulders roll down every lane but one. Iwagame keep rolling in while he lives.
+    koke: { key: 'kokeBoss', name: 'KOKE ONI', slain: 'KOKE ONI SLAIN', r: 52, souls: 70, speed: 50, chaseMs: 1200, windMs: 900, recoverMs: 560,
+      reach: 90, cleave: 4, cleaveShare: 0.08, combo: 2, comboWindMs: 700, comboStep: 50, powerChance: 0.3, powers: [['jump', 'rockslide']],
+      powerWind: { jump: 1250, rockslide: 1300 }, powerReach: 115, powerMult: 2, trickle: true, trickleMs: 4000 },
     tengu: { key: 'tenguBoss', name: 'TENGU', slain: 'TENGU SLAIN', r: 46, souls: 35, speed: 56, chaseMs: 1250, windMs: 820, recoverMs: 480,
       reach: 85, cleave: 3, cleaveShare: 0.08, powerChance: 0.5, powers: [['fly', 'feathers']], powerWind: { fly: 1250, feathers: 1200 },
       powerReach: 100, powerMult: 2 },
@@ -181,8 +186,8 @@ const LEVEL_SPECS = [
   { name: 'The Rock Oni', theme: 'mountain', foe: 'rockOni', demons: false, rows: 14, seg: 370, pack: [7, 3.0, 0.26], crowd: 0.15, hp: 13, charms: [[5, 10], 14, 4], walls: [[4], 120, 0],
     bosses: [{ type: 'rock', after: 'end', hp: 6000 }] },
   // Saga 2 level 2: `mix` brings in a second common foe [kind, share, health x]. Its boss is still to be designed, so the level just ends.
-  { name: 'The Iwagame', theme: 'mountain', foe: 'rockOni', mix: ['iwagame', 0.25, 1.5], demons: false, rows: 16, seg: 370, pack: [7.5, 3.1, 0.26], crowd: 0.15, hp: 14,
-    charms: [[5, 11], 15, 4], walls: [[6], 130, 0], bosses: [] },
+  { name: 'The Iwagame', theme: 'mountain', foe: 'rockOni', mix: ['iwagame', 0.25, 1.5], demons: false, rows: 15, seg: 370, pack: [7.5, 3.1, 0.26], crowd: 0.15, hp: 14,
+    charms: [[5, 11], 15, 4], walls: [[6], 130, 0], bosses: [{ type: 'koke', after: 'end', hp: 6200 }] },
 ];
 // Equipment, chosen on a level's start screen: one weapon, one armor, one necklace. `boss: true` items are won by beating the saga boss.
 const GEAR = {
@@ -726,6 +731,60 @@ const Art = {
     for (let x = 55.5; x < 73; x += 4.8) Art.tri(c, [x, 42], [x + 4, 42], [x + 2, 46], '#e6eaee');
     Art.tri(c, [50, 51.5], [56, 51.5], [52.5, 40], '#fff8e1'); Art.tri(c, [80, 51.5], [74, 51.5], [77.5, 40], '#fff8e1');   // tusks
   },
+  // Saga 2 level 2's boss, the Koke Oni ("moss oni"): a tall brute of cracked grey stone blocks with moss in the cracks,
+  // short curved horns, pointed ears, pale glowing eyes, an underbite of fangs, a torn hide loincloth and a mossy stone club.
+  kokeBoss(c) {
+    Art.shadow(c, 65, 132, 46);
+    const ol = '#262b26', dk = '#5c635c', st = '#959c94', lt = '#c3c9c1', moss = '#7a9a3a', mossLt = '#9cbf55';
+    const slab = (x, y, rx, ry, rot = 0) => {
+      c.save(); c.translate(x, y); c.rotate(rot);
+      Art.ell(c, 0, 0, rx, ry, ol); Art.ell(c, 0, -0.5, rx - 2, ry - 2, Art.grad(c, 0, -ry, 0, ry, [[0, st], [1, dk]]));
+      Art.ell(c, -rx * 0.18, -ry * 0.38, rx * 0.56, ry * 0.3, lt); c.restore();
+    };
+    const mossAt = pts => pts.forEach(([x, y, r]) => { for (let i = 0; i < 5; i++) Art.ell(c, x + Math.cos(i * 1.3) * r * 0.7, y + Math.sin(i * 1.9) * r * 0.45, r * 0.55, r * 0.4, i % 2 ? moss : mossLt); });
+    const cracks = pts => { c.strokeStyle = ol; c.lineWidth = 1.2; c.beginPath(); pts.forEach(([a, b, x, y]) => { c.moveTo(a, b); c.lineTo(x, y); }); c.stroke(); };
+    slab(50, 116, 14, 16); slab(82, 116, 14, 16);                                              // legs
+    [[39, 130], [49, 133], [59, 130], [73, 130], [83, 133], [93, 130]].forEach(([x, y]) => Art.tri(c, [x - 4, y - 3], [x + 4, y - 3], [x, y + 5], '#4a4f49'));   // claws
+    c.save(); c.translate(20, 99); c.rotate(0.3);                                              // the club, hanging from his right hand
+    Art.rr(c, -4.5, -38, 9, 40, 3); c.fillStyle = ol; c.fill(); Art.rr(c, -3, -36, 6, 36, 2); c.fillStyle = '#5d4037'; c.fill();
+    c.fillStyle = '#3e2723'; for (let y = -34; y < -20; y += 4) c.fillRect(-3, y, 6, 1.6);
+    c.fillStyle = ol; c.beginPath(); [[-13, 0], [-5, -4], [9, -2], [15, 8], [14, 30], [5, 38], [-8, 38], [-15, 26]].forEach(p => c.lineTo(...p)); c.closePath(); c.fill();
+    c.fillStyle = Art.grad(c, -13, 0, 13, 36, [[0, lt], [1, dk]]); c.beginPath(); [[-11, 2], [-4, -1.5], [7.5, 0.5], [12.5, 9], [11.5, 28.5], [4, 35.5], [-6.5, 35.5], [-12.5, 25]].forEach(p => c.lineTo(...p)); c.closePath(); c.fill();
+    cracks([[-4, 0, -1, 14], [-1, 14, -10, 20], [-1, 14, 8, 22], [8, 22, 6, 34]]);
+    mossAt([[-6, 6, 6], [8, 28, 5]]);
+    c.restore();
+    Art.rr(c, 31, 50, 68, 58, 20); c.fillStyle = ol; c.fill();                                 // torso
+    Art.rr(c, 33.5, 52, 63, 53, 18); c.fillStyle = Art.grad(c, 33, 52, 96, 106, [[0, st], [1, '#4f554e']]); c.fill();
+    Art.ell(c, 52, 68, 13, 10, lt); Art.ell(c, 79, 68, 13, 10, '#aeb5ac');                    // chest blocks
+    Art.ell(c, 56, 87, 9, 6.5, '#a3aaa1'); Art.ell(c, 75, 87, 9, 6.5, '#9aa198');            // stomach blocks
+    cracks([[65, 58, 65, 96], [42, 79, 88, 79], [47, 93, 84, 93], [40, 62, 44, 70], [90, 62, 86, 70]]);
+    mossAt([[44, 60, 7], [84, 76, 6], [60, 92, 5]]);
+    c.fillStyle = '#4e342e'; c.beginPath(); c.moveTo(33, 98); c.lineTo(97, 98); c.lineTo(99, 110); [[93, 120], [87, 110], [80, 124], [73, 111], [65, 127], [57, 111], [50, 124], [43, 110], [37, 120]].forEach(p => c.lineTo(...p)); c.lineTo(31, 110); c.closePath(); c.fill();
+    c.fillStyle = '#6d4c41'; c.fillRect(32, 95, 66, 7); Art.ell(c, 60, 99, 5, 4.5, '#5d4037');   // knotted belt
+    slab(23, 62, 15, 14); slab(15, 82, 11, 15, 0.15); slab(107, 62, 15, 14); slab(116, 84, 11, 16, -0.12);   // shoulders and arms
+    mossAt([[20, 56, 7], [110, 56, 7], [117, 88, 5]]);
+    slab(16, 100, 10, 9);                                                                      // fist on the club
+    slab(117, 106, 10, 10);                                                                    // open hand, claws down
+    [[110, 114], [116, 116], [122, 114]].forEach(([x, y]) => Art.tri(c, [x - 2.4, y - 2], [x + 2.4, y - 2], [x, y + 7], '#4a4f49'));
+    cracks([[16, 56, 24, 64], [24, 64, 18, 70], [104, 56, 110, 64], [113, 78, 120, 84]]);
+    [1, -1].forEach(side => {                                                                  // ears and short curved horns
+      c.save(); c.translate(65, 0); c.scale(side, 1);
+      Art.tri(c, [22, 30], [33, 24], [23, 38], ol); Art.tri(c, [23, 31], [30.5, 26], [23.5, 36], st);
+      c.fillStyle = ol; c.beginPath(); c.moveTo(12, 16); c.quadraticCurveTo(26, 14, 24, -2); c.quadraticCurveTo(20, 7, 14, 9); c.closePath(); c.fill();
+      c.fillStyle = Art.grad(c, 12, 16, 24, 0, [[0, '#6f746d'], [1, '#d6d8cf']]); c.beginPath(); c.moveTo(13.5, 14.5); c.quadraticCurveTo(24, 12.5, 23, 1.5); c.quadraticCurveTo(19, 9, 15, 10.5); c.closePath(); c.fill();
+      c.restore();
+    });
+    Art.rr(c, 42, 10, 46, 44, 15); c.fillStyle = ol; c.fill();                                 // head
+    Art.rr(c, 44.5, 12, 41, 39, 13); c.fillStyle = Art.grad(c, 44, 12, 86, 52, [[0, lt], [1, dk]]); c.fill();
+    mossAt([[56, 16, 6], [74, 15, 5]]);
+    cracks([[65, 13, 63, 21], [48, 37, 53, 39], [82, 37, 77, 39]]);
+    c.strokeStyle = ol; c.lineWidth = 3.4; c.beginPath(); c.moveTo(47, 24); c.lineTo(61, 30); c.moveTo(83, 24); c.lineTo(69, 30); c.stroke();   // brow
+    c.shadowColor = '#f4ff81'; c.shadowBlur = 8; Art.ell(c, 55, 32, 4.4, 2.8, '#f9fbe7'); Art.ell(c, 75, 32, 4.4, 2.8, '#f9fbe7'); c.shadowBlur = 0;
+    Art.ell(c, 65, 37.5, 4.6, 3, dk); Art.ell(c, 63.2, 38, 1, 0.9, ol); Art.ell(c, 66.8, 38, 1, 0.9, ol);   // nose
+    Art.rr(c, 51, 41.5, 28, 9, 3.5); c.fillStyle = '#1a1c1a'; c.fill();                       // mouth
+    for (let x = 55; x < 74; x += 4.6) Art.tri(c, [x, 50.5], [x + 3.8, 50.5], [x + 1.9, 46], '#ecefe6');
+    Art.tri(c, [52, 50.5], [57, 50.5], [54, 39], '#f5f3e4'); Art.tri(c, [78, 50.5], [73, 50.5], [76, 39], '#f5f3e4');   // fangs jutting up
+  },
   // Mountain pass scenery.
   rockGround(c, w, h) {
     c.fillStyle = '#6f7268'; c.fillRect(0, 0, w, h);
@@ -1224,7 +1283,7 @@ const Art = {
     const m = (k, w, h) => Art.make(scene, k, w, h, Art[k]);
     m('samurai', 36, 50); m('katana', 12, 36); m('demon', 32, 40); m('zombie', 32, 40); m('boss', 130, 126); m('giant', 110, 130); m('thunder', 130, 134);
     Art.make(scene, 'tenguBoss', 130, 120, Art.tengu); m('charm', 40, 44); m('glow', 64, 64);
-    m('rockOni', 32, 40); m('iwagame', 36, 40); m('iwagameBall', 32, 32); m('rockBoss', 130, 130); m('rockGround', 64, 64); m('stonePath', 280, 128); m('cliff', 72, 80); m('boulder', 30, 24);
+    m('rockOni', 32, 40); m('iwagame', 36, 40); m('iwagameBall', 32, 32); m('rockBoss', 130, 130); m('kokeBoss', 130, 140); m('rockGround', 64, 64); m('stonePath', 280, 128); m('cliff', 72, 80); m('boulder', 30, 24);
     m('spike', 36, 28); m('wall', 132, 60); m('log', 132, 60); m('fence', 16, 36); m('civilian', 20, 28); m('cage', 96, 70); m('rock', 12, 12); m('slash', 48, 48); m('soul', 16, 16); m('dot', 8, 8); m('petal', 8, 6);
     m('archer', 36, 50); m('arrow', 8, 22); m('crate', 36, 32); m('box', 84, 34); m('recruit', 84, 48); m('mystery', 84, 34); m('barrel', 48, 46); m('doorHalf', 86, 40); m('chest', 84, 42); m('yard', 64, 64); m('divider', 10, 64); m('fort', W, 174); m('oni', 48, 54); m('warlord', 130, 150);
     m('grass', 64, 64); m('path', 280, 128); m('lantern', 24, 42); m('deadTree', 60, 58); m('rubble', 30, 24); m('crack', 60, 40); m('tree', 60, 58); m('menuBg', W, H);
@@ -2183,7 +2242,7 @@ class GameScene extends BaseScene {
       this.ultCharge = Math.min(this.ultMax, was + (e.prof ? this.ultMax / 5 : 1));
       if (was < this.ultMax && this.ultCharge >= this.ultMax) { Sound.play('ultReady'); this.float(130, 628, 'ULTIMATE READY!', '#ffe082', 15); }
     }
-    const tint = { demon: 0xab47bc, zombie: 0x9ccc65, giant: 0x9ccc65, thunder: 0xb388ff, charm: 0xffd54f, wall: 0x9aa1a9, rockOni: 0x9aa1a9, iwagame: 0x8d6e63, rockBoss: 0x9aa1a9, tenguBoss: 0xef5350, boss: 0xab47bc }[e.kind];
+    const tint = { demon: 0xab47bc, zombie: 0x9ccc65, giant: 0x9ccc65, thunder: 0xb388ff, charm: 0xffd54f, wall: 0x9aa1a9, rockOni: 0x9aa1a9, iwagame: 0x8d6e63, rockBoss: 0x9aa1a9, kokeBoss: 0x8fa07c, tenguBoss: 0xef5350, boss: 0xab47bc }[e.kind];
     this.burst.setParticleTint(e.mat === 'log' ? 0x8d6e63 : tint);
     this.burst.explode(e.r ? 40 : 10, e.x, e.y);
     const orb = this.img(e.x, e.y, 'soul').setDepth(5001).setScale(S * (e.r ? 2 : 1.2));
@@ -2644,13 +2703,15 @@ class GameScene extends BaseScene {
     };
     if (style === 'feathers') return lanes(4, 33);
     if (style === 'drums') return lanes(5, 26);
+    if (style === 'rockslide') return lanes(4, 33);
     return null;
   }
 
   drawZones(b, k) {
-    const col = { feathers: 0xff8a80, drums: 0xb388ff }[b.style], blink = 0.6 + 0.4 * Math.sin(this.time.now * 0.03);
+    const col = { feathers: 0xff8a80, drums: 0xb388ff, rockslide: 0xffa726 }[b.style], blink = 0.6 + 0.4 * Math.sin(this.time.now * 0.03);
     b.zones.forEach(z => {
       const w = (CFG.pathRight - CFG.pathLeft) / (b.style === 'drums' ? 5 : 4);
+      if (b.style === 'rockslide' && Math.random() < 0.08) { this.burst.setParticleTint(0x9e9e8e); this.burst.explode(2, z.x + (Math.random() - 0.5) * 40, b.y + 60); }   // pebbles trickling
       this.danger.fillStyle(col, 0.1 + 0.26 * k).fillRect(z.x - w / 2 + 2, b.y + 40, w - 4, H);
       this.danger.lineStyle(2, col, (0.4 + 0.6 * k) * blink).strokeRect(z.x - w / 2 + 2, b.y + 40, w - 4, H);
       if (b.style === 'drums' && Math.random() < 0.12) this.zap(z.x, b.y + 50 + Math.random() * 200, z.x + (Math.random() - 0.5) * 30, b.y + 150 + Math.random() * 250, 70);
@@ -2668,12 +2729,16 @@ class GameScene extends BaseScene {
           const f = this.add.rectangle(z.x + (Math.random() - 0.5) * 50, b.y + 40 - i * 40, 3, 22, 0xffebee).setDepth(2900).setRotation(0.25);
           this.tweens.add({ targets: f, y: H + 40, duration: 320 + i * 40, onComplete: () => f.destroy() });
         }
+      } else if (style === 'rockslide') {                    // a boulder thunders down the lane
+        const r = this.img(z.x + (Math.random() - 0.5) * 16, b.y + 50, 'boulder').setDepth(2900).setScale(S * 1.7);
+        this.tweens.add({ targets: r, y: H + 60, rotation: 9, duration: 520, ease: 'Quad.in', onComplete: () => r.destroy() });
       } else {                                               // the thunder drums: a bolt down every lane but one
         this.zap(z.x, b.y + 20, z.x + (Math.random() - 0.5) * 20, H, 300);
         this.zap(z.x + (Math.random() - 0.5) * 20, b.y + 20, z.x, H, 240);
       }
     });
     if (style === 'drums') { this.cameras.main.flash(120, 200, 170, 255); Sound.play('thunder'); }
+    if (style === 'rockslide') Sound.play('roll');
     Sound.play(style === 'feathers' ? 'swing' : 'slam');
     this.shake(260, 0.02);
     if (b.zones.some(z => Math.abs(this.armyX - z.x) < z.half)) {
