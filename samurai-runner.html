@@ -283,6 +283,7 @@ const Save = {
   tutorial: false,               // true once the how-to-play pages have been seen or skipped
   forts: 0,                      // strongholds held: 1 once saga 1's compound has been defended (saga 2 needs it)
   civilians: 0,                  // civilians freed from cages, all runs together (rewards at 100, 200... are planned)
+  lang: '',                      // chosen language ('es', 'fr', ...); empty means follow the phone (see I18N)
   load() {
     const num = (k, def) => {
       try { const v = parseInt(localStorage.getItem(k), 10); return Number.isFinite(v) ? v : def; }
@@ -300,6 +301,7 @@ const Save = {
     this.tutorial = num('samurai_tutorial', 0) === 1;
     this.civilians = num('samurai_civilians', 0);
     this.forts = num('samurai_forts', 0);
+    try { this.lang = localStorage.getItem('samurai_lang') || ''; } catch (e) {}
     try { this.armor = localStorage.getItem('samurai_armor') || ''; this.weapon = localStorage.getItem('samurai_weapon') || ''; this.necklace = localStorage.getItem('samurai_necklace') || ''; } catch (e) {}
   },
   save() {
@@ -319,6 +321,7 @@ const Save = {
       localStorage.setItem('samurai_armor', this.armor);
       localStorage.setItem('samurai_weapon', this.weapon);
       localStorage.setItem('samurai_necklace', this.necklace);
+      if (this.lang) localStorage.setItem('samurai_lang', this.lang);
     } catch (e) {}
   },
   resetProgress() { this.souls = 0; this.fire = this.damage = this.range = this.revenue = this.level = 1; this.armor = this.weapon = this.necklace = ''; this.tutorial = false; this.civilians = 0; this.forts = 0; this.save(); },
@@ -340,6 +343,414 @@ const coins = n => n >= 1e6 ? (Math.floor(n / 1e5) / 10) + 'M' : n >= 1000 ? (Ma
 const fmt = n => Number.isInteger(n) ? String(n) : n.toFixed(2).replace(/0$/, '');
 const clamp = (v, a, b) => Math.max(a, Math.min(b, v));
 const damp = (rate, dt) => 1 - Math.exp(-rate * dt);   // frame-rate independent lerp factor
+
+/* ============================================================
+   LANGUAGES — every piece of text goes through I18N.tr on its way to the screen (Phaser's Text.setText is wrapped below),
+   so the game is written in English and translated at the last moment. Each entry is English: [Spanish, French, Italian, Russian].
+   {0}, {1} stand for numbers or names; a name in a gap is translated too if it has an entry. Boss and enemy names that are
+   Japanese (Takemikazuchi, Genbu, Koke Oni, Iwagame, Tengu, Futsu-no-mitama) have no entry, so they stay as they are.
+   A string in capitals also matches an entry written in lower case (SAGAS[0].toUpperCase() finds 'Bamboo Road').
+   ============================================================ */
+const LANGS = [['en', 'English'], ['es', 'Español'], ['fr', 'Français'], ['it', 'Italiano'], ['ru', 'Русский']];
+const I18N = {
+  lang: 'en',
+  T: {
+    // menus
+    'PLAY': ['JUGAR', 'JOUER', 'GIOCA', 'ИГРАТЬ'],
+    'SETTINGS': ['AJUSTES', 'PARAMÈTRES', 'IMPOSTAZIONI', 'НАСТРОЙКИ'],
+    '‹ BACK': ['‹ ATRÁS', '‹ RETOUR', '‹ INDIETRO', '‹ НАЗАД'],
+    'SAGAS': ['SAGAS', 'SAGAS', 'SAGHE', 'САГИ'],
+    '‹ SAGAS': ['‹ SAGAS', '‹ SAGAS', '‹ SAGHE', '‹ САГИ'],
+    '?  HOW TO PLAY': ['?  CÓMO JUGAR', '?  COMMENT JOUER', '?  COME GIOCARE', '?  КАК ИГРАТЬ'],
+    'Civilians saved: {0}': ['Civiles salvados: {0}', 'Civils sauvés : {0}', 'Civili salvati: {0}', 'Спасено жителей: {0}'],
+    'saga cleared': ['saga completada', 'saga terminée', 'saga completata', 'сага пройдена'],
+    'the saga boss awaits': ['el jefe de la saga te espera', 'le boss de la saga t’attend', 'il boss della saga ti aspetta', 'босс саги ждёт'],
+    'level {0} of {1}': ['nivel {0} de {1}', 'niveau {0} sur {1}', 'livello {0} di {1}', 'уровень {0} из {1}'],
+    'LOCKED': ['BLOQUEADO', 'VERROUILLÉ', 'BLOCCATO', 'ЗАКРЫТО'],
+    'SAGA BOSS · {0}': ['JEFE DE SAGA · {0}', 'BOSS DE SAGA · {0}', 'BOSS DELLA SAGA · {0}', 'БОСС САГИ · {0}'],
+    'SAGA BOSS': ['JEFE DE SAGA', 'BOSS DE SAGA', 'BOSS DELLA SAGA', 'БОСС САГИ'],
+    'DEFEND THE COMPOUND': ['DEFIENDE EL FUERTE', 'DÉFENDS LE FORT', 'DIFENDI IL FORTE', 'ЗАЩИТИ КРЕПОСТЬ'],
+    'defend the compound to unlock': ['defiende el fuerte para desbloquear', 'défends le fort pour débloquer', 'difendi il forte per sbloccare', 'защити крепость, чтобы открыть'],
+    'defeat the saga boss to unlock': ['vence al jefe de la saga para desbloquear', 'bats le boss de la saga pour débloquer', 'sconfiggi il boss della saga per sbloccare', 'победи босса саги, чтобы открыть'],
+    'levels cleared · saga boss coming soon': ['niveles completados · jefe de saga muy pronto', 'niveaux terminés · boss de saga bientôt', 'livelli completati · boss della saga in arrivo', 'уровни пройдены · босс саги скоро'],
+    'COMING SOON': ['PRÓXIMAMENTE', 'BIENTÔT', 'IN ARRIVO', 'СКОРО'],
+    'coming soon': ['próximamente', 'bientôt', 'in arrivo', 'скоро'],
+    'Bamboo Road': ['Camino de Bambú', 'Route des Bambous', 'Via del Bambù', 'Бамбуковая дорога'],
+    'Mountain Pass': ['Paso de Montaña', 'Col de Montagne', 'Passo di Montagna', 'Горный перевал'],
+    'Frozen Pass': ['Paso Helado', 'Col Gelé', 'Passo Ghiacciato', 'Ледяной перевал'],
+    'Ember Fortress': ['Fortaleza de Brasas', 'Forteresse des Braises', 'Fortezza delle Braci', 'Крепость углей'],
+    'Demon Gate': ['Puerta del Demonio', 'Porte du Démon', 'Porta del Demone', 'Врата демонов'],
+    'the next saga': ['la siguiente saga', 'la saga suivante', 'la saga successiva', 'следующая сага'],
+    // level names (Takemikazuchi and Genbu are names and stay)
+    'Restless Dead': ['Muertos Inquietos', 'Morts sans Repos', 'Morti Inquieti', 'Беспокойные мертвецы'],
+    'The Tengu': ['El Tengu', 'Le Tengu', 'Il Tengu', 'Tengu'],
+    'The Fat Demon': ['El Demonio Gordo', 'Le Gros Démon', 'Il Demone Grasso', 'Толстый демон'],
+    'The Rock Oni': ['El Oni de Roca', 'L’Oni de Pierre', 'L’Oni di Roccia', 'Каменный они'],
+    'The Iwagame': ['El Iwagame', 'L’Iwagame', 'L’Iwagame', 'Iwagame'],
+    // settings
+    'Music': ['Música', 'Musique', 'Musica', 'Музыка'],
+    'Sound effects': ['Efectos de sonido', 'Effets sonores', 'Effetti sonori', 'Звуковые эффекты'],
+    'Screen shake': ['Vibración de pantalla', 'Tremblement d’écran', 'Scossa dello schermo', 'Тряска экрана'],
+    'Language': ['Idioma', 'Langue', 'Lingua', 'Язык'],
+    'ON': ['SÍ', 'OUI', 'SÌ', 'ВКЛ'],
+    'OFF': ['NO', 'NON', 'NO', 'ВЫКЛ'],
+    'TAP AGAIN TO ERASE': ['TOCA OTRA VEZ PARA BORRAR', 'TOUCHE ENCORE POUR EFFACER', 'TOCCA ANCORA PER CANCELLARE', 'НАЖМИ ЕЩЁ РАЗ ДЛЯ СБРОСА'],
+    'RESET PROGRESS': ['BORRAR PROGRESO', 'EFFACER LA PARTIE', 'AZZERA I PROGRESSI', 'СБРОСИТЬ ПРОГРЕСС'],
+    'this erases coins, upgrades and unlocked levels': ['esto borra monedas, mejoras y niveles desbloqueados', 'efface les pièces, améliorations et niveaux débloqués', 'cancella monete, potenziamenti e livelli sbloccati', 'удалит монеты, улучшения и открытые уровни'],
+    'coins, upgrades and unlocked levels': ['monedas, mejoras y niveles desbloqueados', 'pièces, améliorations et niveaux débloqués', 'monete, potenziamenti e livelli sbloccati', 'монеты, улучшения и открытые уровни'],
+    // tutorial
+    'TUTORIAL': ['TUTORIAL', 'TUTORIEL', 'TUTORIAL', 'ОБУЧЕНИЕ'],
+    'START LEVEL 1': ['EMPEZAR NIVEL 1', 'LANCER LE NIVEAU 1', 'INIZIA LIVELLO 1', 'НАЧАТЬ УРОВЕНЬ 1'],
+    'DONE': ['LISTO', 'TERMINÉ', 'FATTO', 'ГОТОВО'],
+    'NEXT ›': ['SIGUIENTE ›', 'SUIVANT ›', 'AVANTI ›', 'ДАЛЕЕ ›'],
+    'SKIP': ['OMITIR', 'PASSER', 'SALTA', 'ПРОПУСК'],
+    'STEER YOUR ARMY': ['GUÍA A TU EJÉRCITO', 'DIRIGE TON ARMÉE', 'GUIDA IL TUO ESERCITO', 'УПРАВЛЯЙ АРМИЕЙ'],
+    'Slide your finger left and right\nanywhere on the path to move your samurai.': [
+      'Desliza el dedo a izquierda y derecha\nen cualquier parte del camino para mover a tus samuráis.',
+      'Fais glisser ton doigt à gauche et à droite\nn’importe où sur le chemin pour déplacer tes samouraïs.',
+      'Fai scorrere il dito a sinistra e a destra\novunque sul sentiero per muovere i tuoi samurai.',
+      'Води пальцем влево и вправо\nв любом месте дороги, чтобы двигать самураев.'],
+    '‹   slide   ›': ['‹   desliza   ›', '‹   glisse   ›', '‹   scorri   ›', '‹   веди   ›'],
+    'PICK YOUR GATES': ['ELIGE TUS PUERTAS', 'CHOISIS TES PORTES', 'SCEGLI LE PORTE', 'ВЫБИРАЙ ВОРОТА'],
+    'BLUE gates add samurai.\nRED gates take them away.\nThe number over your army is how many you have.': [
+      'Las puertas AZULES añaden samuráis.\nLas ROJAS te los quitan.\nEl número sobre tu ejército es cuántos tienes.',
+      'Les portes BLEUES ajoutent des samouraïs.\nLes ROUGES en retirent.\nLe nombre au-dessus de ton armée, c’est combien tu en as.',
+      'Le porte BLU aggiungono samurai.\nQuelle ROSSE li tolgono.\nIl numero sopra l’esercito dice quanti ne hai.',
+      'СИНИЕ ворота добавляют самураев.\nКРАСНЫЕ забирают их.\nЧисло над армией — сколько их у тебя.'],
+    'FIGHT!': ['¡LUCHA!', 'COMBATS !', 'COMBATTI!', 'В БОЙ!'],
+    'Your samurai attack on their own.\nKeep your army big, and steer around spikes.': [
+      'Tus samuráis atacan solos.\nMantén tu ejército grande y esquiva los pinchos.',
+      'Tes samouraïs attaquent tout seuls.\nGarde une grande armée et évite les pointes.',
+      'I tuoi samurai attaccano da soli.\nTieni grande l’esercito ed evita le punte.',
+      'Самураи атакуют сами.\nДержи армию большой и обходи шипы.'],
+    'avoid!': ['¡evita!', 'évite !', 'evita!', 'обходи!'],
+    'DODGE THE BOSS': ['ESQUIVA AL JEFE', 'ESQUIVE LE BOSS', 'SCHIVA IL BOSS', 'УКЛОНЯЙСЯ ОТ БОССА'],
+    'RED circle: the boss strikes there.\nORANGE circle: a big attack, twice as hard.\nSlide out before it lands!': [
+      'Círculo ROJO: el jefe golpea ahí.\nCírculo NARANJA: un gran ataque, el doble de fuerte.\n¡Sal antes de que caiga!',
+      'Cercle ROUGE : le boss frappe là.\nCercle ORANGE : une grosse attaque, deux fois plus forte.\nSors-en avant l’impact !',
+      'Cerchio ROSSO: il boss colpisce lì.\nCerchio ARANCIONE: un grande attacco, forte il doppio.\nSpostati prima che arrivi!',
+      'КРАСНЫЙ круг: туда ударит босс.\nОРАНЖЕВЫЙ круг: мощная атака, вдвое сильнее.\nУйди, пока не ударило!'],
+    'DODGED': ['ESQUIVADO', 'ESQUIVÉ', 'SCHIVATO', 'УВЕРНУЛСЯ'],
+    'FIND THE SAFE LANE': ['BUSCA EL CARRIL SEGURO', 'TROUVE LA VOIE SÛRE', 'TROVA LA CORSIA SICURA', 'НАЙДИ БЕЗОПАСНУЮ ПОЛОСУ'],
+    'Some bosses light up whole lanes.\nMove into the lane that is NOT lit up.': [
+      'Algunos jefes iluminan carriles enteros.\nMuévete al carril que NO está iluminado.',
+      'Certains boss illuminent des voies entières.\nVa dans la voie qui n’est PAS éclairée.',
+      'Alcuni boss illuminano intere corsie.\nSpostati nella corsia NON illuminata.',
+      'Некоторые боссы подсвечивают целые полосы.\nПерейди на полосу, которая НЕ светится.'],
+    'safe': ['seguro', 'sûr', 'sicura', 'тут безопасно'],
+    'SLOW MOTION': ['CÁMARA LENTA', 'RALENTI', 'RALLENTATORE', 'ЗАМЕДЛЕНИЕ'],
+    'Defeating enemies fills your SPECIAL bar.\nWhen it is full, tap SLOW to slow time down.': [
+      'Derrotar enemigos llena tu barra ESPECIAL.\nCuando esté llena, toca LENTO para frenar el tiempo.',
+      'Vaincre des ennemis remplit ta barre SPÉCIAL.\nQuand elle est pleine, touche LENT pour ralentir le temps.',
+      'Sconfiggere nemici riempie la barra SPECIALE.\nQuando è piena, tocca LENTO per rallentare il tempo.',
+      'Побеждая врагов, ты заполняешь\nполосу ОСОБОЕ. Когда она полна,\nнажми ЗАМЕДЛ., чтобы замедлить время.'],
+    'SPECIAL': ['ESPECIAL', 'SPÉCIAL', 'SPECIALE', 'ОСОБОЕ'],
+    'SPECIAL READY': ['ESPECIAL LISTO', 'SPÉCIAL PRÊT', 'SPECIALE PRONTO', 'ОСОБОЕ ГОТОВО'],
+    'SLOW': ['LENTO', 'LENT', 'LENTO', 'ЗАМЕДЛ.'],
+    'ULTIMATE: DRAGON SLASH': ['DEFINITIVA: TAJO DEL DRAGÓN', 'ULTIME : TRANCHE DU DRAGON', 'SUPREMA: FENDENTE DEL DRAGO', 'УЛЬТА: УДАР ДРАКОНА'],
+    'DRAGON SLASH': ['TAJO DEL DRAGÓN', 'TRANCHE DU DRAGON', 'FENDENTE DEL DRAGO', 'УДАР ДРАКОНА'],
+    'Kills also fill the gold ULTIMATE bar.\nWhen it is full, FLICK UP to send a wave that\ncuts down every enemy on the screen.': [
+      'Las bajas también llenan la barra dorada DEFINITIVA.\nCuando esté llena, DESLIZA HACIA ARRIBA para lanzar\nuna ola que derriba a todos los enemigos en pantalla.',
+      'Tes victimes remplissent aussi la barre dorée ULTIME.\nQuand elle est pleine, BALAIE VERS LE HAUT pour lancer\nune vague qui fauche tous les ennemis à l’écran.',
+      'Le uccisioni riempiono anche la barra dorata SUPREMA.\nQuando è piena, SCORRI IN SU per lanciare un’onda\nche abbatte tutti i nemici sullo schermo.',
+      'Убийства заполняют и золотую полосу УЛЬТЫ.\nКогда она полна, РЕЗКО ПРОВЕДИ ВВЕРХ: волна\nсразит всех врагов на экране.'],
+    'ULTIMATE': ['DEFINITIVA', 'ULTIME', 'SUPREMA', 'УЛЬТА'],
+    'ULTIMATE READY': ['DEFINITIVA LISTA', 'ULTIME PRÊTE', 'SUPREMA PRONTA', 'УЛЬТА ГОТОВА'],
+    'ULTIMATE READY  ▲ FLICK UP': ['DEFINITIVA LISTA  ▲ DESLIZA ARRIBA', 'ULTIME PRÊTE  ▲ BALAIE VERS LE HAUT', 'SUPREMA PRONTA  ▲ SCORRI IN SU', 'УЛЬТА ГОТОВА  ▲ ПРОВЕДИ ВВЕРХ'],
+    'flick up': ['desliza arriba', 'balaie vers le haut', 'scorri in su', 'проведи вверх'],
+    'LUCKY CHARMS': ['AMULETOS DE LA SUERTE', 'PORTE-BONHEUR', 'PORTAFORTUNA', 'ТАЛИСМАНЫ УДАЧИ'],
+    'A glowing lucky cat slides across some levels.\nBreak it for +10% blade damage this run.': [
+      'En algunos niveles cruza un gato de la suerte brillante.\nRómpelo para +10% de daño de espada en esta partida.',
+      'Un chat porte-bonheur lumineux traverse\ncertains niveaux. Brise-le pour +10 % de\ndégâts de lame pendant la partie.',
+      'In alcuni livelli passa un gatto portafortuna luminoso.\nRompilo per +10% di danno della lama in questa partita.',
+      'На некоторых уровнях проплывает\nсветящийся кот удачи. Разбей его:\n+10% к урону клинка до конца забега.'],
+    'LUCKY CHARM': ['AMULETO DE LA SUERTE', 'PORTE-BONHEUR', 'PORTAFORTUNA', 'ТАЛИСМАН УДАЧИ'],
+    'blade damage +10%': ['daño de espada +10%', 'dégâts de lame +10 %', 'danno della lama +10%', 'урон клинка +10%'],
+    'COINS & UPGRADES': ['MONEDAS Y MEJORAS', 'PIÈCES ET AMÉLIORATIONS', 'MONETE E POTENZIAMENTI', 'МОНЕТЫ И УЛУЧШЕНИЯ'],
+    'Kills earn coins. Spend them before a level:\nRANGE hits from further away,\nCOIN REWARD gives more coins per kill.': [
+      'Las bajas dan monedas. Gástalas antes de un nivel:\nALCANCE golpea desde más lejos,\nBOTÍN da más monedas por baja.',
+      'Tes victimes rapportent des pièces.\nDépense-les avant un niveau :\nPORTÉE frappe de plus loin,\nBUTIN donne plus de pièces par victime.',
+      'Le uccisioni danno monete. Spendile prima di un livello:\nPORTATA colpisce da più lontano,\nBOTTINO dà più monete per uccisione.',
+      'За убийства дают монеты. Трать их перед уровнем:\nДАЛЬНОСТЬ — удар издалека,\nНАГРАДА — больше монет за убийство.'],
+    'ATTACK\nSPEED': ['VELOCIDAD\nDE ATAQUE', 'VITESSE\nD’ATTAQUE', 'VELOCITÀ\nD’ATTACCO', 'СКОРОСТЬ\nАТАКИ'],
+    'BLADE\nDAMAGE': ['DAÑO DE\nESPADA', 'DÉGÂTS\nDE LAME', 'DANNO\nDELLA LAMA', 'УРОН\nКЛИНКА'],
+    'COIN\nREWARD': ['BOTÍN', 'BUTIN', 'BOTTINO', 'НАГРАДА'],
+    'ATTACK SPEED': ['VELOCIDAD DE ATAQUE', 'VITESSE D’ATTAQUE', 'VELOCITÀ D’ATTACCO', 'СКОРОСТЬ АТАКИ'],
+    'BLADE DAMAGE': ['DAÑO DE ESPADA', 'DÉGÂTS DE LAME', 'DANNO DELLA LAMA', 'УРОН КЛИНКА'],
+    'RANGE': ['ALCANCE', 'PORTÉE', 'PORTATA', 'ДАЛЬНОСТЬ'],
+    'COIN REWARD': ['BOTÍN', 'BUTIN', 'BOTTINO', 'НАГРАДА'],
+    'ATTACK SPEED UP!': ['¡MÁS VELOCIDAD DE ATAQUE!', 'VITESSE D’ATTAQUE EN HAUSSE !', 'VELOCITÀ D’ATTACCO AUMENTATA!', 'СКОРОСТЬ АТАКИ ПОВЫШЕНА!'],
+    'BLADE DAMAGE UP!': ['¡MÁS DAÑO DE ESPADA!', 'DÉGÂTS DE LAME EN HAUSSE !', 'DANNO DELLA LAMA AUMENTATO!', 'УРОН КЛИНКА ПОВЫШЕН!'],
+    'RANGE UP!': ['¡MÁS ALCANCE!', 'PORTÉE EN HAUSSE !', 'PORTATA AUMENTATA!', 'ДАЛЬНОСТЬ ПОВЫШЕНА!'],
+    'COIN REWARD UP!': ['¡MÁS BOTÍN!', 'BUTIN EN HAUSSE !', 'BOTTINO AUMENTATO!', 'НАГРАДА ПОВЫШЕНА!'],
+    'now level {0}, for good': ['ahora nivel {0}, para siempre', 'niveau {0}, pour de bon', 'ora livello {0}, per sempre', 'теперь уровень {0}, навсегда'],
+    'Lv {0}': ['Nv {0}', 'Niv {0}', 'Liv {0}', 'Ур {0}'],
+    '+ coins': ['+ monedas', '+ pièces', '+ monete', '+ монеты'],
+    'GEAR & STORE': ['EQUIPO Y TIENDA', 'ÉQUIPEMENT ET BOUTIQUE', 'EQUIPAGGIAMENTO E NEGOZIO', 'СНАРЯЖЕНИЕ И ЛАВКА'],
+    'Beat a saga boss to win his weapon and armor.\nPut them on in EQUIPMENT before a level.\nThe STORE is coming soon. Good luck, samurai!': [
+      'Vence a un jefe de saga para ganar su arma y su armadura.\nPóntelas en EQUIPO antes de un nivel.\nLa TIENDA llegará pronto. ¡Buena suerte, samurái!',
+      'Bats un boss de saga pour gagner son arme et son armure.\nÉquipe-les dans ÉQUIPEMENT avant un niveau.\nLa BOUTIQUE arrive bientôt. Bonne chance, samouraï !',
+      'Sconfiggi un boss della saga per vincere arma e armatura.\nIndossale in EQUIPAGGIAMENTO prima di un livello.\nIl NEGOZIO arriverà presto. Buona fortuna, samurai!',
+      'Победи босса саги и получи его оружие и доспех.\nНадень их в меню СНАРЯЖЕНИЕ перед уровнем.\nЛАВКА скоро откроется. Удачи, самурай!'],
+    'EQUIPMENT': ['EQUIPO', 'ÉQUIPEMENT', 'EQUIPAGGIAMENTO', 'СНАРЯЖЕНИЕ'],
+    'STORE': ['TIENDA', 'BOUTIQUE', 'NEGOZIO', 'ЛАВКА'],
+    // level start screen, store, equipment
+    'LEVEL {0}': ['NIVEL {0}', 'NIVEAU {0}', 'LIVELLO {0}', 'УРОВЕНЬ {0}'],
+    '{0}s swing': ['{0}s por golpe', '{0}s par coup', '{0}s a colpo', '{0}с на удар'],
+    '{0} per hit': ['{0} por golpe', '{0} par coup', '{0} a colpo', '{0} за удар'],
+    'up close': ['cuerpo a cuerpo', 'au contact', 'corpo a corpo', 'вплотную'],
+    '{0}m reach': ['{0}m de alcance', '{0}m de portée', '{0}m di portata', 'удар на {0}м'],
+    '{0} per kill': ['{0} por baja', '{0} par victime', '{0} a uccisione', '{0} за убийство'],
+    'MAX': ['MÁX', 'MAX', 'MAX', 'МАКС'],
+    'touch the path to start': ['toca el camino para empezar', 'touche le chemin pour commencer', 'tocca il sentiero per iniziare', 'коснись дороги, чтобы начать'],
+    'touch the road to start': ['toca el camino para empezar', 'touche la route pour commencer', 'tocca la strada per iniziare', 'коснись дороги, чтобы начать'],
+    "DON'T FORGET TO UPGRADE!": ['¡NO OLVIDES MEJORAR!', 'N’OUBLIE PAS D’AMÉLIORER !', 'NON DIMENTICARE DI POTENZIARE!', 'НЕ ЗАБУДЬ УЛУЧШИТЬСЯ!'],
+    '{0} coins': ['{0} monedas', '{0} pièces', '{0} monete', '{0} мон.'],
+    '{0} COINS': ['{0} MONEDAS', '{0} PIÈCES', '{0} MONETE', '{0} МОН.'],
+    'Spend them on the cards at the bottom\nto make your samurai stronger.': [
+      'Gástalas en las cartas de abajo\npara hacer más fuertes a tus samuráis.',
+      'Dépense-les sur les cartes en bas\npour renforcer tes samouraïs.',
+      'Spendile sulle carte in basso\nper rendere più forti i tuoi samurai.',
+      'Потрать их на карточки внизу,\nчтобы усилить самураев.'],
+    'UPGRADE': ['MEJORAR', 'AMÉLIORER', 'POTENZIA', 'УЛУЧШИТЬ'],
+    'play anyway': ['jugar igualmente', 'jouer quand même', 'gioca comunque', 'играть так'],
+    'The merchant is still on the road.\nSave your coins!': ['El mercader aún está en camino.\n¡Ahorra tus monedas!', 'Le marchand est encore en route.\nGarde tes pièces !', 'Il mercante è ancora in viaggio.\nRisparmia le monete!', 'Торговец ещё в пути.\nКопи монеты!'],
+    'CLOSE': ['CERRAR', 'FERMER', 'CHIUDI', 'ЗАКРЫТЬ'],
+    'WEAPON': ['ARMA', 'ARME', 'ARMA', 'ОРУЖИЕ'],
+    'ARMOR': ['ARMADURA', 'ARMURE', 'ARMATURA', 'ДОСПЕХ'],
+    'NECKLACE': ['COLLAR', 'COLLIER', 'COLLANA', 'ОЖЕРЕЛЬЕ'],
+    'EQUIPPED': ['EQUIPADO', 'ÉQUIPÉ', 'EQUIPAGGIATO', 'НАДЕТО'],
+    'EQUIP': ['EQUIPAR', 'ÉQUIPER', 'EQUIPAGGIA', 'НАДЕТЬ'],
+    'Defeat the saga boss to unlock.': ['Vence al jefe de la saga para desbloquear.', 'Bats le boss de la saga pour débloquer.', 'Sconfiggi il boss della saga per sbloccare.', 'Победи босса саги, чтобы открыть.'],
+    'Clan Armor': ['Armadura del Clan', 'Armure du Clan', 'Armatura del Clan', 'Доспех клана'],
+    'Standard issue.': ['De serie.', 'Équipement standard.', 'Dotazione standard.', 'Обычный.'],
+    'Thunder Armor': ['Armadura del Trueno', 'Armure du Tonnerre', 'Armatura del Tuono', 'Доспех грома'],
+    'Halves lightning damage.': ['Reduce a la mitad el daño de los rayos.', 'Divise par deux les dégâts de la foudre.', 'Dimezza il danno dei fulmini.', 'Вдвое снижает урон от молний.'],
+    'Clan Katana': ['Katana del Clan', 'Katana du Clan', 'Katana del Clan', 'Катана клана'],
+    'A trusty blade.': ['Una hoja fiel.', 'Une lame fidèle.', 'Una lama fidata.', 'Верный клинок.'],
+    '+15% damage to flying, armoured and water foes.': ['+15% de daño a enemigos voladores, acorazados y de agua.', '+15 % de dégâts contre les ennemis volants, cuirassés et aquatiques.', '+15% di danno ai nemici volanti, corazzati e d’acqua.', '+15% урона по летающим, бронированным и водным врагам.'],
+    'No Necklace': ['Sin collar', 'Aucun collier', 'Nessuna collana', 'Без ожерелья'],
+    'None found yet.': ['Aún no has encontrado ninguno.', 'Aucun trouvé pour l’instant.', 'Nessuna trovata finora.', 'Пока не найдено.'],
+    "Armor forged in the image of Takemikazuchi's own war gear. It does not fully stop lightning, but it turns the worst of it aside, the same way he endured the storms he commanded. Those who wear it carry a trace of the force that once pinned the earthquake catfish and forced the land to yield. It is heavy with the memory of conquest, not protection freely given.": [
+      'Armadura forjada a imagen del equipo de guerra de Takemikazuchi. No detiene del todo el rayo, pero desvía lo peor, igual que él resistía las tormentas que dominaba. Quien la viste lleva un rastro de la fuerza que una vez inmovilizó al pez gato de los terremotos y obligó a la tierra a ceder. Pesa con el recuerdo de la conquista, no de una protección dada de buena gana.',
+      'Armure forgée à l’image de l’équipement de guerre de Takemikazuchi. Elle n’arrête pas tout à fait la foudre, mais en détourne le pire, comme il endurait les tempêtes qu’il commandait. Qui la porte garde une trace de la force qui cloua jadis le poisson-chat des séismes et fit plier la terre. Elle pèse du souvenir de la conquête, non d’une protection offerte de bon cœur.',
+      'Armatura forgiata a immagine dell’equipaggiamento da guerra di Takemikazuchi. Non ferma del tutto il fulmine, ma ne devia il peggio, come lui sopportava le tempeste che comandava. Chi la indossa porta una traccia della forza che un tempo inchiodò il pesce gatto dei terremoti e costrinse la terra a cedere. È carica del ricordo della conquista, non di una protezione data di buon grado.',
+      'Доспех, выкованный по образу боевого облачения Такэмикадзути. Он не останавливает молнию полностью, но отводит её худшую часть — так же, как бог выдерживал бури, которыми повелевал. Тот, кто носит его, хранит след силы, что однажды пригвоздила сома землетрясений и заставила землю покориться. Он тяжёл памятью о завоевании, а не о защите, данной по доброй воле.'],
+    "A sword once carried by Takemikazuchi. In the old stories, when the first emperor's forces were stalled, Takemikazuchi did not descend himself. Instead he sent this blade down from the heavens so the campaign could continue. It is said the sword carries a fragment of his thunder, striking with the same force he used when he crushed those who opposed the heavenly order. Those who wield it now do so with his reluctant respect, not his blessing.": [
+      'Una espada que una vez llevó Takemikazuchi. En las viejas historias, cuando las tropas del primer emperador se detuvieron, Takemikazuchi no descendió él mismo: envió esta hoja desde los cielos para que la campaña siguiera. Se dice que guarda un fragmento de su trueno y golpea con la misma fuerza con que aplastó a quienes se oponían al orden celestial. Quien la empuña hoy lo hace con su respeto a regañadientes, no con su bendición.',
+      'Une épée jadis portée par Takemikazuchi. Dans les vieux récits, quand les troupes du premier empereur étaient bloquées, Takemikazuchi ne descendit pas lui-même : il envoya cette lame du ciel pour que la campagne continue. On dit qu’elle porte un fragment de son tonnerre et frappe avec la force qui écrasa ceux qui s’opposaient à l’ordre céleste. Qui la manie aujourd’hui le fait avec son respect réticent, non sa bénédiction.',
+      'Una spada un tempo portata da Takemikazuchi. Nelle antiche storie, quando le truppe del primo imperatore si fermarono, Takemikazuchi non scese di persona: mandò questa lama dal cielo perché la campagna continuasse. Si dice che porti un frammento del suo tuono e colpisca con la stessa forza con cui schiacciò chi si opponeva all’ordine celeste. Chi la impugna oggi lo fa con il suo rispetto riluttante, non con la sua benedizione.',
+      'Меч, некогда принадлежавший Такэмикадзути. В древних сказаниях, когда войско первого императора застряло, Такэмикадзути не спустился сам, а послал этот клинок с небес, чтобы поход продолжился. Говорят, в мече живёт частица его грома, и бьёт он с той же силой, с какой бог сокрушал противников небесного порядка. Кто владеет им сейчас, владеет с его неохотным уважением, а не с благословением.'],
+    // the run
+    'MISS': ['FALLO', 'RATÉ', 'MANCATO', 'МИМО'],
+    'MISSED': ['PERDIDO', 'RATÉ', 'PERSO', 'УПУЩЕНО'],
+    'SHARP BLADE': ['HOJA AFILADA', 'LAME AFFÛTÉE', 'LAMA AFFILATA', 'ОСТРЫЙ КЛИНОК'],
+    'damage +{0}% for this run': ['daño +{0}% en esta partida', 'dégâts +{0} % pour cette partie', 'danno +{0}% per questa partita', 'урон +{0}% в этом забеге'],
+    'SWIFT BLADE': ['HOJA VELOZ', 'LAME RAPIDE', 'LAMA RAPIDA', 'БЫСТРЫЙ КЛИНОК'],
+    'swings {0}% faster for this run': ['golpes un {0}% más rápidos en esta partida', 'coups {0} % plus rapides pour cette partie', 'colpi più rapidi del {0}% per questa partita', 'удары на {0}% быстрее в этом забеге'],
+    'LONG REACH': ['GRAN ALCANCE', 'LONGUE PORTÉE', 'LUNGA PORTATA', 'ДАЛЬНИЙ УДАР'],
+    'Range +{0} for this run': ['Alcance +{0} en esta partida', 'Portée +{0} pour cette partie', 'Portata +{0} per questa partita', 'Дальность +{0} в этом забеге'],
+    'CIVILIANS FREED': ['CIVILES LIBERADOS', 'CIVILS LIBÉRÉS', 'CIVILI LIBERATI', 'ЖИТЕЛИ СПАСЕНЫ'],
+    'They thank you. Choose one FREE upgrade:': ['Te lo agradecen. Elige una mejora GRATIS:', 'Ils te remercient. Choisis une amélioration GRATUITE :', 'Ti ringraziano. Scegli un potenziamento GRATIS:', 'Они благодарят тебя. Выбери БЕСПЛАТНОЕ улучшение:'],
+    'FREE': ['GRATIS', 'GRATUIT', 'GRATIS', 'ДАРОМ'],
+    'THE ROAD SPLITS': ['EL CAMINO SE DIVIDE', 'LA ROUTE SE DIVISE', 'LA STRADA SI DIVIDE', 'ДОРОГА РАЗДЕЛЯЕТСЯ'],
+    'logs and a rescue, or the enemies': ['troncos y un rescate, o los enemigos', 'des rondins et un sauvetage, ou les ennemis', 'tronchi e un salvataggio, o i nemici', 'брёвна и спасение — или враги'],
+    'stone and a rescue, or the enemies': ['piedra y un rescate, o los enemigos', 'de la pierre et un sauvetage, ou les ennemis', 'pietra e un salvataggio, o i nemici', 'камни и спасение — или враги'],
+    'the lock snaps: {0} saved!': ['el candado se rompe: ¡{0} salvados!', 'le cadenas cède : {0} sauvés !', 'il lucchetto si spezza: {0} salvati!', 'замок сломан: спасено {0}!'],
+    '+{0} SAVED': ['+{0} SALVADOS', '+{0} SAUVÉS', '+{0} SALVATI', '+{0} СПАСЕНО'],
+    'BREAK IT NOW!': ['¡RÓMPELO YA!', 'BRISE-LE MAINTENANT !', 'ROMPILO ORA!', 'ЛОМАЙ СЕЙЧАС!'],
+    'BREAK IT OR BE CRUSHED!': ['¡RÓMPELO O TE APLASTARÁ!', 'BRISE-LE OU SOIS ÉCRASÉ !', 'ROMPILO O SARAI SCHIACCIATO!', 'ЛОМАЙ, ИЛИ РАЗДАВИТ!'],
+    'WEAPON AHEAD': ['ARMA A LA VISTA', 'ARME EN VUE', 'ARMA IN VISTA', 'ВПЕРЕДИ ОРУЖИЕ'],
+    'cut through for a boost, or take the blue gate': ['ábrete paso para una mejora, o toma la puerta azul', 'taille-toi un passage pour un bonus, ou prends la porte bleue', 'sfonda per un potenziamento, o prendi la porta blu', 'прорубись за бонусом или иди в синие ворота'],
+    'LOGS AHEAD': ['TRONCOS A LA VISTA', 'RONDINS EN VUE', 'TRONCHI IN VISTA', 'ВПЕРЕДИ БРЁВНА'],
+    'STONE AHEAD': ['PIEDRA A LA VISTA', 'PIERRE EN VUE', 'PIETRA IN VISTA', 'ВПЕРЕДИ КАМНИ'],
+    'break through or go around': ['atraviesa o rodea', 'fonce ou contourne', 'sfonda o aggira', 'прорвись или обойди'],
+    'STONE WALL': ['MURO DE PIEDRA', 'MUR DE PIERRE', 'MURO DI PIETRA', 'КАМЕННАЯ СТЕНА'],
+    'break it or go around': ['rómpelo o rodéalo', 'brise-le ou contourne-le', 'rompilo o aggiralo', 'сломай или обойди'],
+    'BLOCKED': ['BLOQUEADO', 'BLOQUÉ', 'BLOCCATO', 'ЗАБЛОКИРОВАН'],
+    'CRUSHED': ['APLASTADO', 'ÉCRASÉ', 'SCHIACCIATO', 'РАЗДАВЛЕН'],
+    'Slide your finger to steer.\nGo through the BLUE gate to add samurai!': [
+      'Desliza el dedo para guiar.\n¡Pasa por la puerta AZUL para sumar samuráis!',
+      'Fais glisser ton doigt pour diriger.\nPasse par la porte BLEUE\npour ajouter des samouraïs !',
+      'Fai scorrere il dito per guidare.\nPassa dalla porta BLU per aggiungere samurai!',
+      'Веди пальцем, чтобы управлять.\nПройди через СИНИЕ ворота,\nчтобы добавить самураев!'],
+    'Enemies! Your samurai fight on their own.\nThe bigger your army, the stronger it is.': [
+      '¡Enemigos! Tus samuráis luchan solos.\nCuanto más grande tu ejército, más fuerte es.',
+      'Des ennemis ! Tes samouraïs se battent seuls.\nPlus ton armée est grande, plus elle est forte.',
+      'Nemici! I tuoi samurai combattono da soli.\nPiù grande è l’esercito, più è forte.',
+      'Враги! Самураи сражаются сами.\nЧем больше армия, тем она сильнее.'],
+    'Your ULTIMATE is ready!\nFLICK your finger UP to unleash the Dragon Slash.': [
+      '¡Tu DEFINITIVA está lista!\nDESLIZA el dedo HACIA ARRIBA\npara lanzar el Tajo del Dragón.',
+      'Ton ULTIME est prête !\nBALAIE ton doigt VERS LE HAUT\npour lancer la Tranche du Dragon.',
+      'La tua SUPREMA è pronta!\nSCORRI il dito IN SU per scatenare\nil Fendente del Drago.',
+      'УЛЬТА готова!\nРЕЗКО проведи пальцем ВВЕРХ,\nчтобы нанести Удар Дракона.'],
+    'Your SLOW power is ready!\nTap the SLOW button (bottom right) to slow time.': [
+      '¡Tu poder LENTO está listo!\nToca el botón LENTO (abajo a la derecha)\npara frenar el tiempo.',
+      'Ton pouvoir LENT est prêt !\nTouche le bouton LENT (en bas à droite)\npour ralentir le temps.',
+      'Il potere LENTO è pronto!\nTocca il pulsante LENTO (in basso a destra)\nper rallentare il tempo.',
+      'ЗАМЕДЛЕНИЕ готово!\nНажми кнопку ЗАМЕДЛ. (внизу справа),\nчтобы замедлить время.'],
+    'RED circle: the boss will strike right there.\nSlide out of it before it lands!': [
+      'Círculo ROJO: el jefe golpeará justo ahí.\n¡Sal de él antes de que caiga!',
+      'Cercle ROUGE : le boss va frapper juste là.\nSors-en avant l’impact !',
+      'Cerchio ROSSO: il boss colpirà proprio lì.\nEsci prima che arrivi!',
+      'КРАСНЫЙ круг: босс ударит прямо туда.\nУйди из него, пока не ударило!'],
+    'ORANGE circle: a big power attack!\nGet clear fast, it hits twice as hard.': [
+      'Círculo NARANJA: ¡un gran ataque!\nApártate rápido, golpea el doble de fuerte.',
+      'Cercle ORANGE : une attaque surpuissante !\nÉcarte-toi vite, elle frappe deux fois plus fort.',
+      'Cerchio ARANCIONE: un grande attacco!\nAllontanati in fretta, colpisce il doppio.',
+      'ОРАНЖЕВЫЙ круг: мощная атака!\nБыстро уходи, она бьёт вдвое сильнее.'],
+    'GOT IT': ['ENTENDIDO', 'COMPRIS', 'CAPITO', 'ПОНЯТНО'],
+    'PAUSED': ['PAUSA', 'PAUSE', 'PAUSA', 'ПАУЗА'],
+    'RESUME': ['CONTINUAR', 'REPRENDRE', 'RIPRENDI', 'ПРОДОЛЖИТЬ'],
+    'QUIT TO SAGAS': ['SALIR A LAS SAGAS', 'QUITTER VERS LES SAGAS', 'ESCI ALLE SAGHE', 'ВЫЙТИ К САГАМ'],
+    // bosses (the Japanese names have no entry and stay)
+    'FAT DEMON': ['DEMONIO GORDO', 'GROS DÉMON', 'DEMONE GRASSO', 'ТОЛСТЫЙ ДЕМОН'],
+    'DEMON SLAIN': ['DEMONIO ABATIDO', 'DÉMON VAINCU', 'DEMONE ABBATTUTO', 'ДЕМОН ПОВЕРЖЕН'],
+    'GIANT ZOMBIE': ['ZOMBI GIGANTE', 'ZOMBIE GÉANT', 'ZOMBI GIGANTE', 'ЗОМБИ-ВЕЛИКАН'],
+    'GIANT SLAIN': ['GIGANTE ABATIDO', 'GÉANT VAINCU', 'GIGANTE ABBATTUTO', 'ВЕЛИКАН ПОВЕРЖЕН'],
+    'ROCK ONI': ['ONI DE ROCA', 'ONI DE PIERRE', 'ONI DI ROCCIA', 'КАМЕННЫЙ ОНИ'],
+    'THE THUNDER GOD FALLS': ['CAE EL DIOS DEL TRUENO', 'LE DIEU DU TONNERRE TOMBE', 'CADE IL DIO DEL TUONO', 'БОГ ГРОМА ПАЛ'],
+    'THE STORM AWAKENS': ['LA TORMENTA DESPIERTA', 'LA TEMPÊTE S’ÉVEILLE', 'LA TEMPESTA SI RISVEGLIA', 'БУРЯ ПРОБУЖДАЕТСЯ'],
+    'THE MOUNTAIN BURNS': ['LA MONTAÑA ARDE', 'LA MONTAGNE BRÛLE', 'LA MONTAGNA BRUCIA', 'ГОРА ПЫЛАЕТ'],
+    '{0} SLAIN': ['{0} ABATIDO', '{0} VAINCU', '{0} ABBATTUTO', '{0} ПОВЕРЖЕН'],
+    '{0} FALLS': ['CAE {0}', '{0} TOMBE', 'CADE {0}', '{0} ПАЛ'],
+    '{0} CLEARED': ['{0} COMPLETADO', '{0} TERMINÉ', '{0} COMPLETATO', '{0} ПРОЙДЕН'],
+    'CLAN CRUSHED': ['CLAN APLASTADO', 'CLAN ÉCRASÉ', 'CLAN SCHIACCIATO', 'КЛАН РАЗДАВЛЕН'],
+    'CLAN WIPED': ['CLAN ANIQUILADO', 'CLAN ANÉANTI', 'CLAN STERMINATO', 'КЛАН УНИЧТОЖЕН'],
+    'MORE LEVELS COMING SOON': ['MÁS NIVELES PRÓXIMAMENTE', 'D’AUTRES NIVEAUX BIENTÔT', 'ALTRI LIVELLI IN ARRIVO', 'НОВЫЕ УРОВНИ СКОРО'],
+    '{0} UNLOCKED': ['DESBLOQUEADO: {0}', 'DÉBLOQUÉ : {0}', 'SBLOCCATO: {0}', 'ОТКРЫТО: {0}'],
+    'NOW DEFEND THE COMPOUND': ['AHORA DEFIENDE EL FUERTE', 'DÉFENDS MAINTENANT LE FORT', 'ORA DIFENDI IL FORTE', 'ТЕПЕРЬ ЗАЩИТИ КРЕПОСТЬ'],
+    'WON: THUNDER ARMOR  ·  FUTSU-NO-MITAMA': ['GANADO: ARMADURA DEL TRUENO  ·  FUTSU-NO-MITAMA', 'GAGNÉ : ARMURE DU TONNERRE  ·  FUTSU-NO-MITAMA', 'VINTO: ARMATURA DEL TUONO  ·  FUTSU-NO-MITAMA', 'ПОЛУЧЕНО: ДОСПЕХ ГРОМА  ·  FUTSU-NO-MITAMA'],
+    'tap to continue': ['toca para continuar', 'touche pour continuer', 'tocca per continuare', 'нажми, чтобы продолжить'],
+    // the stronghold
+    'SUPPLIES': ['SUMINISTROS', 'RAVITAILLEMENT', 'RIFORNIMENTI', 'ПРИПАСЫ'],
+    'PRIZES': ['PREMIOS', 'PRIX', 'PREMI', 'ПРИЗЫ'],
+    'DOOR': ['PUERTA', 'PORTE', 'ANTA', 'СТВОРКА'],
+    'GATE': ['PORTÓN', 'PORTE', 'PORTONE', 'ВОРОТА'],
+    'GATE  {0}': ['MURALLA  {0}', 'REMPART  {0}', 'MURA  {0}', 'СТЕНА  {0}'],
+    'MAIN GATE SHUT': ['PORTÓN CERRADO', 'GRANDE PORTE FERMÉE', 'PORTONE CHIUSO', 'ГЛАВНЫЕ ВОРОТА ЗАКРЫТЫ'],
+    'they must break it down first': ['primero tendrán que derribarlo', 'ils doivent d’abord l’enfoncer', 'prima devono abbatterlo', 'сначала им придётся их сломать'],
+    'ONE DOOR SHUT': ['UNA PUERTA CERRADA', 'UNE PORTE FERMÉE', 'UN’ANTA CHIUSA', 'ОДНА СТВОРКА ЗАКРЫТА'],
+    'now the other one': ['ahora la otra', 'maintenant l’autre', 'ora l’altra', 'теперь вторая'],
+    'THE GATE IS DOWN': ['EL PORTÓN HA CAÍDO', 'LA PORTE EST TOMBÉE', 'IL PORTONE È CADUTO', 'ВОРОТА СЛОМАНЫ'],
+    'here they come': ['ahí vienen', 'les voilà', 'eccoli', 'они идут'],
+    'SLIDE to aim your archers. Hold the wall!\nBroken prizes fall: slide under to CATCH.\nLEFT: shoot the blue banner to raise its\nnumber, open ? boxes, blow up barrels.\nRIGHT: prize chests behind logs.\nMIDDLE: shoot both doors to shut the gate.': [
+      'DESLIZA para apuntar con los arqueros. ¡Defiende la muralla!\nLos premios rotos caen: ponte debajo para ATRAPARLOS.\nIZQUIERDA: dispara al estandarte azul para subir su\nnúmero, abre cajas ?, vuela barriles.\nDERECHA: cofres de premio tras troncos.\nCENTRO: dispara a las dos puertas para cerrar el portón.',
+      'GLISSE pour viser avec tes archers. Tiens le rempart !\nLes prix brisés tombent : glisse dessous pour les ATTRAPER.\nGAUCHE : tire sur la bannière bleue pour monter son\nnombre, ouvre les boîtes ?, fais sauter les tonneaux.\nDROITE : coffres à prix derrière des rondins.\nCENTRE : tire sur les deux portes pour fermer l’entrée.',
+      'SCORRI per mirare con gli arcieri. Tieni le mura!\nI premi rotti cadono: mettiti sotto per PRENDERLI.\nSINISTRA: colpisci lo stendardo blu per alzarne\nil numero, apri le casse ?, fai esplodere i barili.\nDESTRA: forzieri dietro i tronchi.\nCENTRO: colpisci le due ante per chiudere il portone.',
+      'ВЕДИ пальцем, чтобы целиться лучниками. Держи стену!\nРазбитые призы падают: встань под них, чтобы ПОЙМАТЬ.\nСЛЕВА: стреляй в синее знамя, чтобы поднять\nего число, открывай ящики ?, взрывай бочки.\nСПРАВА: сундуки с призами за брёвнами.\nЦЕНТР: стреляй в обе створки, чтобы закрыть ворота.'],
+    '{0}s a shot': ['{0}s por disparo', '{0}s par tir', '{0}s a tiro', '{0}с на выстрел'],
+    '{0} per arrow': ['{0} por flecha', '{0} par flèche', '{0} a freccia', '{0} за стрелу'],
+    '{0} archers': ['{0} arqueros', '{0} archers', '{0} arcieri', 'лучников: {0}'],
+    'BOOM': ['BUM', 'BOUM', 'BUM', 'БУМ'],
+    '+{0} ARCHERS': ['+{0} ARQUEROS', '+{0} ARCHERS', '+{0} ARCIERI', '+{0} ЛУЧН.'],
+    '+{0} ARCHER': ['+{0} ARQUERO', '+{0} ARCHER', '+{0} ARCIERE', '+{0} ЛУЧНИК'],
+    'FIRE ARROWS': ['FLECHAS DE FUEGO', 'FLÈCHES DE FEU', 'FRECCE DI FUOCO', 'ОГНЕННЫЕ СТРЕЛЫ'],
+    'REPAIR': ['REPARAR', 'RÉPARER', 'RIPARA', 'РЕМОНТ'],
+    'SHARP +{0}': ['AFILADAS +{0}', 'AFFÛTÉES +{0}', 'AFFILATE +{0}', 'ОСТРЫЕ +{0}'],
+    'FINAL WAVE': ['OLEADA FINAL', 'DERNIÈRE VAGUE', 'ONDATA FINALE', 'ПОСЛЕДНЯЯ ВОЛНА'],
+    'WAVE {0}': ['OLEADA {0}', 'VAGUE {0}', 'ONDATA {0}', 'ВОЛНА {0}'],
+    'the warlord is coming': ['llega el caudillo', 'le seigneur de guerre arrive', 'arriva il signore della guerra', 'идёт полководец'],
+    '{0} brutes in the ranks': ['{0} brutos en las filas', '{0} brutes dans les rangs', '{0} bruti tra le file', 'громил в рядах: {0}'],
+    'a brute in the ranks': ['un bruto en las filas', 'une brute dans les rangs', 'un bruto tra le file', 'в рядах громила'],
+    'THE WARLORD': ['EL CAUDILLO', 'LE SEIGNEUR DE GUERRE', 'IL SIGNORE DELLA GUERRA', 'ПОЛКОВОДЕЦ'],
+    'WARLORD': ['CAUDILLO', 'SEIGNEUR DE GUERRE', 'SIGNORE DELLA GUERRA', 'ПОЛКОВОДЕЦ'],
+    'stop him before he reaches the gate': ['detenlo antes de que llegue a la muralla', 'arrête-le avant qu’il n’atteigne le rempart', 'fermalo prima che raggiunga le mura', 'останови его до стены'],
+    'LOST': ['PERDIDO', 'PERDU', 'PERSO', 'ПОТЕРЯН'],
+    'BRUTE DOWN': ['BRUTO ABATIDO', 'BRUTE À TERRE', 'BRUTO ABBATTUTO', 'ГРОМИЛА ПОВЕРЖЕН'],
+    'CATCH IT': ['ATRÁPALO', 'ATTRAPE-LE', 'PRENDILO', 'ЛОВИ'],
+    'slide your archers under the prize': ['pon a tus arqueros bajo el premio', 'glisse tes archers sous le prix', 'porta gli arcieri sotto il premio', 'подведи лучников под приз'],
+    'RAPID FIRE': ['FUEGO RÁPIDO', 'TIR RAPIDE', 'TIRO RAPIDO', 'БЫСТРАЯ СТРЕЛЬБА'],
+    'TWIN ARROWS': ['FLECHAS DOBLES', 'FLÈCHES JUMELLES', 'FRECCE DOPPIE', 'ДВОЙНЫЕ СТРЕЛЫ'],
+    'FROZEN': ['CONGELADOS', 'GELÉS', 'CONGELATI', 'ЗАМОРОЗКА'],
+    'REINFORCEMENTS': ['REFUERZOS', 'RENFORTS', 'RINFORZI', 'ПОДКРЕПЛЕНИЕ'],
+    '+{0} archers on the wall': ['+{0} arqueros en la muralla', '+{0} archers sur le rempart', '+{0} arcieri sulle mura', '+{0} лучника на стене'],
+    'they burn through the ranks': ['arrasan las filas', 'elles brûlent les rangs', 'bruciano le file nemiche', 'они прожигают ряды'],
+    'SHARP ARROWS': ['FLECHAS AFILADAS', 'FLÈCHES AFFÛTÉES', 'FRECCE AFFILATE', 'ОСТРЫЕ СТРЕЛЫ'],
+    'arrow damage +{0}%': ['daño de flecha +{0}%', 'dégâts des flèches +{0} %', 'danno delle frecce +{0}%', 'урон стрел +{0}%'],
+    'GATE REPAIRED': ['MURALLA REPARADA', 'REMPART RÉPARÉ', 'MURA RIPARATE', 'СТЕНА ПОЧИНЕНА'],
+    'ARROW STORM': ['LLUVIA DE FLECHAS', 'PLUIE DE FLÈCHES', 'PIOGGIA DI FRECCE', 'ГРАД СТРЕЛ'],
+    'COMPOUND HELD': ['FUERTE DEFENDIDO', 'FORT TENU', 'FORTE DIFESO', 'КРЕПОСТЬ УСТОЯЛА'],
+    'THE GATE HAS FALLEN': ['LA MURALLA HA CAÍDO', 'LE REMPART EST TOMBÉ', 'LE MURA SONO CADUTE', 'СТЕНА ПАЛА'],
+    'includes {0} for holding the land': ['incluye {0} por defender la tierra', 'dont {0} pour avoir tenu la terre', 'di cui {0} per aver difeso la terra', 'из них {0} за удержание земель'],
+    'reached wave {0} of {1}': ['llegaste a la oleada {0} de {1}', 'vague {0} sur {1} atteinte', 'raggiunta l’ondata {0} di {1}', 'дошли до волны {0} из {1}'],
+    'upgrade your clan and try again': ['mejora tu clan e inténtalo de nuevo', 'améliore ton clan et réessaie', 'potenzia il clan e riprova', 'улучши клан и попробуй снова'],
+    // wrappers: a translated phrase with something around it (used only when the inside has a translation)
+    '{0}!': ['¡{0}!', '{0} !', '{0}!', '{0}!'],
+    '{0}  ✓': ['{0}  ✓', '{0}  ✓', '{0}  ✓', '{0}  ✓'],
+  },
+  idx: { es: 0, fr: 1, it: 2, ru: 3 },
+  // Starts in the phone's language when it is one of ours, English otherwise.
+  detect() {
+    const list = (navigator.languages && navigator.languages.length ? navigator.languages : [navigator.language || 'en']);
+    for (const l of list) { const c = String(l).slice(0, 2).toLowerCase(); if (LANGS.some(L => L[0] === c)) return c; }
+    return 'en';
+  },
+  set(lang) {
+    this.lang = LANGS.some(L => L[0] === lang) ? lang : 'en';
+    this.cache = new Map();
+    const i = this.idx[this.lang];
+    this.exact = new Map(); this.upper = new Map(); this.pats = [];
+    if (i === undefined) return;
+    for (const [en, tr] of Object.entries(this.T)) {
+      const to = tr[i];
+      if (!en.includes('{')) { this.exact.set(en, to); if (!this.upper.has(en.toUpperCase())) this.upper.set(en.toUpperCase(), to.toUpperCase()); continue; }
+      const re = new RegExp('^' + en.replace(/[.*+?^${}()|[\]\\]/g, '\\$&').replace(/\\\{(\d)\\\}/g, '(.+?)') + '$');
+      const order = (en.match(/\{\d\}/g) || []).map(m => +m[1]);
+      this.pats.push({ re, to, order, wrap: !/[A-Za-z]/.test(en), weight: en.replace(/\{\d\}/g, '').length });
+    }
+    this.pats.sort((a, b) => b.weight - a.weight);
+    try { document.documentElement.lang = this.lang; } catch (e) {}
+  },
+  tr(s) {
+    if (this.lang === 'en' || typeof s !== 'string' || !/[A-Za-z]/.test(s)) return s;
+    let r = this.cache.get(s);
+    if (r === undefined) {
+      r = this.look(s);
+      if (this.cache.size > 4000) this.cache.clear();
+      this.cache.set(s, r);
+    }
+    return r;
+  },
+  look(s) {
+    if (!/[A-Za-z]/.test(s)) return s;
+    let r = this.exact.get(s);
+    if (r !== undefined) return r;
+    if (s === s.toUpperCase() && (r = this.upper.get(s)) !== undefined) return r;
+    if (s.includes('\n')) return s.split('\n').map(l => this.look(l)).join('\n');
+    for (const p of this.pats) {
+      const m = s.match(p.re);
+      if (!m) continue;
+      const parts = p.order.map((n, k) => [n, this.look(m[k + 1])]);
+      if (p.wrap && parts.every(([n, v], k) => v === m[k + 1])) continue;      // '{0}!' only when the inside was translated
+      let out = p.to;
+      for (const [n, v] of parts) out = out.replace('{' + n + '}', v);
+      return out;
+    }
+    for (const sep of ['  ·  ', ' · ']) if (s.includes(sep)) return s.split(sep).map(l => this.look(l)).join(sep);
+    const t = s.match(/^(.*[A-Za-z].*?) (\d[\d.]*s?)$/);                       // 'RAPID FIRE 3s', 'GATE 900'
+    if (t) return this.look(t[1]) + ' ' + t[2];
+    return s;
+  },
+};
+I18N.set(Save.lang || I18N.detect());
+
+// Every Phaser text goes through here: translate, then shrink to fit if it was given a width (`_fit`, see BaseScene.txt).
+(() => {
+  const P = Phaser.GameObjects.Text.prototype, setText = P.setText;
+  P.setText = function (v) {
+    if (typeof v === 'string') v = I18N.tr(v);
+    const changed = v !== this._text;
+    setText.call(this, v);
+    if (changed && this._fit) fitText(this);
+    return this;
+  };
+})();
+function fitText(t) {
+  const base = t._fitSize;
+  if (parseFloat(t.style.fontSize) !== base) t.setFontSize(base + 'px');
+  if (t.width > t._fit) t.setFontSize(Math.max(6, Math.floor(base * t._fit / t.width * 10) / 10) + 'px');
+}
 
 /* ============================================================
    SOUND — effects and music are synthesised with Web Audio, so
@@ -1377,10 +1788,14 @@ class BaseScene extends Phaser.Scene {
   setupCamera() { this.cameras.main.setOrigin(0, 0).setZoom(R); }
   img(x, y, key) { return this.add.image(x, y, key).setScale(S); }
   sword(x, y) { return this.img(x, y, 'katana').setOrigin(0.52, 0.97); }
+  // `fit` (in extra) is the widest the text may be; a longer translation is drawn smaller. Wrapped text has no limit.
   txt(x, y, str, size, color = '#fff', extra = {}) {
-    return this.add.text(x, y, str, Object.assign({
+    const { fit = extra.wordWrap ? 0 : W - 12, ...style } = extra;
+    const t = this.add.text(x, y, '', Object.assign({
       fontFamily: FONT, fontSize: size + 'px', color, fontStyle: 'bold', resolution: R,
-    }, extra)).setOrigin(0.5);
+    }, style)).setOrigin(0.5);
+    t._fit = fit; t._fitSize = size;
+    return t.setText(str);
   }
   button(x, y, w, h, color, label, size, onTap) {
     const g = this.add.graphics();
@@ -1391,7 +1806,7 @@ class BaseScene extends Phaser.Scene {
       g.fillStyle(0xffffff, 0.16).fillRoundedRect(x - w / 2 + 3, y - h / 2 + 3 + (pressed ? 3 : 0), w - 6, h * 0.4, 8);
     };
     draw(false);
-    const t = this.txt(x, y, label, size);
+    const t = this.txt(x, y, label, size, '#fff', { fit: w - 12 });
     const z = this.add.zone(x, y, w, h).setInteractive({ useHandCursor: true });
     let held = false;
     const set = on => { held = on; draw(on); t.y = y + (on ? 3 : 0); };
@@ -1475,8 +1890,8 @@ class SagaScene extends MenuBase {
     this.button(W / 2, 92, 368, 34, 0x00695c, '?  HOW TO PLAY', 14, () => this.scene.start('Tutorial', {}));
     // Saga 1: open, with its three levels.
     this.panel(W / 2, 258, 368, 272);
-    this.txt(34, 146, numerals[0] + ' · ' + SAGAS[0].toUpperCase(), 17, '#ffd54f').setOrigin(0, 0.5);
-    if (Save.civilians > 0) this.txt(W - 34, 146, 'Civilians saved: ' + Save.civilians, 12, '#a5d6a7', { fontStyle: 'normal' }).setOrigin(1, 0.5);
+    this.txt(34, 146, numerals[0] + ' · ' + SAGAS[0].toUpperCase(), 17, '#ffd54f', { fit: 190 }).setOrigin(0, 0.5);
+    if (Save.civilians > 0) this.txt(W - 34, 146, 'Civilians saved: ' + Save.civilians, 12, '#a5d6a7', { fontStyle: 'normal', fit: 136 }).setOrigin(1, 0.5);
     this.txt(34, 168, Save.level > SAGA_LEVELS + 1 ? 'saga cleared' : Save.level > SAGA_LEVELS ? 'the saga boss awaits' : 'level ' + Save.level + ' of ' + SAGA_LEVELS, 12, '#cfc3d6', { fontStyle: 'normal' }).setOrigin(0, 0.5);
     LEVELS.slice(0, SAGA_LEVELS).forEach((L, i) => {
       const n = i + 1, x = 82 + i * 118, open = n <= Save.level, done = n < Save.level;
@@ -1517,16 +1932,16 @@ class SagaScene extends MenuBase {
         this.scene.start('Game', { level: n });
       });
       b.t.y -= 10; if (!open) b.t.setColor('#8a8094');
-      this.txt(x, 520, open ? L.name : L ? 'LOCKED' : 'COMING SOON', 10, open ? '#fff' : '#8a8094');
+      this.txt(x, 520, open ? L.name : L ? 'LOCKED' : 'COMING SOON', 10, open ? '#fff' : '#8a8094', { fit: 104 });
       if (done) this.txt(x + 38, 472, '✓', 16, '#fff59d');
     }
     // Sagas 3-5: locked.
     for (let i = 2; i < SAGAS.length; i++) {
       const y = 590 + (i - 2) * 45;
       this.panel(W / 2, y, 368, 40, 0.7);
-      this.txt(34, y, numerals[i] + ' · ' + SAGAS[i].toUpperCase(), 15, '#8a8094').setOrigin(0, 0.5);
-      this.txt(250, y, 'coming soon', 11, '#6f6678', { fontStyle: 'normal' });
-      this.txt(338, y, 'LOCKED', 12, '#8a8094');
+      this.txt(34, y, numerals[i] + ' · ' + SAGAS[i].toUpperCase(), 15, '#8a8094', { fit: 176 }).setOrigin(0, 0.5);
+      this.txt(256, y, 'coming soon', 11, '#6f6678', { fontStyle: 'normal', fit: 84 });
+      this.txt(338, y, 'LOCKED', 12, '#8a8094', { fit: 64 });
     }
   }
 }
@@ -1534,23 +1949,40 @@ class SagaScene extends MenuBase {
 class SettingsScene extends MenuBase {
   constructor() { super('Settings'); }
   init(data) { this.confirming = !!(data && data.confirming); }
+  // The language list. Each name is written in its own language so anyone can find theirs.
+  pickLanguage() {
+    const before = new Set(this.children.list);
+    this.add.rectangle(W / 2, H / 2, W, H, 0x05020c, 0.75).setInteractive();
+    this.panel(W / 2, 360, 300, 400, 0.98);
+    this.txt(W / 2, 194, 'Language', 22, '#ffd54f');
+    LANGS.forEach(([code, name], i) => {
+      this.button(W / 2, 250 + i * 60, 240, 48, code === I18N.lang ? 0x2e7d32 : 0x4a3f63, name, 19, () => {
+        Save.lang = code; Save.save(); I18N.set(code);
+        this.scene.restart();
+      });
+    });
+    this.children.list.filter(o => !before.has(o)).forEach((o, i) => o.setDepth(7000 + i));
+  }
   create() {
     this.backdrop('SETTINGS');
-    this.panel(W / 2, 220, 340, 250);
+    this.panel(W / 2, 250, 340, 310);
     [['Music', 'music'], ['Sound effects', 'sfx'], ['Screen shake', 'shake']].forEach(([label, key], i) => {
-      const y = 140 + i * 80;
-      this.txt(52, y, label, 18).setOrigin(0, 0.5);
+      const y = 140 + i * 72;
+      this.txt(52, y, label, 18, '#fff', { fit: 196 }).setOrigin(0, 0.5);
       this.button(300, y, 92, 46, Save[key] ? 0x2e7d32 : 0x4a4250, Save[key] ? 'ON' : 'OFF', 17, () => {
         Save[key] = !Save[key]; Save.save(); Sound.applyOptions();
         this.scene.restart();
       });
     });
-    this.button(W / 2, 430, 280, 54, this.confirming ? 0xc62828 : 0x4a3f63, this.confirming ? 'TAP AGAIN TO ERASE' : 'RESET PROGRESS', 17, () => {
+    // Language: the button shows the current one; tapping it opens the list.
+    this.txt(52, 356, 'Language', 18, '#fff', { fit: 130 }).setOrigin(0, 0.5);
+    this.button(272, 356, 148, 46, 0x1f5fc4, LANGS.find(L => L[0] === I18N.lang)[1] + '  ›', 17, () => this.pickLanguage());
+    this.button(W / 2, 450, 280, 54, this.confirming ? 0xc62828 : 0x4a3f63, this.confirming ? 'TAP AGAIN TO ERASE' : 'RESET PROGRESS', 17, () => {
       if (!this.confirming) { this.scene.restart({ confirming: true }); return; }
       Save.resetProgress();
       this.scene.restart();
     });
-    this.txt(W / 2, 476, this.confirming ? 'this erases coins, upgrades and unlocked levels' : 'coins, upgrades and unlocked levels', 12, '#d7b9a8', { fontStyle: 'normal' });
+    this.txt(W / 2, 496, this.confirming ? 'this erases coins, upgrades and unlocked levels' : 'coins, upgrades and unlocked levels', 12, '#d7b9a8', { fontStyle: 'normal' });
   }
 }
 
@@ -1578,8 +2010,8 @@ class TutorialScene extends MenuBase {
     this.panel(W / 2, 250, 368, 300);
     const art = this.add.container(0, 0);
     P.draw(this, art);
-    this.txt(W / 2, 438, P.title, 22, '#ffd54f', { stroke: '#2a0a14', strokeThickness: 5 });
-    this.txt(W / 2, 508, P.text, 15, '#fff3e0', { fontStyle: 'normal', align: 'center', wordWrap: { width: 360 }, lineSpacing: 5 });
+    this.txt(W / 2, 438, P.title, 22, '#ffd54f', { stroke: '#2a0a14', strokeThickness: 5, fit: 356 });
+    this.txt(W / 2, 508, P.text, 15, '#fff3e0', { fontStyle: 'normal', align: 'center', fit: 360, lineSpacing: 5 });     // the lines break where the text says; a long translation shrinks
     TutorialScene.PAGES.forEach((_, i) => {                  // page dots
       this.add.circle(W / 2 + (i - (TutorialScene.PAGES.length - 1) / 2) * 16, 584, i === this.page ? 5 : 3.5, i === this.page ? 0xffd54f : 0x8a8094);
     });
@@ -1691,7 +2123,7 @@ TutorialScene.PAGES = [
       [['ATTACK\nSPEED', 0x2e7d32], ['BLADE\nDAMAGE', 0x1565c0], ['RANGE', 0xc62828], ['COIN\nREWARD', 0x6a1b9a]].forEach(([t, col], i) => {
         const x = 62 + i * 92, g = sc.add.graphics(); c.add(g);
         g.fillStyle(0x120b18, 1).fillRoundedRect(x - 40, 170, 80, 130, 10).fillStyle(col, 1).fillRoundedRect(x - 40, 170, 80, 34, { tl: 10, tr: 10, bl: 0, br: 0 });
-        c.add(sc.txt(x, 187, t, 10, '#fff', { align: 'center', lineSpacing: -2 }));
+        c.add(sc.txt(x, 187, t, 10, '#fff', { align: 'center', lineSpacing: -2, fit: 76 }));
         c.add(sc.txt(x, 240, 'Lv 1', 18));
       });
       const coin = sc.pic(c, 170, 130, 'soul', 2); c.add(sc.txt(220, 130, '+ coins', 18, '#ffe082'));
@@ -1831,9 +2263,9 @@ class GameScene extends BaseScene {
       g.fillStyle(0x1c1220, 0.96).fillRoundedRect(x - w / 2, y - h / 2, w, h, 12);
       g.fillStyle(color, 1).fillRoundedRect(x - w / 2, y - h / 2, w, 34, { tl: 12, tr: 12, bl: 0, br: 0 });
       g.lineStyle(2, 0xffffff, 0.25).strokeRoundedRect(x - w / 2, y - h / 2, w, h, 12);
-      this.txt(x, y - h / 2 + 17, title, 11, '#fff', { align: 'center', lineSpacing: -2 });
+      this.txt(x, y - h / 2 + 17, title, 11, '#fff', { align: 'center', lineSpacing: -2, fit: 86 });
       this.txt(x, y - 24, 'Lv ' + Save[key], 20);
-      this.txt(x, y - 2, stat, 10, '#cfc3d6', { fontStyle: 'normal' });
+      this.txt(x, y - 2, stat, 10, '#cfc3d6', { fontStyle: 'normal', fit: 88 });
       const b = this.button(x, y + 42, 80, 40, can ? color : 0x4a4250, maxed ? 'MAX' : coins(cost), 15, () => {
         if (maxed || Save.souls < cost) { Sound.play('deny'); return; }
         Save.souls -= cost; Save[key]++; Save.save(); Sound.play('buy'); this.upgraded = true;
@@ -1864,7 +2296,7 @@ class GameScene extends BaseScene {
     this.add.rectangle(W / 2, H / 2, W, H, 0x05020c, 0.6).setInteractive();
     const g = this.add.graphics();
     g.fillStyle(0x1c1220, 0.97).fillRoundedRect(30, 200, 340, 250, 14).lineStyle(3, 0xffd54f, 0.9).strokeRoundedRect(30, 200, 340, 250, 14);
-    this.txt(W / 2, 236, "DON'T FORGET TO UPGRADE!", 19, '#ffd54f');
+    this.txt(W / 2, 236, "DON'T FORGET TO UPGRADE!", 19, '#ffd54f', { fit: 320 });
     this.img(W / 2 - 52, 282, 'soul').setScale(S * 1.6);
     this.txt(W / 2 + 10, 282, coins(Save.souls) + ' coins', 19, '#ffe082');
     this.txt(W / 2, 324, 'Spend them on the cards at the bottom\nto make your samurai stronger.', 14, '#fff3e0', { fontStyle: 'normal', align: 'center', lineSpacing: 4 });
@@ -1910,17 +2342,17 @@ class GameScene extends BaseScene {
       const x = 86 + i * 114, y = 172, on = k === kind, it = equipped(k);
       g.fillStyle(on ? 0x3a2a55 : 0x120b18, 1).fillRoundedRect(x - 52, y - 38, 104, 76, 10);
       g.lineStyle(2, on ? 0xffd54f : 0xffffff, on ? 1 : 0.2).strokeRoundedRect(x - 52, y - 38, 104, 76, 10);
-      this.txt(x, y - 27, label, 10, on ? '#ffd54f' : '#b0a6ba');
+      this.txt(x, y - 27, label, 10, on ? '#ffd54f' : '#b0a6ba', { fit: 98 });
       if (k === 'weapon') this.img(x, y + 2, 'katana').setScale(S * 1.05).setRotation(0.9).setTint(it.id ? 0xd9a8ff : 0xffffff);
       else if (k === 'armor') this.img(x, y - 1, 'samurai').setScale(S * 0.82).setTint(it.id ? 0xc9bcff : 0xffffff);
       else this.add.graphics().lineStyle(2.5, it.id ? 0xffd54f : 0x5a5064, 1).strokeCircle(x, y - 2, 11).fillStyle(it.id ? 0xffd54f : 0x5a5064, 1).fillCircle(x, y + 10, 3.5);
-      this.txt(x, y + 27, it.name, 9.5, '#fff', { fontStyle: 'normal' });
+      this.txt(x, y + 27, it.name, 9.5, '#fff', { fontStyle: 'normal', fit: 100 });
       this.add.zone(x, y, 104, 76).setInteractive({ useHandCursor: true }).on('pointerup', () => { if (k !== kind) { Sound.play('click'); reopen(k); } });
     });
     let y = 240;
     GEAR[kind].forEach(item => {                             // items for the chosen slot
       const have = !item.boss || won, on = Save[kind] === item.id;
-      this.txt(36, y, item.name, 15, have ? '#fff' : '#8a8094').setOrigin(0, 0.5);
+      this.txt(36, y, item.name, 15, have ? '#fff' : '#8a8094', { fit: 226 }).setOrigin(0, 0.5);
       if (GEAR[kind].length > 1) {
         const b = this.button(318, y + 4, 96, 34, on ? 0x2e7d32 : have ? 0x1565c0 : 0x3a3444, on ? 'EQUIPPED' : have ? 'EQUIP' : 'LOCKED', 12, () => {
           if (!have) { Sound.play('deny'); return; }
@@ -2119,9 +2551,9 @@ class GameScene extends BaseScene {
     this.soulIcon = this.img(22, 56, 'soul').setScale(S * 1.2).setDepth(D);
     this.soulText = this.txt(34, 56, '', 16, '#ffe082', { stroke: '#1a0a20', strokeThickness: 3 }).setOrigin(0, 0.5).setDepth(D);
     this.countText = this.txt(0, 0, '', 15, '#fff', { stroke: '#0d1642', strokeThickness: 4 }).setDepth(D);
-    this.specialText = this.txt(336, 676, 'SLOW', 13).setDepth(D + 1).setVisible(false);
+    this.specialText = this.txt(336, 676, 'SLOW', 13, '#fff', { fit: 62 }).setDepth(D + 1).setVisible(false);
     this.specialHint = this.txt(130, 662, 'SPECIAL', 10, '#b39ddb').setDepth(D).setVisible(false);
-    this.ultHint = this.txt(130, 634, 'ULTIMATE', 10, '#ffe082').setDepth(D).setVisible(false);
+    this.ultHint = this.txt(130, 634, 'ULTIMATE', 10, '#ffe082', { fit: 240 }).setDepth(D).setVisible(false);
     this.add.zone(336, 676, 84, 76).setInteractive().on('pointerdown', () => this.activateSpecial());
     this.earnedText = this.txt(0, 57, '', 11, '#ffe082', { stroke: '#1a0a20', strokeThickness: 3 }).setOrigin(0, 0.5).setDepth(D).setAlpha(0.9);
     // pause button
@@ -2516,7 +2948,7 @@ class GameScene extends BaseScene {
     const g = this.add.graphics();
     g.fillStyle(0x1c1220, 0.97).fillRoundedRect(10, 196, 380, 290, 14).lineStyle(3, 0xffd54f, 0.9).strokeRoundedRect(10, 196, 380, 290, 14);
     this.txt(W / 2, 226, 'CIVILIANS FREED!', 24, '#ffd54f', { stroke: '#2a0a14', strokeThickness: 5 });
-    this.txt(W / 2, 256, 'They thank you. Choose one FREE upgrade:', 13, '#fff3e0', { fontStyle: 'normal' });
+    this.txt(W / 2, 256, 'They thank you. Choose one FREE upgrade:', 13, '#fff3e0', { fontStyle: 'normal', fit: 336 });
     this.freePick = key => {
       if (key === 'range' && Stats.rangeMaxed()) { Sound.play('deny'); return; }
       Save[key]++; Save.save(); Sound.play('buy');
@@ -2531,7 +2963,7 @@ class GameScene extends BaseScene {
       g.fillStyle(0x120b18, 1).fillRoundedRect(x - w / 2, y - h / 2, w, h, 12);
       g.fillStyle(color, 1).fillRoundedRect(x - w / 2, y - h / 2, w, 36, { tl: 12, tr: 12, bl: 0, br: 0 });
       g.lineStyle(2, 0xffffff, 0.25).strokeRoundedRect(x - w / 2, y - h / 2, w, h, 12);
-      this.txt(x, y - h / 2 + 18, title, 11, '#fff', { align: 'center', lineSpacing: -2 });
+      this.txt(x, y - h / 2 + 18, title, 11, '#fff', { align: 'center', lineSpacing: -2, fit: 72 });
       this.txt(x, y - 22, 'Lv ' + Save[key], 15, '#cfc3d6');
       this.txt(x, y + 4, maxed ? 'MAX' : '▼\nLv ' + (Save[key] + 1), 18, '#ffe082', { align: 'center', lineSpacing: -4 });
       const b = this.button(x, y + 56, 76, 40, maxed ? 0x4a4250 : color, maxed ? 'MAX' : 'FREE', 15, () => this.freePick(key));
@@ -3063,7 +3495,7 @@ class GameScene extends BaseScene {
     const g = this.add.graphics();
     const top = low ? 340 : 92;
     g.fillStyle(0x1c1220, 0.96).fillRoundedRect(24, top, 352, 132, 14).lineStyle(3, 0xffd54f, 0.9).strokeRoundedRect(24, top, 352, 132, 14);
-    this.txt(W / 2, top + 48, text, 15, '#fff3e0', { align: 'center', wordWrap: { width: 330 }, lineSpacing: 4 });
+    this.txt(W / 2, top + 48, text, 15, '#fff3e0', { align: 'center', fit: 336, lineSpacing: 4 });
     this.button(W / 2, top + 102, 140, 38, 0x2e7d32, 'GOT IT', 16, () => {
       ui.forEach(o => o.destroy());
       this.paused = false; this.time.paused = false; this.tweens.resumeAll();
@@ -3088,7 +3520,7 @@ class GameScene extends BaseScene {
     this.txt(W / 2, 162, 'PAUSED', 24, '#ffd54f');
     [['Music', 'music'], ['Sound effects', 'sfx'], ['Screen shake', 'shake']].forEach(([label, key], i) => {
       const y = 222 + i * 64;
-      this.txt(56, y, label, 18).setOrigin(0, 0.5);
+      this.txt(56, y, label, 18, '#fff', { fit: 186 }).setOrigin(0, 0.5);
       this.button(296, y, 92, 44, Save[key] ? 0x2e7d32 : 0x4a4250, Save[key] ? 'ON' : 'OFF', 17, () => {
         Save[key] = !Save[key]; Save.save(); Sound.applyOptions();
         this.paused = false; this.setPaused(true);           // redraw
@@ -3349,8 +3781,8 @@ class DefenseScene extends BaseScene {
     });
     const fog = this.add.graphics().setDepth(-15);
     fog.fillGradientStyle(0x1a1030, 0x1a1030, 0x1a1030, 0x1a1030, 0.8, 0.8, 0, 0).fillRect(0, 0, W, 170);
-    this.txt(F.laneL / 2, 100, 'SUPPLIES', 11, '#bbdefb', { stroke: '#0d1642', strokeThickness: 3 }).setDepth(-14).setAlpha(0.85);
-    this.txt((W + F.laneR) / 2, 100, 'PRIZES', 11, '#ffe082', { stroke: '#3a2400', strokeThickness: 3 }).setDepth(-14).setAlpha(0.85);
+    this.txt(F.laneL / 2, 100, 'SUPPLIES', 11, '#bbdefb', { stroke: '#0d1642', strokeThickness: 3, fit: 104 }).setDepth(-14).setAlpha(0.85);
+    this.txt((W + F.laneR) / 2, 100, 'PRIZES', 11, '#ffe082', { stroke: '#3a2400', strokeThickness: 3, fit: 104 }).setDepth(-14).setAlpha(0.85);
     this.lane = this.add.graphics().setDepth(-12);            // where the archers are aiming
     this.fort = this.img(W / 2, F.wallY - 14, 'fort').setOrigin(0.5, 0).setDepth(F.wallY + 2);
     this.burst = this.add.particles(0, 0, 'dot', { speed: { min: 40, max: 150 }, lifespan: { min: 250, max: 480 }, scale: { start: S, end: 0 }, emitting: false }).setDepth(3000);
@@ -3372,9 +3804,9 @@ class DefenseScene extends BaseScene {
     this.gateText = this.txt(W / 2, 29, '', 11, '#fff', { stroke: '#000', strokeThickness: 3 }).setDepth(D + 1);
     this.waveText = this.txt(W / 2, 57, '', 13, '#fff3e0', { stroke: '#1a0a20', strokeThickness: 3 }).setDepth(D);
     this.boostText = this.txt(W / 2, 76, '', 12, '#ffab91', { stroke: '#1a0a20', strokeThickness: 3 }).setDepth(D);
-    this.specialText = this.txt(336, 676, 'SLOW', 13).setDepth(D + 1).setVisible(false);
+    this.specialText = this.txt(336, 676, 'SLOW', 13, '#fff', { fit: 62 }).setDepth(D + 1).setVisible(false);
     this.specialHint = this.txt(130, 662, 'SPECIAL', 10, '#b39ddb').setDepth(D).setVisible(false);
-    this.ultHint = this.txt(130, 634, 'ULTIMATE', 10, '#ffe082').setDepth(D).setVisible(false);
+    this.ultHint = this.txt(130, 634, 'ULTIMATE', 10, '#ffe082', { fit: 240 }).setDepth(D).setVisible(false);
     this.add.zone(336, 676, 84, 76).setInteractive().on('pointerdown', () => this.activateSpecial());
     const pg = this.add.graphics().setDepth(5100);
     pg.fillStyle(0x000000, 0.45).fillCircle(372, 58, 17).fillStyle(0xffffff, 1).fillRoundedRect(365, 50, 5, 16, 1.5).fillRoundedRect(374, 50, 5, 16, 1.5);
@@ -3461,7 +3893,7 @@ class DefenseScene extends BaseScene {
     const g0 = this.add.graphics();
     g0.fillStyle(0x1c1220, 0.94).fillRoundedRect(24, 150, 352, 208, 14).lineStyle(3, 0xffd54f, 0.9).strokeRoundedRect(24, 150, 352, 208, 14);
     this.txt(W / 2, 182, 'DEFEND THE COMPOUND', 24, '#ffd54f', { stroke: '#2a0a14', strokeThickness: 5 });
-    this.txt(W / 2, 258, 'SLIDE to aim your archers. Hold the wall!\nBroken prizes fall: slide under to CATCH.\nLEFT: shoot the blue banner to raise its\nnumber, open ? boxes, blow up barrels.\nRIGHT: prize chests behind logs.\nMIDDLE: shoot both doors to shut the gate.', 13, '#fff3e0', { align: 'center', fontStyle: 'normal', lineSpacing: 3 });
+    this.txt(W / 2, 258, 'SLIDE to aim your archers. Hold the wall!\nBroken prizes fall: slide under to CATCH.\nLEFT: shoot the blue banner to raise its\nnumber, open ? boxes, blow up barrels.\nRIGHT: prize chests behind logs.\nMIDDLE: shoot both doors to shut the gate.', 13, '#fff3e0', { align: 'center', fontStyle: 'normal', lineSpacing: 3, fit: 344 });
     const hint = this.txt(W / 2, 334, 'touch the road to start', 15, '#fff', { stroke: '#000', strokeThickness: 4 });
     this.tweens.add({ targets: hint, alpha: 0.35, duration: 600, yoyo: true, repeat: -1 });
     this.add.rectangle(W / 2, 618, W, 204, 0x0a0610, 0.75);
@@ -3478,9 +3910,9 @@ class DefenseScene extends BaseScene {
       g.fillStyle(0x1c1220, 0.96).fillRoundedRect(x - w / 2, y - h / 2, w, h, 12);
       g.fillStyle(color, 1).fillRoundedRect(x - w / 2, y - h / 2, w, 34, { tl: 12, tr: 12, bl: 0, br: 0 });
       g.lineStyle(2, 0xffffff, 0.25).strokeRoundedRect(x - w / 2, y - h / 2, w, h, 12);
-      this.txt(x, y - h / 2 + 17, title, 11, '#fff', { align: 'center', lineSpacing: -2 });
+      this.txt(x, y - h / 2 + 17, title, 11, '#fff', { align: 'center', lineSpacing: -2, fit: 86 });
       this.txt(x, y - 24, 'Lv ' + Save[key], 20);
-      this.txt(x, y - 2, stat, 10, '#cfc3d6', { fontStyle: 'normal' });
+      this.txt(x, y - 2, stat, 10, '#cfc3d6', { fontStyle: 'normal', fit: 88 });
       const b = this.button(x, y + 42, 80, 40, can ? color : 0x4a4250, maxed ? 'MAX' : coins(cost), 15, () => {
         if (maxed || Save.souls < cost) { Sound.play('deny'); return; }
         Save.souls -= cost; Save[key]++; Save.save(); Sound.play('buy');
@@ -3570,7 +4002,7 @@ class DefenseScene extends BaseScene {
       if (e.boost === 'archers' && this.archerCount() >= F.maxArchers) e.boost = 'fire';
       if (e.boost === 'repair' && this.gate >= F.gateHp) e.boost = 'sharp';
       e.name = { banner: '', mystery: '?', barrel: 'BOOM', log: '', archers: '+' + F.moreArchers + ' ARCHERS', fire: 'FIRE ARROWS', repair: 'REPAIR', sharp: 'SHARP +' + Math.round(F.sharp * 100) + '%' }[e.boost];
-      e.label = this.txt(e.x, e.y, '', kind === 'banner' ? 20 : 12, '#fff', { stroke: kind === 'banner' ? '#0d1642' : kind === 'mystery' ? '#38006b' : kind === 'barrel' ? '#2b0e08' : '#5d3a00', strokeThickness: 4, align: 'center', lineSpacing: -3 });
+      e.label = this.txt(e.x, e.y, '', kind === 'banner' ? 20 : 12, '#fff', { stroke: kind === 'banner' ? '#0d1642' : kind === 'mystery' ? '#38006b' : kind === 'barrel' ? '#2b0e08' : '#5d3a00', strokeThickness: 4, align: 'center', lineSpacing: -3, fit: 86 });
     } else if (K.big) e.label = this.txt(e.x, e.y, '', kind === 'warlord' ? 18 : 13, '#fff', { stroke: '#7f0000', strokeThickness: 4 });
     this.enemies.push(e);
     return e;
@@ -3739,7 +4171,7 @@ class DefenseScene extends BaseScene {
   dropPrize(e, x, y) {
     const box = e.kind === 'mystery';
     const obj = this.img(x, y, box ? 'mystery' : 'chest').setScale(S * 0.55).setDepth(2950);
-    const label = this.txt(x, y, box ? '?' : e.name, box ? 16 : 11, '#fff', { stroke: box ? '#38006b' : '#5d3a00', strokeThickness: 4, align: 'center' }).setDepth(2951);
+    const label = this.txt(x, y, box ? '?' : e.name, box ? 16 : 11, '#fff', { stroke: box ? '#38006b' : '#5d3a00', strokeThickness: 4, align: 'center', fit: 86 }).setDepth(2951);
     const ring = this.add.graphics().setDepth(2949);
     this.drops.push({ kind: e.kind, boost: e.boost, x, y, obj, label, ring });
     Sound.play('gateGood');
@@ -3906,7 +4338,7 @@ class DefenseScene extends BaseScene {
     this.txt(W / 2, 162, 'PAUSED', 24, '#ffd54f');
     [['Music', 'music'], ['Sound effects', 'sfx'], ['Screen shake', 'shake']].forEach(([label, key], i) => {
       const y = 222 + i * 64;
-      this.txt(56, y, label, 18).setOrigin(0, 0.5);
+      this.txt(56, y, label, 18, '#fff', { fit: 186 }).setOrigin(0, 0.5);
       this.button(296, y, 92, 44, Save[key] ? 0x2e7d32 : 0x4a4250, Save[key] ? 'ON' : 'OFF', 17, () => {
         Save[key] = !Save[key]; Save.save(); Sound.applyOptions();
         this.paused = false; this.setPaused(true);
