@@ -99,6 +99,10 @@ const CFG = {
     zombie: { speed: 38, hit: 0.22, strikeMs: 1100 },
     demon:  { speed: 55, hit: 0.42, strikeMs: 900 },
     rockOni: { speed: 44, hit: 0.30, strikeMs: 1000 },      // saga 2's common foe: a zombie's manner, a harder claw
+    // Iwagame ("rock turtle"), saga 2 from level 2, mixed in with the rock oni. A little faster; every few seconds it pulls into its
+    // shell, glows for `windMs` (an orange streak shows where it is aimed) and rolls at where the army stood. A roll that reaches a
+    // samurai knocks out `rollHit` men and stops it there.
+    iwagame: { speed: 52, hit: 0.30, strikeMs: 1000, roll: { every: [4500, 7000], windMs: 600, speed: 300, ms: 950, hit: 1 } },
   },
   // Big fights share one cycle: follow the army -> wind up (red zone on the ground) -> strike -> pause.
   //   speed          px/s sideways after the army
@@ -176,6 +180,9 @@ const LEVEL_SPECS = [
   // Saga 2, Mountain Pass. `theme` picks the scenery, `foe` the common enemy.
   { name: 'The Rock Oni', theme: 'mountain', foe: 'rockOni', demons: false, rows: 14, seg: 370, pack: [7, 3.0, 0.26], crowd: 0.15, hp: 13, charms: [[5, 10], 14, 4], walls: [[4], 120, 0],
     bosses: [{ type: 'rock', after: 'end', hp: 6000 }] },
+  // Saga 2 level 2: `mix` brings in a second common foe [kind, share, health x]. Its boss is still to be designed, so the level just ends.
+  { name: 'The Iwagame', theme: 'mountain', foe: 'rockOni', mix: ['iwagame', 0.25, 1.5], demons: false, rows: 16, seg: 370, pack: [7.5, 3.1, 0.26], crowd: 0.15, hp: 14,
+    charms: [[5, 11], 15, 4], walls: [[6], 130, 0], bosses: [] },
 ];
 // Equipment, chosen on a level's start screen: one weapon, one armor, one necklace. `boss: true` items are won by beating the saga boss.
 const GEAR = {
@@ -202,7 +209,7 @@ const GOOD_GATES = ['+3', '+3', 'x2', '+4', '+5', '+6', 'x2', '+8', '+10', '+12'
 // Turns a spec into positions measured in distance along the path (px).
 function layoutLevel(spec, index) {
   const L = { name: spec.name, demons: spec.demons, charms: spec.charms || [[], 0, 0], walls: spec.walls || [[], 0, 0], gates: [], packs: [], spikes: [], bosses: [] };
-  L.theme = spec.theme || ''; L.foe = spec.foe || 'zombie';
+  L.theme = spec.theme || ''; L.foe = spec.foe || 'zombie'; L.mix = spec.mix || null;
   L.storm = !!spec.storm;                                    // dark sky, broken ground and lightning waves
   L.pace = spec.pace || 1 + CFG.levelPace * (index % (SAGA_LEVELS + 1));                 // level 1, 2, 3 of each saga
   // Weapon rows (see CFG.weapon): about a third and two thirds of the way in, never in the saga boss stage,
@@ -405,6 +412,7 @@ const Sound = {
     warn: (S) => S.tone({ type: 'square', f: 220, to: 440, dur: 0.3, vol: 0.14 }),
     warnPower: (S) => S.tone({ type: 'sawtooth', f: 130, to: 620, dur: 0.7, vol: 0.18, attack: 0.3 }),
     slam: (S) => { S.tone({ f: 130, to: 32, dur: 0.45, vol: 0.9 }); S.noise({ type: 'lowpass', f: 700, to: 120, dur: 0.35, vol: 0.5 }); },
+    roll: (S) => { S.noise({ type: 'lowpass', f: 420, to: 140, dur: 0.6, vol: 0.4 }); S.tone({ f: 70, to: 45, dur: 0.5, vol: 0.35 }); },      // an Iwagame rolling
     thunder: (S, r) => { S.noise({ type: 'lowpass', f: 320 * r, to: 60, dur: 1.3, vol: 0.45, attack: 0.03 }); S.tone({ f: 70, to: 32, dur: 1.1, vol: 0.4 }); },
     dodge: (S, r, t) => { S.tone({ type: 'triangle', f: 988, dur: 0.07, vol: 0.25 }); S.tone({ type: 'triangle', f: 1319, dur: 0.12, vol: 0.25, at: t + 0.06 }); },
     win: (S, r, t) => [294, 349, 440, 587, 698, 880].forEach((f, i) => S.tone({ type: 'triangle', f, dur: 0.5, vol: 0.35, at: t + i * 0.11 })),
@@ -622,6 +630,50 @@ const Art = {
     c.shadowColor = '#fff9c4'; c.shadowBlur = 4; Art.ell(c, 13.3, 10.3, 1.7, 1.2, '#fffde7'); Art.ell(c, 18.7, 10.3, 1.7, 1.2, '#fffde7'); c.shadowBlur = 0;
     Art.rr(c, 12.2, 12.4, 7.6, 2.8, 1); c.fillStyle = '#1b1d20'; c.fill();
     for (let x = 12.6; x < 19; x += 1.9) Art.tri(c, [x, 12.4], [x + 1.6, 12.4], [x + 0.8, 14.2], '#e6eaee');
+  },
+  // Saga 2 level 2's second foe, the Iwagame: hunched brown rock under a domed shell of stone plates, moss on head and shell,
+  // orange glowing cracks and eyes, a torn loincloth, long dark claws. Seen from the front, shell humped up behind the head.
+  iwagame(c) {
+    Art.shadow(c, 18, 38, 12);
+    const ol = '#1f120c', dk = '#3e2518', st = '#5d3a28', lt = '#80553c', fire = '#ff8f00', moss = '#7cb342', mossDk = '#4e7a22';
+    const crack = pts => { c.strokeStyle = fire; c.lineWidth = 0.6; c.beginPath(); pts.forEach(([a, b, x, y]) => { c.moveTo(a, b); c.lineTo(x, y); }); c.stroke(); };
+    // the shell, humped up behind
+    Art.ell(c, 18, 13, 16, 12, ol); Art.ell(c, 18, 12.6, 14.6, 10.8, Art.grad(c, 0, 2, 0, 24, [[0, lt], [1, dk]]));
+    c.strokeStyle = ol; c.lineWidth = 0.8; c.beginPath();
+    [[8, 8, 13, 5], [13, 5, 19, 4], [19, 4, 25, 6], [25, 6, 29, 10], [8, 8, 6, 15], [13, 5, 13, 11], [19, 4, 19, 10], [25, 6, 26, 12], [29, 10, 30, 16]].forEach(([a, b, x, y]) => { c.moveTo(a, b); c.lineTo(x, y); });
+    c.stroke();
+    crack([[10, 10, 12, 13], [24, 9, 27, 12], [16, 6, 17, 9]]);
+    Art.ell(c, 8, 8, 4, 2.2, moss); Art.ell(c, 27, 7, 3.4, 2, moss); Art.ell(c, 8, 7.4, 2.4, 1.2, mossDk);
+    // legs and claws
+    [[11, 33], [25, 33]].forEach(([x, y]) => { Art.ell(c, x, y, 4.6, 4.2, ol); Art.ell(c, x, y - 0.4, 3.6, 3.2, st); [-2.4, 0, 2.4].forEach(dx => Art.tri(c, [x + dx - 0.8, y + 2.6], [x + dx + 0.8, y + 2.6], [x + dx, y + 5.2], '#2b211c')); });
+    // body
+    Art.ell(c, 18, 25, 10, 8, ol); Art.ell(c, 18, 24.6, 8.8, 7, Art.grad(c, 0, 18, 0, 32, [[0, lt], [1, st]]));
+    crack([[14, 21, 16, 24], [16, 24, 15, 27], [21, 22, 22, 25]]);
+    c.fillStyle = '#6d5638'; c.beginPath(); c.moveTo(11, 27); c.lineTo(25, 27); c.lineTo(24, 32); c.lineTo(21.5, 30); c.lineTo(19.5, 33); c.lineTo(17, 30.5); c.lineTo(14.5, 33); c.lineTo(12, 30.5); c.closePath(); c.fill();
+    // arms hanging forward with long claws
+    [[5.5, 21], [30.5, 21]].forEach(([x, y]) => {
+      Art.ell(c, x, y, 4.2, 6, ol); Art.ell(c, x, y - 0.3, 3.2, 5, st);
+      [-2, 0, 2].forEach(dx => Art.tri(c, [x + dx - 0.9, y + 4.6], [x + dx + 0.9, y + 4.6], [x + dx * 1.4, y + 9], '#3a2e27'));
+    });
+    // head, low under the shell's front rim
+    Art.ell(c, 18, 16, 7.4, 6, ol); Art.ell(c, 18, 15.8, 6.4, 5, Art.grad(c, 0, 11, 0, 21, [[0, lt], [1, st]]));
+    Art.ell(c, 18, 11.6, 4.6, 1.8, moss); Art.ell(c, 17, 11.2, 2.4, 1, '#9ccc65');
+    c.strokeStyle = ol; c.lineWidth = 1.2; c.beginPath(); c.moveTo(12.6, 14.2); c.lineTo(16.6, 15.6); c.moveTo(23.4, 14.2); c.lineTo(19.4, 15.6); c.stroke();     // scowl
+    c.shadowColor = '#ff6d00'; c.shadowBlur = 5; Art.ell(c, 15, 16.4, 1.7, 1.3, '#ffb300'); Art.ell(c, 21, 16.4, 1.7, 1.3, '#ffb300'); c.shadowBlur = 0;
+    Art.ell(c, 15, 16.4, 0.7, 0.6, '#fff3e0'); Art.ell(c, 21, 16.4, 0.7, 0.6, '#fff3e0');
+    c.strokeStyle = ol; c.lineWidth = 0.9; c.beginPath(); c.moveTo(15.6, 19.6); c.quadraticCurveTo(18, 18.6, 20.4, 19.6); c.stroke();                            // frown
+  },
+  // The same Iwagame pulled into its shell to roll: a ball of stone plates, glowing cracks, moss, claw tips peeking out.
+  iwagameBall(c) {
+    Art.shadow(c, 16, 30, 11);
+    const ol = '#1f120c', dk = '#3e2518', lt = '#80553c';
+    Art.ell(c, 16, 16, 14, 13, ol); Art.ell(c, 16, 15.6, 12.6, 11.6, Art.grad(c, 4, 4, 28, 28, [[0, lt], [1, dk]]));
+    c.strokeStyle = ol; c.lineWidth = 0.9; c.beginPath();
+    [[6, 10, 26, 10], [5, 18, 27, 18], [11, 5, 10, 26], [21, 5, 22, 26]].forEach(([a, b, x, y]) => { c.moveTo(a, b); c.lineTo(x, y); }); c.stroke();
+    c.shadowColor = '#ff6d00'; c.shadowBlur = 4; c.strokeStyle = '#ff9800'; c.lineWidth = 0.9; c.beginPath();
+    [[13, 12, 16, 15], [16, 15, 15, 18], [23, 13, 25, 16], [8, 20, 11, 22]].forEach(([a, b, x, y]) => { c.moveTo(a, b); c.lineTo(x, y); }); c.stroke(); c.shadowBlur = 0;
+    Art.ell(c, 12, 6, 4.2, 2, '#7cb342'); Art.ell(c, 23, 22, 3, 1.6, '#7cb342');
+    [[4, 22], [28, 22], [16, 28.5]].forEach(([x, y]) => Art.tri(c, [x - 1, y - 1], [x + 1, y - 1], [x, y + 2], '#3a2e27'));
   },
   // Saga 2's first big fight: a hulking stone oni with heavy horns, tusks, a torn hide and a crude stone club.
   rockBoss(c) {
@@ -1172,7 +1224,7 @@ const Art = {
     const m = (k, w, h) => Art.make(scene, k, w, h, Art[k]);
     m('samurai', 36, 50); m('katana', 12, 36); m('demon', 32, 40); m('zombie', 32, 40); m('boss', 130, 126); m('giant', 110, 130); m('thunder', 130, 134);
     Art.make(scene, 'tenguBoss', 130, 120, Art.tengu); m('charm', 40, 44); m('glow', 64, 64);
-    m('rockOni', 32, 40); m('rockBoss', 130, 130); m('rockGround', 64, 64); m('stonePath', 280, 128); m('cliff', 72, 80); m('boulder', 30, 24);
+    m('rockOni', 32, 40); m('iwagame', 36, 40); m('iwagameBall', 32, 32); m('rockBoss', 130, 130); m('rockGround', 64, 64); m('stonePath', 280, 128); m('cliff', 72, 80); m('boulder', 30, 24);
     m('spike', 36, 28); m('wall', 132, 60); m('log', 132, 60); m('fence', 16, 36); m('civilian', 20, 28); m('cage', 96, 70); m('rock', 12, 12); m('slash', 48, 48); m('soul', 16, 16); m('dot', 8, 8); m('petal', 8, 6);
     m('archer', 36, 50); m('arrow', 8, 22); m('crate', 36, 32); m('box', 84, 34); m('recruit', 84, 48); m('mystery', 84, 34); m('barrel', 48, 46); m('doorHalf', 86, 40); m('chest', 84, 42); m('yard', 64, 64); m('divider', 10, 64); m('fort', W, 174); m('oni', 48, 54); m('warlord', 130, 150);
     m('grass', 64, 64); m('path', 280, 128); m('lantern', 24, 42); m('deadTree', 60, 58); m('rubble', 30, 24); m('crack', 60, 40); m('tree', 60, 58); m('menuBg', W, H);
@@ -1809,9 +1861,9 @@ class GameScene extends BaseScene {
     if (this.L.splitAt) this.buildSplit();
     this.L.packs.forEach(pk => {
       for (let i = 0; i < pk.n; i++) {
-        const demon = this.L.demons && Math.random() < CFG.enemy.demonShare;
+        const [kind, mul] = this.pickFoe();
         const x = pk.split ? W / 2 + this.split.foeSide * (22 + Math.random() * 100) : 85 + Math.random() * 230;       // the split's pack keeps to its side
-        const e = this.addEnemy(demon ? 'demon' : this.L.foe, x, pk.d + i * pk.gap, Math.round(pk.hp * (demon ? CFG.enemy.demonHp : 1)));
+        const e = this.addEnemy(kind, x, pk.d + i * pk.gap, Math.round(pk.hp * mul));
         if (pk.split) e.splitSide = this.split.foeSide;
       }
     });
@@ -1885,6 +1937,12 @@ class GameScene extends BaseScene {
     return { x, op, good, obj: this.add.container(x, -200, [g, t]) };
   }
 
+  // A common enemy for this level and its health multiplier: a demon (saga 1), the level's mixed-in foe, or its usual one.
+  pickFoe() {
+    if (this.L.demons && Math.random() < CFG.enemy.demonShare) return ['demon', CFG.enemy.demonHp];
+    if (this.L.mix && Math.random() < this.L.mix[1]) return [this.L.mix[0], this.L.mix[2]];
+    return [this.L.foe, 1];
+  }
   addEnemy(kind, x, d, hp) {
     const e = { kind, x, d, hp, maxHp: hp, r: 0, strike: 400, seed: Math.random() * 6, obj: this.img(x, -200, kind) };
     this.enemies.push(e);
@@ -2125,7 +2183,7 @@ class GameScene extends BaseScene {
       this.ultCharge = Math.min(this.ultMax, was + (e.prof ? this.ultMax / 5 : 1));
       if (was < this.ultMax && this.ultCharge >= this.ultMax) { Sound.play('ultReady'); this.float(130, 628, 'ULTIMATE READY!', '#ffe082', 15); }
     }
-    const tint = { demon: 0xab47bc, zombie: 0x9ccc65, giant: 0x9ccc65, thunder: 0xb388ff, charm: 0xffd54f, wall: 0x9aa1a9, rockOni: 0x9aa1a9, rockBoss: 0x9aa1a9, tenguBoss: 0xef5350, boss: 0xab47bc }[e.kind];
+    const tint = { demon: 0xab47bc, zombie: 0x9ccc65, giant: 0x9ccc65, thunder: 0xb388ff, charm: 0xffd54f, wall: 0x9aa1a9, rockOni: 0x9aa1a9, iwagame: 0x8d6e63, rockBoss: 0x9aa1a9, tenguBoss: 0xef5350, boss: 0xab47bc }[e.kind];
     this.burst.setParticleTint(e.mat === 'log' ? 0x8d6e63 : tint);
     this.burst.explode(e.r ? 40 : 10, e.x, e.y);
     const orb = this.img(e.x, e.y, 'soul').setDepth(5001).setScale(S * (e.r ? 2 : 1.2));
@@ -2156,6 +2214,8 @@ class GameScene extends BaseScene {
     const E = CFG.enemy;
     const pack = this.enemies.filter(e => !e.r && !e.gone && e.y > -20);
     const backRow = this.soldiers.reduce((m, s) => Math.max(m, s.y), 0);
+    if (!this.rollG) this.rollG = this.add.graphics().setDepth(-9);
+    this.rollG.clear();
     pack.forEach(e => {
       const k = E[e.kind], run = k.speed * this.L.pace + (this.fight ? E.fightRush : 0);
       // The split path's pack keeps to its side of the fence, and runs straight on if the army took the other side.
@@ -2166,6 +2226,7 @@ class GameScene extends BaseScene {
       let near = null, L = Infinity;
       this.soldiers.forEach(s => { const d = Math.hypot(s.x - e.x, s.y - e.y); if (d < L) { L = d; near = s; } });
       if (!near) { e.hold = false; return; }
+      if (k.roll && this.shellRoll(e, k.roll, wdt, backRow)) return;
       e.hold = L <= E.reach;
       if (!e.hold) {
         const v = run * wdt / L;
@@ -2180,7 +2241,7 @@ class GameScene extends BaseScene {
       if (e.strike > 0) return;
       e.strike = k.strikeMs;
       Sound.play('claw');
-      this.enemySlash(near.x, near.y, 0.55, e.kind === 'demon' ? 0xea80fc : e.kind === 'rockOni' ? 0xcfd8dc : 0xc5e1a5);
+      this.enemySlash(near.x, near.y, 0.55, e.kind === 'demon' ? 0xea80fc : e.kind === 'rockOni' ? 0xcfd8dc : e.kind === 'iwagame' ? 0xffab40 : 0xc5e1a5);
       near.img.setTint(0xff8a80);
       this.time.delayedCall(90, () => { if (near.img.active) near.img.setTint(this.armorTint); });
       this.wound += k.hit;
@@ -2193,6 +2254,51 @@ class GameScene extends BaseScene {
       const push = (13 - d) / 2 / d;
       p.x += dx * push; q.x -= dx * push; p.d -= dy * push; q.d += dy * push;
     }
+  }
+
+  // The Iwagame's roll: count down, wind up in its shell (aim shown), roll; true while it is busy with that.
+  shellRoll(e, R, wdt, backRow) {
+    const ms = wdt * 1000;
+    if (e.rolling) {
+      e.rolling -= ms; e.spin = (e.spin || 0) + wdt * 14;
+      e.x = clamp(e.x + e.rvx * wdt, CFG.pathLeft + 12, CFG.pathRight - 12); e.d -= e.rvy * wdt;
+      e.obj.setRotation(e.spin);
+      if (Math.random() < 0.5) { this.burst.setParticleTint(0x8d6e63); this.burst.explode(1, e.x, e.y + 8); }
+      const hit = this.soldiers.find(s => Math.hypot(s.x - e.x, s.y - e.y) < 15);
+      if (hit) {
+        Sound.play('slam'); this.shake(160, 0.008);
+        hit.img.setTint(0xff8a80); this.time.delayedCall(90, () => { if (hit.img.active) hit.img.setTint(this.armorTint); });
+        this.lose(R.hit, hit);
+      }
+      if (hit || e.rolling <= 0 || e.y > backRow + 12) this.endRoll(e, R);
+      return true;
+    }
+    if (e.wind) {
+      e.wind -= ms;
+      const f = 1 - e.wind / R.windMs, dx = e.tx - e.x, dy = e.ty - e.y, len = Math.hypot(dx, dy) || 1;
+      e.obj.setRotation(Math.sin(this.time.now * 0.06) * 0.25);
+      e.obj.setTint(Phaser.Display.Color.GetColor(255, 255 - 110 * f, 255 - 200 * f));
+      const reach = Math.min(len + 40, R.speed * R.ms / 1000), ex = e.x + dx / len * reach, ey = e.y + dy / len * reach;
+      this.rollG.lineStyle(22, 0xff6d00, 0.12 + 0.2 * f).lineBetween(e.x, e.y, ex, ey).lineStyle(3, 0xffab40, 0.5 + 0.4 * f).lineBetween(e.x, e.y, ex, ey);
+      if (e.wind <= 0) {
+        e.wind = 0; e.rolling = R.ms; e.obj.clearTint();
+        e.rvx = dx / len * R.speed; e.rvy = dy / len * R.speed;
+        Sound.play('roll');
+      }
+      return true;
+    }
+    if (e.rollT === undefined) e.rollT = R.every[0] + Math.random() * (R.every[1] - R.every[0]);
+    if (e.hold || e.splitSide) return false;
+    e.rollT -= ms;
+    if (e.rollT > 0 || e.y < 40 || e.y > backRow - 70) return false;
+    e.wind = R.windMs; e.tx = this.armyX; e.ty = this.formY;       // aimed at where the army is now
+    e.obj.setTexture('iwagameBall');
+    return true;
+  }
+  endRoll(e, R) {
+    e.rolling = 0; e.rollT = R.every[0] + Math.random() * (R.every[1] - R.every[0]);
+    e.strike = CFG.enemy[e.kind].strikeMs;
+    if (e.obj.active) e.obj.setTexture(e.kind).setRotation(0);
   }
 
   // Weapon rows: decided as the row nears (the Range card must be high enough by then); the red gate is swapped for a
@@ -2408,8 +2514,8 @@ class GameScene extends BaseScene {
       b.trickleT -= wdt * 1000;
       if (b.trickleT <= 0) {
         b.trickleT = B.trickleMs;
-        const demon = this.L.demons && Math.random() < CFG.enemy.demonShare;
-        this.addEnemy(demon ? 'demon' : this.L.foe, 85 + Math.random() * 230, this.dist + CFG.armyY + 10, Math.round(b.trickleHp * (demon ? CFG.enemy.demonHp : 1)));
+        const [kind, mul] = this.pickFoe();
+        this.addEnemy(kind, 85 + Math.random() * 230, this.dist + CFG.armyY + 10, Math.round(b.trickleHp * mul));
       }
     }
     if (B.phase2 && !b.phase2 && !b.powering && b.hp <= b.maxHp * B.phase2) {          // second phase: he powers up first
