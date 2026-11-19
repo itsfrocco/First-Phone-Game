@@ -220,7 +220,9 @@ players to progress fast. At 1.5 the bot at level 3 with speed/damage 2 wins or 
   game's style. Save every picture they send into `art-reference/` (named `sagaN-<name>`), commit it
   with the work, and tell them it is saved. Pictures from earlier sessions can be recovered with
   `list_events` (kinds `user`) on that session: user-sent images are base64 blocks outside tool results.
-  The game never loads these files. Saved so far: Saga 2's Iwagame, Koke Oni and Genbu.
+  The game never loads these files. Saved so far: Saga 1's common demon (purple), goblin (small green,
+  horned), Takemikazuchi (saga boss); Saga 2's common rock oni (skinny grey), Rock Oni mini boss (big grey
+  with club, stage 5's boss), Iwagame, Koke Oni and Genbu.
 
 ## Plan: App Store release with in-app purchases
 
