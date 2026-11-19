@@ -41,6 +41,18 @@ Also say one visible thing that tells them they have the new version.
 | `Art` | Every texture, drawn with Canvas 2D at device resolution. The only image file is `menu.jpg`, loaded in `BootScene`; its PLAY and SETTINGS buttons are painted in, with invisible touch areas over them in `MenuScene`. `Art.menuBg` and plain buttons are the fallback if it does not load (always the case from `file://`) |
 | Scenes | `MenuScene`, `SagaScene`, `SettingsScene`, `TutorialScene`, `GameScene`, `DefenseScene` (the stronghold) |
 
+Languages (`LANGS`, `I18N`, `Save.lang` / `samurai_lang`): English, Spanish, French, Italian, Russian, chosen in Settings
+(Language row opens a list, `pickLanguage`). With no choice saved the game follows the phone's language (`I18N.detect`),
+English if it is none of these. The code stays in English: Phaser's `Text.setText` is wrapped so every string goes through
+`I18N.tr` on its way to the screen. `I18N.T` maps each English string to [es, fr, it, ru]; `{0}` marks a number or name
+(translated too if it has an entry), capitals match a lower-case entry, and lines, ' · ' parts and a trailing number are
+translated piece by piece. ANY NEW TEXT NEEDS AN ENTRY in `I18N.T` (all four languages) or it shows in English; check with
+a run that logs strings `I18N.tr` leaves unchanged. Japanese names (Takemikazuchi, Genbu, Koke Oni, Iwagame, Tengu,
+Futsu-no-mitama) have no entry on purpose (owner); "SAMURAI RUNNER" and the painted PLAY/SETTINGS on `menu.jpg` stay English.
+`txt(..., { fit })` shrinks a long translation to a width (default the screen, buttons their own width); tutorial pages
+and tips break lines where the text says and shrink rather than wrap. The translations are ours: suggest a native check
+before the App Store release.
+
 Tutorial: `TutorialScene.PAGES` are ten picture pages (steer, gates, fight, red/orange circles, safe lanes, SLOW,
 the ultimate, lucky charm, upgrade cards, gear and store) with SKIP on every page. Tapping level 1 opens them while
 `Save.tutorial` (`samurai_tutorial`) is false; finishing or skipping sets it and starts level 1 with `tips: true`,
@@ -217,7 +229,12 @@ players to progress fast. At 1.5 the bot at level 3 with speed/damage 2 wins or 
 - They play on a phone and are not a programmer. Explain changes in plain words, no code.
 - For anything beyond a small tweak they like the request read back before building.
 - Enemy and boss ideas usually come with a reference picture: draw an original version in the
-  game's style.
+  game's style. Save every picture they send into `art-reference/` (named `sagaN-<name>`), commit it
+  with the work, and tell them it is saved. Pictures from earlier sessions can be recovered with
+  `list_events` (kinds `user`) on that session: user-sent images are base64 blocks outside tool results.
+  The game never loads these files. Saved so far: Saga 1's common demon (purple), goblin (small green,
+  horned), fat demon (boss), Takemikazuchi (saga boss); Saga 2's common rock oni (skinny grey), Rock Oni mini boss (big grey
+  with club, stage 5's boss), Iwagame, Koke Oni and Genbu.
 
 ## Plan: App Store release with in-app purchases
 
