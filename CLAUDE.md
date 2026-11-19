@@ -18,9 +18,9 @@ Only open or merge a pull request yourself if they ask for it in that message.
 Always resend the game link with a fresh cache-busting number on the end, one higher than
 the last one used, so their phone downloads the new copy:
 
-    https://itsfrocco.github.io/First-Phone-Game/samurai-runner.html?v=36
+    https://itsfrocco.github.io/First-Phone-Game/samurai-runner.html?v=39
 
-Last number sent: `?v=35`. Update this line each time a new link is sent.
+Last number sent: `?v=38`. Update this line each time a new link is sent.
 
 Before sending the link, check that the "pages build and deployment" run for the merge commit has
 finished (GitHub MCP `actions_list`); a link opened earlier caches the old game for about ten minutes.
@@ -185,6 +185,27 @@ levels 2 and 3 shortened to 12 and 16 rows, Takemikazuchi 3500 health, the level
 (`comboWindMs` 600), the fat demon 10% slower in movement and attacks, storm waves every 4.6-5.8s to make up for
 the slower run. The saga boss stage is swingy for the bot (it arrives with 1-57 men); arriving healthy it wins at 5-6.
 Saga 2 level 1 (stage 5) is tuned for about 5: the dodging bot wins from 3 up, the bot that never dodges loses at 5.
+Saga 2 level 2 (stage 6, "The Iwagame", 15 rows): a spec's `mix` (`['iwagame', 0.25, 1.5]`, `pickFoe`) mixes a second
+common foe into the packs, a quarter of them, with 1.5 times the health. The Iwagame ("rock turtle"; drawn from the owner's picture of a
+mossy rock turtle brute: `Art.iwagame`, `Art.iwagameBall`; the owner was happy for it not to be called an oni) walks a little faster than
+the rock oni and every 4.5-7s rolls (`CFG.enemy.iwagame.roll`, `shellRoll`): it tucks into its shell, glows orange for 0.6s with a streak
+showing its aim, then rolls fast at where the army stood; a roll that reaches a samurai takes one man and stops there. Two men a roll every
+3-5s wiped small early armies, so it was eased. The bot does not dodge rolls.
+Its boss, the Koke Oni ("moss oni", `CFG.bosses.koke`, `Art.kokeBoss`, from the owner's picture of a mossy stone oni with a club; owner:
+"pretty cool, nothing too crazy", the fancy moves are saved for saga 2 level 3's boss): two-swing club combos, the leaping ground-pound,
+and Rockslide (`zonesFor('rockslide')`: boulders down every lane but one), with Iwagame and rock oni trickling in. 6200 health, no second
+phase. With him in, the level was cut to 15 rows: the 16th row's pack (over 100) arrived with him and wiped the army. As tuned: 5 loses,
+6 wins about two times in three, 7 and up win.
+Saga 2 level 3 (stage 7, "Genbu", 15 rows): a third of the pack are Iwagame, the Koke Oni comes back as a mid fight (3600 health, after
+row 7), and Genbu ends it (`CFG.bosses.genbu`, `Art.genbu`, `Art.genbuBall`; from the owner's picture of a four-armed rock turtle with lava
+cracks; Genbu is the black tortoise of Japanese myth, the owner agreed). 9000 health. Front-claw combos (two, three in phase 2); Boulder
+Barrage (`startBarrage`, `updateBarrage`): the back arms throw 4 rocks (5 in phase 2), each falling on a shadow aimed at the army when
+thrown, drawn above the soldiers (`rockG`) or they hide it; Shell Roll (`bossRoll`): tucks in with an orange lane showing, rolls down
+through the army and back. Phase 2 at half health ("THE MOUNTAIN BURNS", `lava: true`: embers instead of lightning in `powerUp` and
+`updateLightning`): faster, and each rock leaves a lava pool for 1.8s (`hazards` with `lava`, `every`, `share`). The owner was promised
+Iwagame trickling in, but during a fight the samurai always strike the boss, so helpers chip away unopposed and made him unwinnable;
+he fights alone (the field clears when the fight starts). The bot dodges the barrage and roll. As tuned: 6 loses (once won), 7 wins,
+the bot that never dodges loses at 7. The sagas screen now says "level n of 3" and "levels cleared · saga boss coming soon" for saga 2.
 Range is an extra, optional card: spending coins on it helps about as much as the same coins on speed and
 damage (level 3: speed/damage 2 loses, adding Range 5 wins). Range grows 1m (9px) a level and has its own cheaper
 cost curve. Ranged swings take `CFG.rangedSwing` (1.5) times a normal swing: the owner does not want early
@@ -237,7 +258,7 @@ Still waiting on the owner: what the shop should sell.
 - The Store (button on the level start screen, `showStore`) is an empty "coming soon" panel. What it sells is undecided.
 
 - A necklace for the empty equipment slot (name, effect and how it is earned are undecided).
-- Saga 2 (Mountain Pass) has its first level; levels 2 and 3 and its saga boss are not designed yet. Sagas 3 to 5
+- Saga 2 (Mountain Pass) has all three levels (bosses: Rock Oni, Koke Oni, Genbu); its saga boss and stronghold are not designed yet. Sagas 3 to 5
   are shown locked. Each saga should have three levels and a saga boss, with the same 10% per-level speed step.
   Common enemies should keep scaling up from where the previous saga ended.
 - Oni art (`Art.oni`) is kept unused for a later boss.

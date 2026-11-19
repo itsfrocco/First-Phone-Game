@@ -99,6 +99,10 @@ const CFG = {
     zombie: { speed: 38, hit: 0.22, strikeMs: 1100 },
     demon:  { speed: 55, hit: 0.42, strikeMs: 900 },
     rockOni: { speed: 44, hit: 0.30, strikeMs: 1000 },      // saga 2's common foe: a zombie's manner, a harder claw
+    // Iwagame ("rock turtle"), saga 2 from level 2, mixed in with the rock oni. A little faster; every few seconds it pulls into its
+    // shell, glows for `windMs` (an orange streak shows where it is aimed) and rolls at where the army stood. A roll that reaches a
+    // samurai knocks out `rollHit` men and stops it there.
+    iwagame: { speed: 52, hit: 0.30, strikeMs: 1000, roll: { every: [4500, 7000], windMs: 600, speed: 300, ms: 950, hit: 1 } },
   },
   // Big fights share one cycle: follow the army -> wind up (red zone on the ground) -> strike -> pause.
   //   speed          px/s sideways after the army
@@ -129,6 +133,22 @@ const CFG = {
     // Saga 2, level 1. Slow and heavy: long wind-ups that are easy to read, but a club that takes a big bite, and a wider ground-pound.
     rock: { key: 'rockBoss', name: 'ROCK ONI', slain: 'ROCK ONI SLAIN', r: 50, souls: 60, speed: 46, chaseMs: 1300, windMs: 950, recoverMs: 600,
       reach: 90, cleave: 5, cleaveShare: 0.12, powerChance: 0.3, powerWindMs: 1300, powerReach: 120, powerMult: 2, powerStyle: 'jump' },
+    // Saga 2, level 2 (owner: cool but not too complex; the saga 2 level 3 boss gets the fancy moves). Two-swing club combos,
+    // a leaping ground-pound, and Rockslide: boulders roll down every lane but one. Iwagame keep rolling in while he lives.
+    koke: { key: 'kokeBoss', name: 'KOKE ONI', slain: 'KOKE ONI SLAIN', r: 52, souls: 70, speed: 50, chaseMs: 1200, windMs: 900, recoverMs: 560,
+      reach: 90, cleave: 4, cleaveShare: 0.08, combo: 2, comboWindMs: 700, comboStep: 50, powerChance: 0.3, powers: [['jump', 'rockslide']],
+      powerWind: { jump: 1250, rockslide: 1300 }, powerReach: 115, powerMult: 2, trickle: true, trickleMs: 4000 },
+    // Saga 2, level 3: Genbu, the stone tortoise (owner's picture: a four-armed rock turtle with lava cracks; "make him interesting").
+    // Front claws swipe in combos. Boulder Barrage: the arms on his back hurl rocks that fall one after another on shadows chasing the
+    // army. Shell Roll: he tucks in (an orange lane shows his path) and rolls down through the army and back. At half health his lava
+    // blazes (`lava`): faster, three-swing combos, bigger barrages, and each rock leaves a lava pool for a moment.
+    genbu: { key: 'genbu', name: 'GENBU', slain: 'GENBU FALLS', r: 56, souls: 120, speed: 52, chaseMs: 1150, windMs: 850, recoverMs: 520,
+      reach: 92, cleave: 5, cleaveShare: 0.09, combo: 2, phase2Combo: 3, comboWindMs: 620, comboStep: 50,
+      powerChance: 0.4, powers: [['barrage', 'shellroll'], ['barrage', 'shellroll', 'barrage']], powerWind: { barrage: 900, shellroll: 1000 },
+      powerReach: 70, powerMult: 2,
+      phase2: 0.5, phase2Haste: 1.25, phase2Name: 'THE MOUNTAIN BURNS', powerUpMs: 2200, powerUpHeal: 0.1, lava: true,
+      barrage: { n: 4, n2: 5, gap: 420, fall: 800, r: 30, hit: 2, share: 0.05, pool: 1800, poolTick: 500, poolShare: 0.03 },
+      roll: { ms: 1300, depth: 420, half: 55 } },
     tengu: { key: 'tenguBoss', name: 'TENGU', slain: 'TENGU SLAIN', r: 46, souls: 35, speed: 56, chaseMs: 1250, windMs: 820, recoverMs: 480,
       reach: 85, cleave: 3, cleaveShare: 0.08, powerChance: 0.5, powers: [['fly', 'feathers']], powerWind: { fly: 1250, feathers: 1200 },
       powerReach: 100, powerMult: 2 },
@@ -176,6 +196,12 @@ const LEVEL_SPECS = [
   // Saga 2, Mountain Pass. `theme` picks the scenery, `foe` the common enemy.
   { name: 'The Rock Oni', theme: 'mountain', foe: 'rockOni', demons: false, rows: 14, seg: 370, pack: [7, 3.0, 0.26], crowd: 0.15, hp: 13, charms: [[5, 10], 14, 4], walls: [[4], 120, 0],
     bosses: [{ type: 'rock', after: 'end', hp: 6000 }] },
+  // Saga 2 level 2: `mix` brings in a second common foe [kind, share, health x]. Its boss is still to be designed, so the level just ends.
+  { name: 'The Iwagame', theme: 'mountain', foe: 'rockOni', mix: ['iwagame', 0.25, 1.5], demons: false, rows: 15, seg: 370, pack: [7.5, 3.1, 0.26], crowd: 0.15, hp: 14,
+    charms: [[5, 11], 15, 4], walls: [[6], 130, 0], bosses: [{ type: 'koke', after: 'end', hp: 6200 }] },
+  // Saga 2 level 3: more Iwagame, the Koke Oni again half way, and Genbu at the end.
+  { name: 'Genbu', theme: 'mountain', foe: 'rockOni', mix: ['iwagame', 0.33, 1.5], demons: false, rows: 15, seg: 370, pack: [8, 3.2, 0.26], crowd: 0.15, hp: 16,
+    charms: [[5, 12], 16, 4], walls: [[10], 150, 0], bosses: [{ type: 'koke', after: 7, hp: 3600 }, { type: 'genbu', after: 'end', hp: 9000 }] },
 ];
 // Equipment, chosen on a level's start screen: one weapon, one armor, one necklace. `boss: true` items are won by beating the saga boss.
 const GEAR = {
@@ -202,7 +228,7 @@ const GOOD_GATES = ['+3', '+3', 'x2', '+4', '+5', '+6', 'x2', '+8', '+10', '+12'
 // Turns a spec into positions measured in distance along the path (px).
 function layoutLevel(spec, index) {
   const L = { name: spec.name, demons: spec.demons, charms: spec.charms || [[], 0, 0], walls: spec.walls || [[], 0, 0], gates: [], packs: [], spikes: [], bosses: [] };
-  L.theme = spec.theme || ''; L.foe = spec.foe || 'zombie';
+  L.theme = spec.theme || ''; L.foe = spec.foe || 'zombie'; L.mix = spec.mix || null;
   L.storm = !!spec.storm;                                    // dark sky, broken ground and lightning waves
   L.pace = spec.pace || 1 + CFG.levelPace * (index % (SAGA_LEVELS + 1));                 // level 1, 2, 3 of each saga
   // Weapon rows (see CFG.weapon): about a third and two thirds of the way in, never in the saga boss stage,
@@ -405,6 +431,7 @@ const Sound = {
     warn: (S) => S.tone({ type: 'square', f: 220, to: 440, dur: 0.3, vol: 0.14 }),
     warnPower: (S) => S.tone({ type: 'sawtooth', f: 130, to: 620, dur: 0.7, vol: 0.18, attack: 0.3 }),
     slam: (S) => { S.tone({ f: 130, to: 32, dur: 0.45, vol: 0.9 }); S.noise({ type: 'lowpass', f: 700, to: 120, dur: 0.35, vol: 0.5 }); },
+    roll: (S) => { S.noise({ type: 'lowpass', f: 420, to: 140, dur: 0.6, vol: 0.4 }); S.tone({ f: 70, to: 45, dur: 0.5, vol: 0.35 }); },      // an Iwagame rolling
     thunder: (S, r) => { S.noise({ type: 'lowpass', f: 320 * r, to: 60, dur: 1.3, vol: 0.45, attack: 0.03 }); S.tone({ f: 70, to: 32, dur: 1.1, vol: 0.4 }); },
     dodge: (S, r, t) => { S.tone({ type: 'triangle', f: 988, dur: 0.07, vol: 0.25 }); S.tone({ type: 'triangle', f: 1319, dur: 0.12, vol: 0.25, at: t + 0.06 }); },
     win: (S, r, t) => [294, 349, 440, 587, 698, 880].forEach((f, i) => S.tone({ type: 'triangle', f, dur: 0.5, vol: 0.35, at: t + i * 0.11 })),
@@ -623,6 +650,50 @@ const Art = {
     Art.rr(c, 12.2, 12.4, 7.6, 2.8, 1); c.fillStyle = '#1b1d20'; c.fill();
     for (let x = 12.6; x < 19; x += 1.9) Art.tri(c, [x, 12.4], [x + 1.6, 12.4], [x + 0.8, 14.2], '#e6eaee');
   },
+  // Saga 2 level 2's second foe, the Iwagame: hunched brown rock under a domed shell of stone plates, moss on head and shell,
+  // orange glowing cracks and eyes, a torn loincloth, long dark claws. Seen from the front, shell humped up behind the head.
+  iwagame(c) {
+    Art.shadow(c, 18, 38, 12);
+    const ol = '#1f120c', dk = '#3e2518', st = '#5d3a28', lt = '#80553c', fire = '#ff8f00', moss = '#7cb342', mossDk = '#4e7a22';
+    const crack = pts => { c.strokeStyle = fire; c.lineWidth = 0.6; c.beginPath(); pts.forEach(([a, b, x, y]) => { c.moveTo(a, b); c.lineTo(x, y); }); c.stroke(); };
+    // the shell, humped up behind
+    Art.ell(c, 18, 13, 16, 12, ol); Art.ell(c, 18, 12.6, 14.6, 10.8, Art.grad(c, 0, 2, 0, 24, [[0, lt], [1, dk]]));
+    c.strokeStyle = ol; c.lineWidth = 0.8; c.beginPath();
+    [[8, 8, 13, 5], [13, 5, 19, 4], [19, 4, 25, 6], [25, 6, 29, 10], [8, 8, 6, 15], [13, 5, 13, 11], [19, 4, 19, 10], [25, 6, 26, 12], [29, 10, 30, 16]].forEach(([a, b, x, y]) => { c.moveTo(a, b); c.lineTo(x, y); });
+    c.stroke();
+    crack([[10, 10, 12, 13], [24, 9, 27, 12], [16, 6, 17, 9]]);
+    Art.ell(c, 8, 8, 4, 2.2, moss); Art.ell(c, 27, 7, 3.4, 2, moss); Art.ell(c, 8, 7.4, 2.4, 1.2, mossDk);
+    // legs and claws
+    [[11, 33], [25, 33]].forEach(([x, y]) => { Art.ell(c, x, y, 4.6, 4.2, ol); Art.ell(c, x, y - 0.4, 3.6, 3.2, st); [-2.4, 0, 2.4].forEach(dx => Art.tri(c, [x + dx - 0.8, y + 2.6], [x + dx + 0.8, y + 2.6], [x + dx, y + 5.2], '#2b211c')); });
+    // body
+    Art.ell(c, 18, 25, 10, 8, ol); Art.ell(c, 18, 24.6, 8.8, 7, Art.grad(c, 0, 18, 0, 32, [[0, lt], [1, st]]));
+    crack([[14, 21, 16, 24], [16, 24, 15, 27], [21, 22, 22, 25]]);
+    c.fillStyle = '#6d5638'; c.beginPath(); c.moveTo(11, 27); c.lineTo(25, 27); c.lineTo(24, 32); c.lineTo(21.5, 30); c.lineTo(19.5, 33); c.lineTo(17, 30.5); c.lineTo(14.5, 33); c.lineTo(12, 30.5); c.closePath(); c.fill();
+    // arms hanging forward with long claws
+    [[5.5, 21], [30.5, 21]].forEach(([x, y]) => {
+      Art.ell(c, x, y, 4.2, 6, ol); Art.ell(c, x, y - 0.3, 3.2, 5, st);
+      [-2, 0, 2].forEach(dx => Art.tri(c, [x + dx - 0.9, y + 4.6], [x + dx + 0.9, y + 4.6], [x + dx * 1.4, y + 9], '#3a2e27'));
+    });
+    // head, low under the shell's front rim
+    Art.ell(c, 18, 16, 7.4, 6, ol); Art.ell(c, 18, 15.8, 6.4, 5, Art.grad(c, 0, 11, 0, 21, [[0, lt], [1, st]]));
+    Art.ell(c, 18, 11.6, 4.6, 1.8, moss); Art.ell(c, 17, 11.2, 2.4, 1, '#9ccc65');
+    c.strokeStyle = ol; c.lineWidth = 1.2; c.beginPath(); c.moveTo(12.6, 14.2); c.lineTo(16.6, 15.6); c.moveTo(23.4, 14.2); c.lineTo(19.4, 15.6); c.stroke();     // scowl
+    c.shadowColor = '#ff6d00'; c.shadowBlur = 5; Art.ell(c, 15, 16.4, 1.7, 1.3, '#ffb300'); Art.ell(c, 21, 16.4, 1.7, 1.3, '#ffb300'); c.shadowBlur = 0;
+    Art.ell(c, 15, 16.4, 0.7, 0.6, '#fff3e0'); Art.ell(c, 21, 16.4, 0.7, 0.6, '#fff3e0');
+    c.strokeStyle = ol; c.lineWidth = 0.9; c.beginPath(); c.moveTo(15.6, 19.6); c.quadraticCurveTo(18, 18.6, 20.4, 19.6); c.stroke();                            // frown
+  },
+  // The same Iwagame pulled into its shell to roll: a ball of stone plates, glowing cracks, moss, claw tips peeking out.
+  iwagameBall(c) {
+    Art.shadow(c, 16, 30, 11);
+    const ol = '#1f120c', dk = '#3e2518', lt = '#80553c';
+    Art.ell(c, 16, 16, 14, 13, ol); Art.ell(c, 16, 15.6, 12.6, 11.6, Art.grad(c, 4, 4, 28, 28, [[0, lt], [1, dk]]));
+    c.strokeStyle = ol; c.lineWidth = 0.9; c.beginPath();
+    [[6, 10, 26, 10], [5, 18, 27, 18], [11, 5, 10, 26], [21, 5, 22, 26]].forEach(([a, b, x, y]) => { c.moveTo(a, b); c.lineTo(x, y); }); c.stroke();
+    c.shadowColor = '#ff6d00'; c.shadowBlur = 4; c.strokeStyle = '#ff9800'; c.lineWidth = 0.9; c.beginPath();
+    [[13, 12, 16, 15], [16, 15, 15, 18], [23, 13, 25, 16], [8, 20, 11, 22]].forEach(([a, b, x, y]) => { c.moveTo(a, b); c.lineTo(x, y); }); c.stroke(); c.shadowBlur = 0;
+    Art.ell(c, 12, 6, 4.2, 2, '#7cb342'); Art.ell(c, 23, 22, 3, 1.6, '#7cb342');
+    [[4, 22], [28, 22], [16, 28.5]].forEach(([x, y]) => Art.tri(c, [x - 1, y - 1], [x + 1, y - 1], [x, y + 2], '#3a2e27'));
+  },
   // Saga 2's first big fight: a hulking stone oni with heavy horns, tusks, a torn hide and a crude stone club.
   rockBoss(c) {
     Art.shadow(c, 65, 122, 46);
@@ -673,6 +744,126 @@ const Art = {
     Art.rr(c, 50, 42, 30, 9, 3.5); c.fillStyle = '#1b1d20'; c.fill();
     for (let x = 55.5; x < 73; x += 4.8) Art.tri(c, [x, 42], [x + 4, 42], [x + 2, 46], '#e6eaee');
     Art.tri(c, [50, 51.5], [56, 51.5], [52.5, 40], '#fff8e1'); Art.tri(c, [80, 51.5], [74, 51.5], [77.5, 40], '#fff8e1');   // tusks
+  },
+  // Saga 2 level 2's boss, the Koke Oni ("moss oni"): a tall brute of cracked grey stone blocks with moss in the cracks,
+  // short curved horns, pointed ears, pale glowing eyes, an underbite of fangs, a torn hide loincloth and a mossy stone club.
+  kokeBoss(c) {
+    Art.shadow(c, 65, 132, 46);
+    const ol = '#262b26', dk = '#5c635c', st = '#959c94', lt = '#c3c9c1', moss = '#7a9a3a', mossLt = '#9cbf55';
+    const slab = (x, y, rx, ry, rot = 0) => {
+      c.save(); c.translate(x, y); c.rotate(rot);
+      Art.ell(c, 0, 0, rx, ry, ol); Art.ell(c, 0, -0.5, rx - 2, ry - 2, Art.grad(c, 0, -ry, 0, ry, [[0, st], [1, dk]]));
+      Art.ell(c, -rx * 0.18, -ry * 0.38, rx * 0.56, ry * 0.3, lt); c.restore();
+    };
+    const mossAt = pts => pts.forEach(([x, y, r]) => { for (let i = 0; i < 5; i++) Art.ell(c, x + Math.cos(i * 1.3) * r * 0.7, y + Math.sin(i * 1.9) * r * 0.45, r * 0.55, r * 0.4, i % 2 ? moss : mossLt); });
+    const cracks = pts => { c.strokeStyle = ol; c.lineWidth = 1.2; c.beginPath(); pts.forEach(([a, b, x, y]) => { c.moveTo(a, b); c.lineTo(x, y); }); c.stroke(); };
+    slab(50, 116, 14, 16); slab(82, 116, 14, 16);                                              // legs
+    [[39, 130], [49, 133], [59, 130], [73, 130], [83, 133], [93, 130]].forEach(([x, y]) => Art.tri(c, [x - 4, y - 3], [x + 4, y - 3], [x, y + 5], '#4a4f49'));   // claws
+    c.save(); c.translate(20, 99); c.rotate(0.3);                                              // the club, hanging from his right hand
+    Art.rr(c, -4.5, -38, 9, 40, 3); c.fillStyle = ol; c.fill(); Art.rr(c, -3, -36, 6, 36, 2); c.fillStyle = '#5d4037'; c.fill();
+    c.fillStyle = '#3e2723'; for (let y = -34; y < -20; y += 4) c.fillRect(-3, y, 6, 1.6);
+    c.fillStyle = ol; c.beginPath(); [[-13, 0], [-5, -4], [9, -2], [15, 8], [14, 30], [5, 38], [-8, 38], [-15, 26]].forEach(p => c.lineTo(...p)); c.closePath(); c.fill();
+    c.fillStyle = Art.grad(c, -13, 0, 13, 36, [[0, lt], [1, dk]]); c.beginPath(); [[-11, 2], [-4, -1.5], [7.5, 0.5], [12.5, 9], [11.5, 28.5], [4, 35.5], [-6.5, 35.5], [-12.5, 25]].forEach(p => c.lineTo(...p)); c.closePath(); c.fill();
+    cracks([[-4, 0, -1, 14], [-1, 14, -10, 20], [-1, 14, 8, 22], [8, 22, 6, 34]]);
+    mossAt([[-6, 6, 6], [8, 28, 5]]);
+    c.restore();
+    Art.rr(c, 31, 50, 68, 58, 20); c.fillStyle = ol; c.fill();                                 // torso
+    Art.rr(c, 33.5, 52, 63, 53, 18); c.fillStyle = Art.grad(c, 33, 52, 96, 106, [[0, st], [1, '#4f554e']]); c.fill();
+    Art.ell(c, 52, 68, 13, 10, lt); Art.ell(c, 79, 68, 13, 10, '#aeb5ac');                    // chest blocks
+    Art.ell(c, 56, 87, 9, 6.5, '#a3aaa1'); Art.ell(c, 75, 87, 9, 6.5, '#9aa198');            // stomach blocks
+    cracks([[65, 58, 65, 96], [42, 79, 88, 79], [47, 93, 84, 93], [40, 62, 44, 70], [90, 62, 86, 70]]);
+    mossAt([[44, 60, 7], [84, 76, 6], [60, 92, 5]]);
+    c.fillStyle = '#4e342e'; c.beginPath(); c.moveTo(33, 98); c.lineTo(97, 98); c.lineTo(99, 110); [[93, 120], [87, 110], [80, 124], [73, 111], [65, 127], [57, 111], [50, 124], [43, 110], [37, 120]].forEach(p => c.lineTo(...p)); c.lineTo(31, 110); c.closePath(); c.fill();
+    c.fillStyle = '#6d4c41'; c.fillRect(32, 95, 66, 7); Art.ell(c, 60, 99, 5, 4.5, '#5d4037');   // knotted belt
+    slab(23, 62, 15, 14); slab(15, 82, 11, 15, 0.15); slab(107, 62, 15, 14); slab(116, 84, 11, 16, -0.12);   // shoulders and arms
+    mossAt([[20, 56, 7], [110, 56, 7], [117, 88, 5]]);
+    slab(16, 100, 10, 9);                                                                      // fist on the club
+    slab(117, 106, 10, 10);                                                                    // open hand, claws down
+    [[110, 114], [116, 116], [122, 114]].forEach(([x, y]) => Art.tri(c, [x - 2.4, y - 2], [x + 2.4, y - 2], [x, y + 7], '#4a4f49'));
+    cracks([[16, 56, 24, 64], [24, 64, 18, 70], [104, 56, 110, 64], [113, 78, 120, 84]]);
+    [1, -1].forEach(side => {                                                                  // ears and short curved horns
+      c.save(); c.translate(65, 0); c.scale(side, 1);
+      Art.tri(c, [22, 30], [33, 24], [23, 38], ol); Art.tri(c, [23, 31], [30.5, 26], [23.5, 36], st);
+      c.fillStyle = ol; c.beginPath(); c.moveTo(12, 16); c.quadraticCurveTo(26, 14, 24, -2); c.quadraticCurveTo(20, 7, 14, 9); c.closePath(); c.fill();
+      c.fillStyle = Art.grad(c, 12, 16, 24, 0, [[0, '#6f746d'], [1, '#d6d8cf']]); c.beginPath(); c.moveTo(13.5, 14.5); c.quadraticCurveTo(24, 12.5, 23, 1.5); c.quadraticCurveTo(19, 9, 15, 10.5); c.closePath(); c.fill();
+      c.restore();
+    });
+    Art.rr(c, 42, 10, 46, 44, 15); c.fillStyle = ol; c.fill();                                 // head
+    Art.rr(c, 44.5, 12, 41, 39, 13); c.fillStyle = Art.grad(c, 44, 12, 86, 52, [[0, lt], [1, dk]]); c.fill();
+    mossAt([[56, 16, 6], [74, 15, 5]]);
+    cracks([[65, 13, 63, 21], [48, 37, 53, 39], [82, 37, 77, 39]]);
+    c.strokeStyle = ol; c.lineWidth = 3.4; c.beginPath(); c.moveTo(47, 24); c.lineTo(61, 30); c.moveTo(83, 24); c.lineTo(69, 30); c.stroke();   // brow
+    c.shadowColor = '#f4ff81'; c.shadowBlur = 8; Art.ell(c, 55, 32, 4.4, 2.8, '#f9fbe7'); Art.ell(c, 75, 32, 4.4, 2.8, '#f9fbe7'); c.shadowBlur = 0;
+    Art.ell(c, 65, 37.5, 4.6, 3, dk); Art.ell(c, 63.2, 38, 1, 0.9, ol); Art.ell(c, 66.8, 38, 1, 0.9, ol);   // nose
+    Art.rr(c, 51, 41.5, 28, 9, 3.5); c.fillStyle = '#1a1c1a'; c.fill();                       // mouth
+    for (let x = 55; x < 74; x += 4.6) Art.tri(c, [x, 50.5], [x + 3.8, 50.5], [x + 1.9, 46], '#ecefe6');
+    Art.tri(c, [52, 50.5], [57, 50.5], [54, 39], '#f5f3e4'); Art.tri(c, [78, 50.5], [73, 50.5], [76, 39], '#f5f3e4');   // fangs jutting up
+  },
+  // Saga 2 level 3's boss, Genbu the stone tortoise (from the owner's picture): grey stone blocks with glowing lava cracks, a domed
+  // shell, a moss cap on the head, fiery eyes and fangs, two clawed front arms hanging low and two great arms raised from his back.
+  genbu(c) {
+    Art.shadow(c, 75, 142, 54);
+    const ol = '#1d2124', dk = '#4c5357', st = '#8c9397', lt = '#bcc3c7', lava = '#ff9100';
+    const slab = (x, y, rx, ry, rot = 0) => {
+      c.save(); c.translate(x, y); c.rotate(rot);
+      Art.ell(c, 0, 0, rx, ry, ol); Art.ell(c, 0, -0.5, rx - 2, ry - 2, Art.grad(c, 0, -ry, 0, ry, [[0, st], [1, dk]]));
+      Art.ell(c, -rx * 0.18, -ry * 0.38, rx * 0.56, ry * 0.3, lt); c.restore();
+    };
+    const glow = pts => { c.save(); c.shadowColor = '#ff6d00'; c.shadowBlur = 5; c.strokeStyle = lava; c.lineWidth = 1.5; c.beginPath(); pts.forEach(([a, b, x, y]) => { c.moveTo(a, b); c.lineTo(x, y); }); c.stroke(); c.restore(); };
+    const claws = (x, y, dir) => [-5, 0, 5].forEach(dx => Art.tri(c, [x + dx - 2.2, y], [x + dx + 2.2, y], [x + dx * 1.3, y + 9 * dir], '#3b3f42'));
+    // the shell, humped up behind him
+    Art.ell(c, 75, 58, 52, 34, ol); Art.ell(c, 75, 57, 49, 31, Art.grad(c, 0, 26, 0, 88, [[0, lt], [1, dk]]));
+    c.strokeStyle = ol; c.lineWidth = 1.4; c.beginPath();
+    [[35, 50, 52, 36], [52, 36, 75, 31], [75, 31, 98, 36], [98, 36, 115, 50], [52, 36, 50, 60], [75, 31, 75, 50], [98, 36, 100, 60]].forEach(([a, b, x, y]) => { c.moveTo(a, b); c.lineTo(x, y); });
+    c.stroke();
+    glow([[44, 46, 50, 54], [104, 46, 98, 54], [86, 36, 90, 44]]);
+    // the great back arms, raised high with claws spread
+    [[1, 0], [-1, 0]].forEach(([side]) => {
+      c.save(); c.translate(75, 0); c.scale(side, 1);
+      slab(42, 46, 13, 15, 0.3); slab(52, 24, 11, 15, 0.15); slab(57, 9, 10, 8);
+      claws(57, 3, -1);
+      glow([[38, 42, 46, 50], [50, 18, 55, 28]]);
+      c.restore();
+    });
+    // legs
+    slab(55, 122, 16, 17); slab(95, 122, 16, 17);
+    claws(55, 136, 1); claws(95, 136, 1);
+    glow([[50, 116, 58, 126], [98, 114, 92, 124]]);
+    // torso
+    Art.rr(c, 42, 62, 66, 52, 20); c.fillStyle = ol; c.fill();
+    Art.rr(c, 44.5, 64, 61, 47, 18); c.fillStyle = Art.grad(c, 44, 64, 106, 112, [[0, st], [1, '#474d51']]); c.fill();
+    Art.ell(c, 62, 78, 12, 9, lt); Art.ell(c, 88, 78, 12, 9, '#a9b0b4'); Art.ell(c, 66, 97, 9, 6.5, '#a0a7ab'); Art.ell(c, 84, 97, 9, 6.5, '#989fa3');
+    glow([[75, 66, 75, 104], [52, 88, 98, 88], [75, 76, 68, 70], [75, 76, 82, 70], [60, 104, 66, 96]]);
+    c.fillStyle = '#5d4433'; c.beginPath(); c.moveTo(48, 106); c.lineTo(102, 106); c.lineTo(103, 114); [[96, 122], [90, 114], [84, 128], [77, 116], [71, 130], [64, 116], [58, 124], [52, 114]].forEach(p => c.lineTo(...p)); c.lineTo(47, 114); c.closePath(); c.fill();
+    c.fillStyle = '#7a5a41'; c.fillRect(47, 104, 56, 5); Art.ell(c, 82, 107, 4, 3.6, '#5d4433');
+    // front arms hanging low
+    slab(36, 74, 14, 13); slab(28, 94, 11, 16, 0.12); slab(26, 112, 11, 10);
+    slab(114, 74, 14, 13); slab(122, 94, 11, 16, -0.12); slab(124, 112, 11, 10);
+    claws(26, 119, 1); claws(124, 119, 1);
+    glow([[32, 70, 40, 78], [26, 90, 31, 100], [118, 70, 110, 78], [124, 90, 119, 100]]);
+    // head, low under the shell's rim, with a cap of moss
+    Art.rr(c, 55, 36, 40, 34, 13); c.fillStyle = ol; c.fill();
+    Art.rr(c, 57.5, 38, 35, 29, 11); c.fillStyle = Art.grad(c, 57, 38, 92, 67, [[0, lt], [1, dk]]); c.fill();
+    Art.ell(c, 75, 37, 17, 5.5, '#4e5a2a'); Art.ell(c, 75, 36, 15, 4.4, '#7cb342'); Art.ell(c, 71, 35, 6, 1.8, '#a5d65a');
+    c.strokeStyle = ol; c.lineWidth = 3; c.beginPath(); c.moveTo(60, 46); c.lineTo(72, 51); c.moveTo(90, 46); c.lineTo(78, 51); c.stroke();      // brow
+    c.save(); c.shadowColor = '#ff6d00'; c.shadowBlur = 8; Art.ell(c, 66, 53, 3.6, 2.6, '#ffb300'); Art.ell(c, 84, 53, 3.6, 2.6, '#ffb300'); c.restore();
+    Art.ell(c, 66, 53, 1.3, 1.1, '#fff3e0'); Art.ell(c, 84, 53, 1.3, 1.1, '#fff3e0');
+    Art.ell(c, 75, 58, 4, 2.4, dk);                                                            // snout
+    Art.rr(c, 65, 61, 20, 5.5, 2.5); c.fillStyle = '#161819'; c.fill();
+    Art.tri(c, [66, 61], [70, 61], [68, 66.5], '#eceff1'); Art.tri(c, [84, 61], [80, 61], [82, 66.5], '#eceff1');      // fangs
+    glow([[60, 58, 63, 62], [90, 58, 87, 62]]);
+  },
+  // Genbu pulled into his shell to roll: a great ball of stone plates split by lava, moss on top, claws peeking out.
+  genbuBall(c) {
+    Art.shadow(c, 55, 104, 40);
+    const ol = '#1d2124', dk = '#4c5357', lt = '#bcc3c7';
+    Art.ell(c, 55, 54, 50, 48, ol); Art.ell(c, 55, 53, 47, 45, Art.grad(c, 10, 10, 100, 100, [[0, lt], [1, dk]]));
+    c.strokeStyle = ol; c.lineWidth = 1.6; c.beginPath();
+    [[12, 38, 98, 38], [10, 66, 100, 66], [34, 10, 30, 98], [76, 10, 80, 98]].forEach(([a, b, x, y]) => { c.moveTo(a, b); c.lineTo(x, y); }); c.stroke();
+    c.save(); c.shadowColor = '#ff6d00'; c.shadowBlur = 7; c.strokeStyle = '#ff9100'; c.lineWidth = 2; c.beginPath();
+    [[48, 42, 56, 52], [56, 52, 52, 62], [82, 44, 90, 52], [20, 72, 30, 78], [64, 76, 72, 86]].forEach(([a, b, x, y]) => { c.moveTo(a, b); c.lineTo(x, y); }); c.stroke(); c.restore();
+    Art.ell(c, 46, 14, 14, 5, '#7cb342'); Art.ell(c, 42, 13, 6, 2, '#a5d65a');
+    [[8, 76], [102, 76], [55, 101]].forEach(([x, y]) => Art.tri(c, [x - 3, y - 2], [x + 3, y - 2], [x, y + 6], '#3b3f42'));
   },
   // Mountain pass scenery.
   rockGround(c, w, h) {
@@ -1172,7 +1363,7 @@ const Art = {
     const m = (k, w, h) => Art.make(scene, k, w, h, Art[k]);
     m('samurai', 36, 50); m('katana', 12, 36); m('demon', 32, 40); m('zombie', 32, 40); m('boss', 130, 126); m('giant', 110, 130); m('thunder', 130, 134);
     Art.make(scene, 'tenguBoss', 130, 120, Art.tengu); m('charm', 40, 44); m('glow', 64, 64);
-    m('rockOni', 32, 40); m('rockBoss', 130, 130); m('rockGround', 64, 64); m('stonePath', 280, 128); m('cliff', 72, 80); m('boulder', 30, 24);
+    m('rockOni', 32, 40); m('iwagame', 36, 40); m('iwagameBall', 32, 32); m('rockBoss', 130, 130); m('genbu', 150, 150); m('genbuBall', 110, 110); m('kokeBoss', 130, 140); m('rockGround', 64, 64); m('stonePath', 280, 128); m('cliff', 72, 80); m('boulder', 30, 24);
     m('spike', 36, 28); m('wall', 132, 60); m('log', 132, 60); m('fence', 16, 36); m('civilian', 20, 28); m('cage', 96, 70); m('rock', 12, 12); m('slash', 48, 48); m('soul', 16, 16); m('dot', 8, 8); m('petal', 8, 6);
     m('archer', 36, 50); m('arrow', 8, 22); m('crate', 36, 32); m('box', 84, 34); m('recruit', 84, 48); m('mystery', 84, 34); m('barrel', 48, 46); m('doorHalf', 86, 40); m('chest', 84, 42); m('yard', 64, 64); m('divider', 10, 64); m('fort', W, 174); m('oni', 48, 54); m('warlord', 130, 150);
     m('grass', 64, 64); m('path', 280, 128); m('lantern', 24, 42); m('deadTree', 60, 58); m('rubble', 30, 24); m('crack', 60, 40); m('tree', 60, 58); m('menuBg', W, H);
@@ -1314,11 +1505,11 @@ class SagaScene extends MenuBase {
         this.scene.start('Defense', { saga: 0 });
       });
     if (!bossDone) fort.t.setColor('#8a8094');
-    // Saga 2: opens once the first saga's boss is beaten. Only its first level exists so far.
+    // Saga 2: opens once the first saga's boss is beaten. Its three levels exist; its saga boss does not yet.
     const first2 = SAGA_LEVELS + 2, open2 = Save.level >= first2 && fortDone;          // stage number of saga 2, level 1
     this.panel(W / 2, 478, 368, 156, open2 ? 0.92 : 0.7);
     this.txt(34, 418, numerals[1] + ' · ' + SAGAS[1].toUpperCase(), 17, open2 ? '#ffd54f' : '#8a8094').setOrigin(0, 0.5);
-    this.txt(34, 438, !open2 ? (bossDone ? 'defend the compound to unlock' : 'defeat the saga boss to unlock') : Save.level > first2 ? 'level 1 cleared · more coming soon' : 'level 1 of ' + SAGA_LEVELS, 12, open2 ? '#cfc3d6' : '#6f6678', { fontStyle: 'normal' }).setOrigin(0, 0.5);
+    this.txt(34, 438, !open2 ? (bossDone ? 'defend the compound to unlock' : 'defeat the saga boss to unlock') : Save.level > first2 + SAGA_LEVELS - 1 ? 'levels cleared · saga boss coming soon' : 'level ' + (Save.level - first2 + 1) + ' of ' + SAGA_LEVELS, 12, open2 ? '#cfc3d6' : '#6f6678', { fontStyle: 'normal' }).setOrigin(0, 0.5);
     for (let k = 0; k < SAGA_LEVELS; k++) {
       const n = first2 + k, L = LEVELS[n - 1], x = 82 + k * 118, open = !!L && open2 && Save.level >= n, done = open && Save.level > n;
       const b = this.button(x, 498, 104, 76, open ? (done ? 0x2e7d32 : 0xc62828) : 0x3a3444, open ? String(k + 1) : '—', 28, () => {
@@ -1809,9 +2000,9 @@ class GameScene extends BaseScene {
     if (this.L.splitAt) this.buildSplit();
     this.L.packs.forEach(pk => {
       for (let i = 0; i < pk.n; i++) {
-        const demon = this.L.demons && Math.random() < CFG.enemy.demonShare;
+        const [kind, mul] = this.pickFoe();
         const x = pk.split ? W / 2 + this.split.foeSide * (22 + Math.random() * 100) : 85 + Math.random() * 230;       // the split's pack keeps to its side
-        const e = this.addEnemy(demon ? 'demon' : this.L.foe, x, pk.d + i * pk.gap, Math.round(pk.hp * (demon ? CFG.enemy.demonHp : 1)));
+        const e = this.addEnemy(kind, x, pk.d + i * pk.gap, Math.round(pk.hp * mul));
         if (pk.split) e.splitSide = this.split.foeSide;
       }
     });
@@ -1885,6 +2076,12 @@ class GameScene extends BaseScene {
     return { x, op, good, obj: this.add.container(x, -200, [g, t]) };
   }
 
+  // A common enemy for this level and its health multiplier: a demon (saga 1), the level's mixed-in foe, or its usual one.
+  pickFoe() {
+    if (this.L.demons && Math.random() < CFG.enemy.demonShare) return ['demon', CFG.enemy.demonHp];
+    if (this.L.mix && Math.random() < this.L.mix[1]) return [this.L.mix[0], this.L.mix[2]];
+    return [this.L.foe, 1];
+  }
   addEnemy(kind, x, d, hp) {
     const e = { kind, x, d, hp, maxHp: hp, r: 0, strike: 400, seed: Math.random() * 6, obj: this.img(x, -200, kind) };
     this.enemies.push(e);
@@ -2125,7 +2322,7 @@ class GameScene extends BaseScene {
       this.ultCharge = Math.min(this.ultMax, was + (e.prof ? this.ultMax / 5 : 1));
       if (was < this.ultMax && this.ultCharge >= this.ultMax) { Sound.play('ultReady'); this.float(130, 628, 'ULTIMATE READY!', '#ffe082', 15); }
     }
-    const tint = { demon: 0xab47bc, zombie: 0x9ccc65, giant: 0x9ccc65, thunder: 0xb388ff, charm: 0xffd54f, wall: 0x9aa1a9, rockOni: 0x9aa1a9, rockBoss: 0x9aa1a9, tenguBoss: 0xef5350, boss: 0xab47bc }[e.kind];
+    const tint = { demon: 0xab47bc, zombie: 0x9ccc65, giant: 0x9ccc65, thunder: 0xb388ff, charm: 0xffd54f, wall: 0x9aa1a9, rockOni: 0x9aa1a9, iwagame: 0x8d6e63, rockBoss: 0x9aa1a9, genbu: 0xff9100, kokeBoss: 0x8fa07c, tenguBoss: 0xef5350, boss: 0xab47bc }[e.kind];
     this.burst.setParticleTint(e.mat === 'log' ? 0x8d6e63 : tint);
     this.burst.explode(e.r ? 40 : 10, e.x, e.y);
     const orb = this.img(e.x, e.y, 'soul').setDepth(5001).setScale(S * (e.r ? 2 : 1.2));
@@ -2156,6 +2353,8 @@ class GameScene extends BaseScene {
     const E = CFG.enemy;
     const pack = this.enemies.filter(e => !e.r && !e.gone && e.y > -20);
     const backRow = this.soldiers.reduce((m, s) => Math.max(m, s.y), 0);
+    if (!this.rollG) this.rollG = this.add.graphics().setDepth(-9);
+    this.rollG.clear();
     pack.forEach(e => {
       const k = E[e.kind], run = k.speed * this.L.pace + (this.fight ? E.fightRush : 0);
       // The split path's pack keeps to its side of the fence, and runs straight on if the army took the other side.
@@ -2166,6 +2365,7 @@ class GameScene extends BaseScene {
       let near = null, L = Infinity;
       this.soldiers.forEach(s => { const d = Math.hypot(s.x - e.x, s.y - e.y); if (d < L) { L = d; near = s; } });
       if (!near) { e.hold = false; return; }
+      if (k.roll && this.shellRoll(e, k.roll, wdt, backRow)) return;
       e.hold = L <= E.reach;
       if (!e.hold) {
         const v = run * wdt / L;
@@ -2180,7 +2380,7 @@ class GameScene extends BaseScene {
       if (e.strike > 0) return;
       e.strike = k.strikeMs;
       Sound.play('claw');
-      this.enemySlash(near.x, near.y, 0.55, e.kind === 'demon' ? 0xea80fc : e.kind === 'rockOni' ? 0xcfd8dc : 0xc5e1a5);
+      this.enemySlash(near.x, near.y, 0.55, e.kind === 'demon' ? 0xea80fc : e.kind === 'rockOni' ? 0xcfd8dc : e.kind === 'iwagame' ? 0xffab40 : 0xc5e1a5);
       near.img.setTint(0xff8a80);
       this.time.delayedCall(90, () => { if (near.img.active) near.img.setTint(this.armorTint); });
       this.wound += k.hit;
@@ -2193,6 +2393,51 @@ class GameScene extends BaseScene {
       const push = (13 - d) / 2 / d;
       p.x += dx * push; q.x -= dx * push; p.d -= dy * push; q.d += dy * push;
     }
+  }
+
+  // The Iwagame's roll: count down, wind up in its shell (aim shown), roll; true while it is busy with that.
+  shellRoll(e, R, wdt, backRow) {
+    const ms = wdt * 1000;
+    if (e.rolling) {
+      e.rolling -= ms; e.spin = (e.spin || 0) + wdt * 14;
+      e.x = clamp(e.x + e.rvx * wdt, CFG.pathLeft + 12, CFG.pathRight - 12); e.d -= e.rvy * wdt;
+      e.obj.setRotation(e.spin);
+      if (Math.random() < 0.5) { this.burst.setParticleTint(0x8d6e63); this.burst.explode(1, e.x, e.y + 8); }
+      const hit = this.soldiers.find(s => Math.hypot(s.x - e.x, s.y - e.y) < 15);
+      if (hit) {
+        Sound.play('slam'); this.shake(160, 0.008);
+        hit.img.setTint(0xff8a80); this.time.delayedCall(90, () => { if (hit.img.active) hit.img.setTint(this.armorTint); });
+        this.lose(R.hit, hit);
+      }
+      if (hit || e.rolling <= 0 || e.y > backRow + 12) this.endRoll(e, R);
+      return true;
+    }
+    if (e.wind) {
+      e.wind -= ms;
+      const f = 1 - e.wind / R.windMs, dx = e.tx - e.x, dy = e.ty - e.y, len = Math.hypot(dx, dy) || 1;
+      e.obj.setRotation(Math.sin(this.time.now * 0.06) * 0.25);
+      e.obj.setTint(Phaser.Display.Color.GetColor(255, 255 - 110 * f, 255 - 200 * f));
+      const reach = Math.min(len + 40, R.speed * R.ms / 1000), ex = e.x + dx / len * reach, ey = e.y + dy / len * reach;
+      this.rollG.lineStyle(22, 0xff6d00, 0.12 + 0.2 * f).lineBetween(e.x, e.y, ex, ey).lineStyle(3, 0xffab40, 0.5 + 0.4 * f).lineBetween(e.x, e.y, ex, ey);
+      if (e.wind <= 0) {
+        e.wind = 0; e.rolling = R.ms; e.obj.clearTint();
+        e.rvx = dx / len * R.speed; e.rvy = dy / len * R.speed;
+        Sound.play('roll');
+      }
+      return true;
+    }
+    if (e.rollT === undefined) e.rollT = R.every[0] + Math.random() * (R.every[1] - R.every[0]);
+    if (e.hold || e.splitSide) return false;
+    e.rollT -= ms;
+    if (e.rollT > 0 || e.y < 40 || e.y > backRow - 70) return false;
+    e.wind = R.windMs; e.tx = this.armyX; e.ty = this.formY;       // aimed at where the army is now
+    e.obj.setTexture('iwagameBall');
+    return true;
+  }
+  endRoll(e, R) {
+    e.rolling = 0; e.rollT = R.every[0] + Math.random() * (R.every[1] - R.every[0]);
+    e.strike = CFG.enemy[e.kind].strikeMs;
+    if (e.obj.active) e.obj.setTexture(e.kind).setRotation(0);
   }
 
   // Weapon rows: decided as the row nears (the Range card must be high enough by then); the red gate is swapped for a
@@ -2400,6 +2645,7 @@ class GameScene extends BaseScene {
   // Boss cycle: shuffle after the army -> wind up (red zone shows where it lands) -> strike -> pause.
   updateBoss(wdt) {
     this.danger.clear();
+    if (this.rockG) this.rockG.clear();
     this.boltG.clear();
     const b = this.boss;
     if (!b || !this.fight || b.gone) return;
@@ -2408,8 +2654,8 @@ class GameScene extends BaseScene {
       b.trickleT -= wdt * 1000;
       if (b.trickleT <= 0) {
         b.trickleT = B.trickleMs;
-        const demon = this.L.demons && Math.random() < CFG.enemy.demonShare;
-        this.addEnemy(demon ? 'demon' : this.L.foe, 85 + Math.random() * 230, this.dist + CFG.armyY + 10, Math.round(b.trickleHp * (demon ? CFG.enemy.demonHp : 1)));
+        const [kind, mul] = this.pickFoe();
+        this.addEnemy(kind, 85 + Math.random() * 230, this.dist + CFG.armyY + 10, Math.round(b.trickleHp * mul));
       }
     }
     if (B.phase2 && !b.phase2 && !b.powering && b.hp <= b.maxHp * B.phase2) {          // second phase: he powers up first
@@ -2422,6 +2668,8 @@ class GameScene extends BaseScene {
     const haste = b.phase2 ? B.phase2Haste || 1 : 1;
     this.updateLightning(b, wdt);
     b.t -= wdt * 1000 * haste;
+    if (b.state === 'roll') { this.bossRoll(b); return; }
+    if (b.state === 'barrage') { this.updateBarrage(b, wdt * 1000 * haste); return; }
     if (b.state === 'chase') {
       b.obj.setRotation(0);
       const step = B.speed * haste * wdt;
@@ -2445,7 +2693,15 @@ class GameScene extends BaseScene {
         if (b.air) this.danger.fillStyle(0x000000, 0.28).fillEllipse(b.x, b.y + 50, 70 - h * 30, 22 - h * 9);   // his shadow
       } else b.obj.setRotation((style === 'dash' ? 0.3 : -0.25) * k);
       if (b.zones) this.drawZones(b, k);
-      else if (style === 'bolt') {                           // a lane of lightning, from him to the bottom of the screen
+      else if (style === 'shellroll') {                      // his path: an orange lane from him to the bottom of the screen
+        const R = B.roll;
+        b.obj.setRotation(Math.sin(this.time.now * 0.06) * 0.12 * k).setTint(Phaser.Display.Color.GetColor(255, 255 - 90 * k, 255 - 190 * k));
+        this.danger.fillStyle(0xff6d00, 0.12 + 0.28 * k).fillRect(b.aimX - R.half, b.y + 30, R.half * 2, H);
+        this.danger.lineStyle(2, 0xffcc80, 0.4 + 0.6 * k).strokeRect(b.aimX - R.half, b.y + 30, R.half * 2, H);
+      } else if (style === 'barrage') {                      // the back arms heave up a boulder
+        b.obj.setRotation(Math.sin(this.time.now * 0.03) * 0.06 * k);
+        if (Math.random() < 0.15) { this.burst.setParticleTint(0x9e9e9e); this.burst.explode(2, b.x + (Math.random() < 0.5 ? -50 : 50), b.obj.y - 70); }
+      } else if (style === 'bolt') {                           // a lane of lightning, from him to the bottom of the screen
         this.danger.fillStyle(0xb388ff, 0.14 + 0.3 * k).fillRect(b.aimX - reach, b.y + 30, reach * 2, H);
         this.danger.lineStyle(2, 0xede7f6, 0.4 + 0.6 * k).strokeRect(b.aimX - reach, b.y + 30, reach * 2, H);
         if (Math.random() < 0.3) this.zap(b.aimX + (Math.random() - 0.5) * reach, b.y + 40 + Math.random() * 300, b.aimX + (Math.random() - 0.5) * reach, b.y + 120 + Math.random() * 300, 90);
@@ -2456,6 +2712,8 @@ class GameScene extends BaseScene {
       }
       if (b.t > 0) return;
       if (b.zones) { this.zonesStrike(b); return; }
+      if (style === 'shellroll') { Object.assign(b, { state: 'roll', t: B.roll.ms, rollHit: false }); b.x = b.aimX; b.obj.clearTint(); Sound.play('roll'); return; }
+      if (style === 'barrage') { this.startBarrage(b); return; }
       if (style === 'dash') this.zap(b.x, b.y + 40, b.aimX, b.y + 40, 220);
       if (style !== 'bolt') b.x = b.aimX;
       b.air = false;
@@ -2496,9 +2754,11 @@ class GameScene extends BaseScene {
     b.hp = Math.min(b.maxHp, b.hp + b.maxHp * B.powerUpHeal * ms / B.powerUpMs);
     this.shade.setAlpha(0.6 * Math.min(1, k * 5));
     b.obj.y -= k * 28;
-    b.obj.setScale(b.obj.scaleX * (1 + 0.22 * k)).setTint(k > 0.25 ? 0xd9c2ff : 0xffffff);
-    if (Math.random() < 0.25 + k * 0.6) this.zap(b.x + (Math.random() - 0.5) * 320, -10, b.x + (Math.random() - 0.5) * 40, b.obj.y - 20, 200);
-    if (Math.random() < 0.6) { const a = Math.random() * 6.28, r = 40 + k * 40; this.zap(b.x + Math.cos(a) * r, b.obj.y + Math.sin(a) * r, b.x + Math.cos(a + 1.2) * r, b.obj.y + Math.sin(a + 1.2) * r, 120); }
+    b.obj.setScale(b.obj.scaleX * (1 + 0.22 * k)).setTint(k > 0.25 ? (B.lava ? 0xffc28a : 0xd9c2ff) : 0xffffff);
+    if (B.lava) {                                            // the mountain shakes and lava wells up through his cracks
+      if (Math.random() < 0.7) { this.burst.setParticleTint(Math.random() < 0.5 ? 0xff6d00 : 0xffd180); this.burst.explode(3, b.x + (Math.random() - 0.5) * 120, b.obj.y + 30 + Math.random() * 40); }
+    } else if (Math.random() < 0.25 + k * 0.6) this.zap(b.x + (Math.random() - 0.5) * 320, -10, b.x + (Math.random() - 0.5) * 40, b.obj.y - 20, 200);
+    if (!B.lava && Math.random() < 0.6) { const a = Math.random() * 6.28, r = 40 + k * 40; this.zap(b.x + Math.cos(a) * r, b.obj.y + Math.sin(a) * r, b.x + Math.cos(a + 1.2) * r, b.obj.y + Math.sin(a + 1.2) * r, 120); }
     this.shake(120, 0.004 + 0.02 * k);
     this.updateLightning(b, wdt);
     if (b.t > 0) return;
@@ -2506,11 +2766,12 @@ class GameScene extends BaseScene {
     b.obj.clearTint();
     this.tweens.add({ targets: this.shade, alpha: 0, duration: 500 });
     if (this.stormDark) this.tweens.add({ targets: this.stormDark, alpha: 0.5, duration: 500 });      // the storm closes in for phase 2
-    for (let i = 0; i < 8; i++) this.zap(b.x, b.y, b.x + Math.cos(i * 0.785) * 190, b.y + Math.sin(i * 0.785) * 190, 320);
-    this.burst.setParticleTint(0xb388ff); this.burst.explode(50, b.x, b.y);
+    if (!B.lava) for (let i = 0; i < 8; i++) this.zap(b.x, b.y, b.x + Math.cos(i * 0.785) * 190, b.y + Math.sin(i * 0.785) * 190, 320);
+    this.burst.setParticleTint(B.lava ? 0xff6d00 : 0xb388ff); this.burst.explode(50, b.x, b.y);
+    if (B.lava) b.obj.setTint(0xffd0b0);                     // he stays a little lit by the lava
     this.banner(B.phase2Name, '');
     Sound.play('gong'); Sound.play('slam');
-    this.cameras.main.flash(350, 200, 170, 255);
+    if (B.lava) this.cameras.main.flash(350, 255, 140, 40); else this.cameras.main.flash(350, 200, 170, 255);
     this.shake(450, 0.03);
   }
 
@@ -2524,7 +2785,62 @@ class GameScene extends BaseScene {
     b.aimX = style ? clamp(this.armyX, 100, 300) : b.x;
     b.air = style === 'fly';                                 // in the air he cannot be hit
     b.zones = this.zonesFor(style);
+    if (style === 'shellroll') b.obj.setTexture(B.key + 'Ball');
     Sound.play(style ? 'warnPower' : 'warn');
+  }
+
+  // Genbu's Shell Roll: down through the army along the marked lane and back up.
+  bossRoll(b) {
+    const B = b.prof, R = B.roll, k = clamp(1 - b.t / R.ms, 0, 1), down = Math.sin(k * Math.PI) * R.depth;
+    b.obj.y += down; b.obj.setRotation(k * 22).setDepth(b.obj.y + 40);
+    this.danger.fillStyle(0xff6d00, 0.1).fillRect(b.x - R.half, b.y + 30, R.half * 2, down);
+    if (Math.random() < 0.6) { this.burst.setParticleTint(0x8d8d8d); this.burst.explode(2, b.x + (Math.random() - 0.5) * 50, b.obj.y + 40); }
+    if (!b.rollHit && b.y + down >= this.formY - 30) {
+      b.rollHit = true; this.shake(320, 0.025); Sound.play('slam');
+      if (Math.abs(this.armyX - b.x) < R.half) this.lose(Math.max(B.cleave, Math.ceil(this.count * B.cleaveShare)) * B.powerMult);
+      else { Sound.play('dodge'); this.float(this.armyX, this.formY - 46, 'DODGED', '#80d8ff', 18); }
+    }
+    if (b.t > 0) return;
+    b.obj.setTexture(B.key).setRotation(0);
+    b.swings++; b.state = 'recover'; b.t = B.recoverMs;
+  }
+
+  // Genbu's Boulder Barrage: rocks thrown up one after another, each falling on a shadow aimed where the army is when it is thrown.
+  startBarrage(b) {
+    const A = b.prof.barrage, n = b.phase2 ? A.n2 : A.n;
+    b.state = 'barrage'; b.bt = 0; b.obj.setRotation(0);
+    b.rocks = [...Array(n)].map((_, i) => ({ at: i * A.gap }));
+  }
+  updateBarrage(b, ms) {
+    const B = b.prof, A = B.barrage;
+    b.bt += ms;
+    b.obj.setRotation(Math.sin(this.time.now * 0.02) * 0.05);
+    b.rocks.forEach((r, i) => {
+      if (r.done || b.bt < r.at) return;
+      if (r.x === undefined) {                                // thrown: up from one of the arms on his back, off the top of the screen
+        r.x = clamp(this.armyX + (Math.random() - 0.5) * 30, 90, 310); r.y = this.formY + 6;
+        const up = this.img(b.x + (i % 2 ? 46 : -46), b.obj.y - 80, 'boulder').setDepth(2900).setScale(S * 2);
+        this.tweens.add({ targets: up, y: -60, rotation: 4, duration: 340, ease: 'Quad.out', onComplete: () => up.destroy() });
+        Sound.play('swing');
+      }
+      const k = clamp((b.bt - r.at) / A.fall, 0, 1), blink = 0.75 + 0.25 * Math.sin(this.time.now * 0.03);
+      if (!this.rockG) this.rockG = this.add.graphics().setDepth(2950);      // drawn over the army, or the soldiers would hide it
+      this.rockG.fillStyle(0x000000, 0.1 + 0.22 * k).fillEllipse(r.x, r.y, A.r * 2 * (0.4 + 0.6 * k), A.r * (0.4 + 0.6 * k));
+      this.rockG.fillStyle(0xff6d00, 0.12 + 0.12 * k).fillEllipse(r.x, r.y, A.r * 2, A.r);
+      this.rockG.lineStyle(3, 0xffab40, (0.5 + 0.5 * k) * blink).strokeEllipse(r.x, r.y, A.r * 2, A.r);
+      if (k > 0.75 && !r.drop) {                              // the rock in the last moment of its fall
+        r.drop = this.img(r.x, r.y - 160, 'boulder').setDepth(2900).setScale(S * 2.4);
+        this.tweens.add({ targets: r.drop, y: r.y - 8, duration: A.fall * 0.25, ease: 'Quad.in' });
+      }
+      if (k < 1) return;
+      r.done = true;
+      if (r.drop) { const d = r.drop; this.tweens.add({ targets: d, alpha: 0, duration: 250, onComplete: () => d.destroy() }); }
+      this.burst.setParticleTint(0x9e9e9e); this.burst.explode(16, r.x, r.y); this.shake(160, 0.012); Sound.play('slam');
+      if (Math.abs(this.armyX - r.x) < A.r) this.lose(Math.max(A.hit, Math.ceil(this.count * A.share)));
+      else if (i === b.rocks.length - 1) { Sound.play('dodge'); this.float(this.armyX, this.formY - 46, 'DODGED', '#80d8ff', 18); }
+      if (b.phase2) this.hazards.push({ x: r.x, y: r.y + 4, rx: A.r, ry: 13, t: A.pool, tick: A.poolTick, every: A.poolTick, share: A.poolShare, lava: true });
+    });
+    if (b.rocks.every(r => r.done)) { b.swings++; b.state = 'recover'; b.t = B.recoverMs; b.rocks = null; }
   }
 
   // Attacks that light up every lane but one.
@@ -2538,13 +2854,15 @@ class GameScene extends BaseScene {
     };
     if (style === 'feathers') return lanes(4, 33);
     if (style === 'drums') return lanes(5, 26);
+    if (style === 'rockslide') return lanes(4, 33);
     return null;
   }
 
   drawZones(b, k) {
-    const col = { feathers: 0xff8a80, drums: 0xb388ff }[b.style], blink = 0.6 + 0.4 * Math.sin(this.time.now * 0.03);
+    const col = { feathers: 0xff8a80, drums: 0xb388ff, rockslide: 0xffa726 }[b.style], blink = 0.6 + 0.4 * Math.sin(this.time.now * 0.03);
     b.zones.forEach(z => {
       const w = (CFG.pathRight - CFG.pathLeft) / (b.style === 'drums' ? 5 : 4);
+      if (b.style === 'rockslide' && Math.random() < 0.08) { this.burst.setParticleTint(0x9e9e8e); this.burst.explode(2, z.x + (Math.random() - 0.5) * 40, b.y + 60); }   // pebbles trickling
       this.danger.fillStyle(col, 0.1 + 0.26 * k).fillRect(z.x - w / 2 + 2, b.y + 40, w - 4, H);
       this.danger.lineStyle(2, col, (0.4 + 0.6 * k) * blink).strokeRect(z.x - w / 2 + 2, b.y + 40, w - 4, H);
       if (b.style === 'drums' && Math.random() < 0.12) this.zap(z.x, b.y + 50 + Math.random() * 200, z.x + (Math.random() - 0.5) * 30, b.y + 150 + Math.random() * 250, 70);
@@ -2562,12 +2880,16 @@ class GameScene extends BaseScene {
           const f = this.add.rectangle(z.x + (Math.random() - 0.5) * 50, b.y + 40 - i * 40, 3, 22, 0xffebee).setDepth(2900).setRotation(0.25);
           this.tweens.add({ targets: f, y: H + 40, duration: 320 + i * 40, onComplete: () => f.destroy() });
         }
+      } else if (style === 'rockslide') {                    // a boulder thunders down the lane
+        const r = this.img(z.x + (Math.random() - 0.5) * 16, b.y + 50, 'boulder').setDepth(2900).setScale(S * 1.7);
+        this.tweens.add({ targets: r, y: H + 60, rotation: 9, duration: 520, ease: 'Quad.in', onComplete: () => r.destroy() });
       } else {                                               // the thunder drums: a bolt down every lane but one
         this.zap(z.x, b.y + 20, z.x + (Math.random() - 0.5) * 20, H, 300);
         this.zap(z.x + (Math.random() - 0.5) * 20, b.y + 20, z.x, H, 240);
       }
     });
     if (style === 'drums') { this.cameras.main.flash(120, 200, 170, 255); Sound.play('thunder'); }
+    if (style === 'rockslide') Sound.play('roll');
     Sound.play(style === 'feathers' ? 'swing' : 'slam');
     this.shake(260, 0.02);
     if (b.zones.some(z => Math.abs(this.armyX - z.x) < z.half)) {
@@ -2651,19 +2973,22 @@ class GameScene extends BaseScene {
   // Draws lightning, the storm around a second-phase boss, and the lightning left on the ground.
   updateLightning(b, wdt) {
     const ms = wdt * 1000;
-    if (b.phase2 && Math.random() < 0.5) {                   // storm crackling around him
+    if (b.phase2 && b.prof.lava) {                          // embers rising off him
+      if (Math.random() < 0.3) { this.burst.setParticleTint(Math.random() < 0.5 ? 0xff9100 : 0xffd180); this.burst.explode(1, b.x + (Math.random() - 0.5) * 90, b.obj.y + (Math.random() - 0.5) * 80); }
+    } else if (b.phase2 && Math.random() < 0.5) {            // storm crackling around him
       const a = Math.random() * 6.28, r = 46 + Math.random() * 16;
       this.zap(b.x + Math.cos(a) * r, b.obj.y + Math.sin(a) * r, b.x + Math.cos(a + 1) * r, b.obj.y + Math.sin(a + 1) * r, 110);
     }
     this.hazards = this.hazards.filter(h => (h.t -= ms) > 0);
     this.hazards.forEach(h => {
-      this.danger.fillStyle(0x7c4dff, 0.22 + Math.random() * 0.12).fillEllipse(h.x, h.y, h.rx * 2, h.ry * 2);
-      this.danger.lineStyle(2, 0xede7f6, 0.7).strokeEllipse(h.x, h.y, h.rx * 2, h.ry * 2);
-      if (Math.random() < 0.35) this.zap(h.x + (Math.random() - 0.5) * h.rx * 1.6, h.y + (Math.random() - 0.5) * h.ry, h.x + (Math.random() - 0.5) * h.rx * 1.6, h.y + (Math.random() - 0.5) * h.ry, 100);
+      this.danger.fillStyle(h.lava ? 0xff6d00 : 0x7c4dff, 0.3 + Math.random() * 0.12).fillEllipse(h.x, h.y, h.rx * 2, h.ry * 2);
+      this.danger.lineStyle(2, h.lava ? 0xffe0b2 : 0xede7f6, 0.7).strokeEllipse(h.x, h.y, h.rx * 2, h.ry * 2);
+      if (h.lava) { if (Math.random() < 0.2) { this.burst.setParticleTint(0xffab40); this.burst.explode(1, h.x + (Math.random() - 0.5) * h.rx, h.y); } }
+      else if (Math.random() < 0.35) this.zap(h.x + (Math.random() - 0.5) * h.rx * 1.6, h.y + (Math.random() - 0.5) * h.ry, h.x + (Math.random() - 0.5) * h.rx * 1.6, h.y + (Math.random() - 0.5) * h.ry, 100);
       h.tick -= ms;
       if (h.tick <= 0 && Math.abs(this.armyX - h.x) < h.rx) {
-        h.tick = b.prof.lingerTick;
-        this.lose(Math.max(1, Math.ceil(this.count * b.prof.lingerShare)), null, true);
+        h.tick = h.every || b.prof.lingerTick;
+        this.lose(Math.max(1, Math.ceil(this.count * (h.share || b.prof.lingerShare))), null, !h.lava);
       }
     });
   }

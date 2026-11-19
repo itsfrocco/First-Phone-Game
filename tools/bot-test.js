@@ -72,6 +72,18 @@ const GAME = 'file://' + path.resolve(__dirname, '..', 'samurai-runner.html');
             }
             tx = bestX;
           }
+          if (bo.state === 'roll') tx = bo.x < 200 ? Math.min(322, bo.x + bo.prof.roll.half + 40) : Math.max(78, bo.x - bo.prof.roll.half - 40);   // stay out of Genbu's lane
+          if (bo.rocks) {                                              // Genbu's barrage: keep clear of every shadow still to land
+            const live = bo.rocks.filter(r => r.x !== undefined && !r.done && bo.bt - r.at > (mode.startsWith('dodge') ? 300 : 9e9));
+            if (live.some(r => Math.abs(tx - r.x) < bo.prof.barrage.r + 6)) {
+              let bestX = tx, bestD = 1e9;
+              for (let x = 78; x <= 322; x += 2) {
+                if (live.some(r => Math.abs(x - r.x) < bo.prof.barrage.r + 6) || sc.hazards.some(h => Math.abs(x - h.x) < h.rx + 4)) continue;
+                if (Math.abs(x - sc.armyX) < bestD) { bestD = Math.abs(x - sc.armyX); bestX = x; }
+              }
+              tx = bestX;
+            }
+          }
         } else if (lastBoss && ff) { secs.push(+(ff / 60).toFixed(0)); ff = 0; }
         if (mode.startsWith('dodge') && sc.wave && Math.abs(tx - sc.wave.x) < 80) tx = sc.wave.x < 200 ? sc.wave.x + 85 : sc.wave.x - 85;
         if (sc.freePick) { sc.freePick('damage'); Save.damage = up; freed++; }
