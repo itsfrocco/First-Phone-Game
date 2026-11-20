@@ -102,7 +102,7 @@ const CFG = {
     // Iwagame ("rock turtle"), saga 2 from level 2, mixed in with the rock oni. A little faster; every few seconds it pulls into its
     // shell, glows for `windMs` (an orange streak shows where it is aimed) and rolls at where the army stood. A roll that reaches a
     // samurai knocks out `rollHit` men and stops it there.
-    iwagame: { speed: 52, hit: 0.30, strikeMs: 1000, roll: { every: [4500, 7000], windMs: 600, speed: 300, ms: 950, hit: 1 } },
+    iwagame: { speed: 53, hit: 0.30, strikeMs: 1000, roll: { every: [4500, 7000], windMs: 600, speed: 300, ms: 950, hit: 1 } },
   },
   // Big fights share one cycle: follow the army -> wind up (red zone on the ground) -> strike -> pause.
   //   speed          px/s sideways after the army
@@ -499,6 +499,10 @@ const I18N = {
       'Победи босса саги и получи его оружие и доспех.\nНадень их в меню СНАРЯЖЕНИЕ перед уровнем.\nЛАВКА скоро откроется. Удачи, самурай!'],
     'EQUIPMENT': ['EQUIPO', 'ÉQUIPEMENT', 'EQUIPAGGIAMENTO', 'СНАРЯЖЕНИЕ'],
     'STORE': ['TIENDA', 'BOUTIQUE', 'NEGOZIO', 'ЛАВКА'],
+    'SKILL TREE': ['HABILIDADES', 'TALENTS', 'ABILITÀ', 'НАВЫКИ'],
+    'MENU': ['MENÚ', 'MENU', 'MENU', 'МЕНЮ'],
+    'Your sensei is still drawing up the path.': ['Tu sensei aún está trazando el camino.', 'Ton sensei trace encore la voie.', 'Il tuo sensei sta ancora tracciando la via.', 'Твой сэнсэй ещё чертит путь.'],
+    'Come back soon!': ['¡Vuelve pronto!', 'Reviens bientôt !', 'Torna presto!', 'Возвращайся скоро!'],
     // level start screen, store, equipment
     'LEVEL {0}': ['NIVEL {0}', 'NIVEAU {0}', 'LIVELLO {0}', 'УРОВЕНЬ {0}'],
     '{0}s swing': ['{0}s por golpe', '{0}s par coup', '{0}s a colpo', '{0}с на удар'],
@@ -2596,6 +2600,67 @@ const Art = {
     Art.tri(c, [lx - 15, ly - 12], [lx, ly - 25], [lx + 15, ly - 12], '#5f656c');
     c.fillStyle = Art.grad(c, 0, 0, 0, h, [[0, 'rgba(10,20,10,0.28)'], [0.25, 'rgba(0,0,0,0)'], [0.8, 'rgba(0,0,0,0)'], [1, 'rgba(10,20,10,0.35)']]); c.fillRect(0, 0, w, h);
   },
+  // Start screen icons (44x34): equipment (helmet over crossed swords), store (a stall with a gem), skill tree.
+  iconGear(c, w, h) {
+    const sword = (a) => {
+      c.save(); c.translate(w / 2, h / 2 + 3); c.rotate(a);
+      c.lineCap = 'round';
+      c.strokeStyle = '#1b1420'; c.lineWidth = 4.5; c.beginPath(); c.moveTo(0, 15); c.lineTo(0, -21); c.stroke();
+      c.strokeStyle = '#e8eef4'; c.lineWidth = 2.6; c.beginPath(); c.moveTo(0, 6); c.lineTo(0, -21); c.stroke();
+      c.strokeStyle = '#3b2a4a'; c.lineWidth = 3; c.beginPath(); c.moveTo(0, 15); c.lineTo(0, 8); c.stroke();
+      c.fillStyle = '#ffc107'; c.strokeStyle = '#1b1420'; c.lineWidth = 1; c.beginPath(); c.ellipse(0, 7, 3.6, 1.6, 0, 0, 7); c.fill(); c.stroke();
+      c.restore();
+    };
+    sword(-1.0); sword(1.0);
+    c.save(); c.translate(w / 2, h / 2 + 6); c.scale(0.72, 0.72); c.translate(-w / 2, -h / 2 - 3);
+    const x = w / 2, y = h / 2 + 3;
+    Art.blob(c, () => { c.moveTo(x - 13, y + 6); c.quadraticCurveTo(x - 15, y + 12, x - 8, y + 12); c.lineTo(x + 8, y + 12); c.quadraticCurveTo(x + 15, y + 12, x + 13, y + 6); c.closePath(); }, '#283a73', '#120c1c', 1.4);   // neck guard
+    Art.blob(c, () => { c.moveTo(x - 11, y + 6); c.bezierCurveTo(x - 12, y - 10, x + 12, y - 10, x + 11, y + 6); c.closePath(); }, '#33478c', '#120c1c', 1.4);          // bowl
+    c.fillStyle = 'rgba(255,255,255,0.35)'; c.beginPath(); c.ellipse(x - 4, y - 3, 3.5, 2, -0.5, 0, 7); c.fill();
+    c.fillStyle = '#ffca28'; c.fillRect(x - 11, y + 4, 22, 2.4);
+    Art.blob(c, () => { c.moveTo(x, y - 4); c.quadraticCurveTo(x - 9, y - 9, x - 12, y - 17); c.quadraticCurveTo(x - 6, y - 10, x, y - 7); c.quadraticCurveTo(x + 6, y - 10, x + 12, y - 17); c.quadraticCurveTo(x + 9, y - 9, x, y - 4); }, '#ffd54f', '#6d4c00', 1);   // gold crest
+    c.restore();
+  },
+  iconStore(c, w, h) {
+    const x = w / 2;
+    c.fillStyle = '#6d4c33'; c.fillRect(x - 15, 9, 3, 18); c.fillRect(x + 12, 9, 3, 18);                    // posts
+    Art.rr(c, x - 18, 21, 36, 9, 2); c.fillStyle = '#8d6e4f'; c.fill(); c.strokeStyle = '#2a1a10'; c.lineWidth = 1.2; c.stroke();   // counter
+    c.fillStyle = 'rgba(255,255,255,0.25)'; c.fillRect(x - 16, 22.5, 32, 1.5);
+    for (let i = 0; i < 6; i++) {                             // striped awning with a scalloped edge
+      c.fillStyle = i % 2 ? '#fff3e0' : '#e53935';
+      c.beginPath(); c.moveTo(x - 19 + i * 6.33, 3); c.lineTo(x - 19 + (i + 1) * 6.33, 3); c.lineTo(x - 19 + (i + 1) * 6.33, 10);
+      c.arc(x - 19 + (i + 0.5) * 6.33, 10, 3.17, 0, Math.PI); c.closePath(); c.fill();
+    }
+    c.strokeStyle = '#2a1a10'; c.lineWidth = 1.2; c.strokeRect(x - 19, 3, 38, 7);
+    const gx = x, gy = 22;                                   // the gem
+    c.shadowColor = '#40c4ff'; c.shadowBlur = 6;
+    Art.poly(c, [[gx - 9, gy - 4], [gx - 5, gy - 9], [gx + 5, gy - 9], [gx + 9, gy - 4], [gx, gy + 9]]); c.fillStyle = '#29b6f6'; c.fill();
+    c.shadowBlur = 0;
+    Art.poly(c, [[gx - 9, gy - 4], [gx + 9, gy - 4], [gx, gy + 9]]); c.fillStyle = '#0288d1'; c.fill();
+    Art.poly(c, [[gx - 5, gy - 9], [gx - 2, gy - 4], [gx - 9, gy - 4]]); c.fillStyle = '#b3e5fc'; c.fill();
+    Art.poly(c, [[gx - 2, gy - 4], [gx + 2, gy - 4], [gx, gy + 9]]); c.fillStyle = '#4fc3f7'; c.fill();
+    Art.poly(c, [[gx - 9, gy - 4], [gx - 5, gy - 9], [gx + 5, gy - 9], [gx + 9, gy - 4], [gx, gy + 9]]); c.strokeStyle = '#01375a'; c.lineWidth = 1.3; c.stroke();
+    c.fillStyle = '#fff'; c.beginPath(); c.moveTo(gx + 10, gy - 12); c.lineTo(gx + 11, gy - 9.5); c.lineTo(gx + 13.5, gy - 8.5); c.lineTo(gx + 11, gy - 7.5);
+    c.lineTo(gx + 10, gy - 5); c.lineTo(gx + 9, gy - 7.5); c.lineTo(gx + 6.5, gy - 8.5); c.lineTo(gx + 9, gy - 9.5); c.closePath(); c.fill();
+  },
+  iconSkill(c, w, h) {
+    const x = w / 2, nodes = [[x, 29], [x, 18], [x - 11, 9], [x + 11, 9], [x, 4]];
+    c.lineCap = 'round';
+    [[0, 1], [1, 2], [1, 3], [1, 4]].forEach(([a, b]) => {
+      c.strokeStyle = '#1b1420'; c.lineWidth = 4.5; c.beginPath(); c.moveTo(...nodes[a]); c.lineTo(...nodes[b]); c.stroke();
+      c.strokeStyle = '#a1887f'; c.lineWidth = 2.4; c.beginPath(); c.moveTo(...nodes[a]); c.lineTo(...nodes[b]); c.stroke();
+    });
+    nodes.forEach(([nx, ny], i) => {
+      c.shadowColor = '#ffd54f'; c.shadowBlur = i < 2 ? 5 : 0;
+      c.beginPath(); c.arc(nx, ny, i === 0 ? 4.5 : 4, 0, 7); c.fillStyle = i < 2 ? '#ffd54f' : '#80cbc4'; c.fill();
+      c.shadowBlur = 0; c.strokeStyle = '#1b1420'; c.lineWidth = 1.3; c.stroke();
+      c.fillStyle = 'rgba(255,255,255,0.6)'; c.beginPath(); c.arc(nx - 1.2, ny - 1.2, 1.2, 0, 7); c.fill();
+    });
+  },
+  whetstone(c, w, h) {
+    Art.rr(c, 0.5, 0.5, w - 1, h - 1, 1.5); c.fillStyle = '#8d8a86'; c.fill(); c.strokeStyle = '#2b2622'; c.lineWidth = 1; c.stroke();
+    c.fillStyle = '#b8b4ae'; c.fillRect(1.5, 1.5, w - 3, 1.5);
+  },
   buildAll(scene) {
     const m = (k, w, h) => Art.make(scene, k, w, h, Art[k]);
     [['samurai', 36, 50], ['demon', 32, 40], ['zombie', 32, 40], ['rockOni', 32, 40], ['iwagame', 36, 40]].forEach(([k, w, h]) => {   // walking frames
@@ -2609,6 +2674,7 @@ const Art = {
     m('spike', 36, 28); m('wall', 132, 60); m('log', 132, 60); m('fence', 16, 36); m('civilian', 20, 28); m('cage', 96, 70); m('rock', 12, 12); m('slash', 48, 48); m('soul', 16, 16); m('dot', 8, 8); m('petal', 8, 6);
     m('archer', 36, 50); m('arrow', 8, 22); m('crate', 36, 32); m('box', 84, 34); m('recruit', 84, 48); m('mystery', 84, 34); m('barrel', 48, 46); m('doorHalf', 86, 40); m('chest', 84, 42); m('yard', 64, 64); m('divider', 10, 64); m('fort', W, 174); m('oni', 48, 54); m('warlord', 130, 150);
     m('grass', 64, 64); m('path', 280, 128); m('lantern', 24, 42); m('deadTree', 60, 58); m('rubble', 30, 24); m('crack', 60, 40); m('tree', 60, 58); m('menuBg', W, H);
+    m('iconGear', 44, 34); m('iconStore', 44, 34); m('iconSkill', 44, 34); m('whetstone', 10, 5);
     Art.make(scene, 'gateGood', 150, 90, (c, w, h) => Art.gate(c, w, h, true)); Art.make(scene, 'gateBad', 150, 90, (c, w, h) => Art.gate(c, w, h, false));
     Object.keys(RIGS).forEach(kind => {                       // boss limbs (right side, and mirrored for the left), and a whole picture
       RIGS[kind].parts.forEach(d => { if (!scene.textures.exists(d.key)) Art.make(scene, d.key, d.w, d.h, d.side < 0 ? c => { c.translate(d.w, 0); c.scale(-1, 1); Art[d.base](c, d.w, d.h); } : Art[d.base]); });
@@ -2634,7 +2700,8 @@ class BaseScene extends Phaser.Scene {
     t._fit = fit; t._fitSize = size;
     return t.setText(str);
   }
-  button(x, y, w, h, color, label, size, onTap) {
+  // With `icon` (a texture key) the picture sits in the middle and the label along the bottom.
+  button(x, y, w, h, color, label, size, onTap, icon) {
     const g = this.add.graphics();
     const draw = (pressed) => {
       const C = Phaser.Display.Color, dk = C.IntegerToColor(color).darken(28).color, lt = C.IntegerToColor(color).lighten(14).color;
@@ -2648,14 +2715,25 @@ class BaseScene extends Phaser.Scene {
       g.lineStyle(1.5, C.IntegerToColor(color).darken(40).color, 1).strokeRoundedRect(x0, y0 + p, w, h - 2, rad);
     };
     draw(false);
-    const t = this.txt(x, y, label, size, '#fff', { fit: w - 12 });
+    const ty = icon ? y + h / 2 - 11 : y, iy = y - 6;
+    const t = this.txt(x, ty, label, size, '#fff', icon ? { fit: w - 8, stroke: '#120c1c', strokeThickness: 3 } : { fit: w - 12 });
+    const ic = icon ? this.img(x, iy, icon) : null;
     const z = this.add.zone(x, y, w, h).setInteractive({ useHandCursor: true });
     let held = false;
-    const set = on => { held = on; draw(on); t.y = y + (on ? 3 : 0); };
+    const set = on => { held = on; draw(on); t.y = ty + (on ? 3 : 0); if (ic) ic.y = iy + (on ? 3 : 0); };
     z.on('pointerdown', () => set(true));
     z.on('pointerout', () => set(false));
     z.on('pointerup', () => { if (!held) return; set(false); Sound.play('click'); onTap(); });
-    return { g, t, z };
+    return { g, t, z, ic };
+  }
+  // The MENU button at the top right (opens the pause menu).
+  menuButton(onTap) {
+    const g = this.add.graphics().setDepth(5100);
+    g.fillStyle(0x000000, 0.5).fillRoundedRect(322, 43, 70, 30, 15).lineStyle(1.5, 0xffffff, 0.35).strokeRoundedRect(322, 43, 70, 30, 15);
+    g.fillStyle(0xffffff, 1);
+    for (let i = 0; i < 3; i++) g.fillRoundedRect(332, 51 + i * 5.5, 12, 2.6, 1.2);
+    this.txt(368, 58, 'MENU', 12, '#fff', { fit: 44 }).setDepth(5100);
+    this.add.zone(357, 58, 78, 48).setDepth(5100).setInteractive({ useHandCursor: true }).on('pointerdown', () => { Sound.unlock(); onTap(); });
   }
 }
 
@@ -3131,7 +3209,7 @@ class GameScene extends BaseScene {
     this.banner(this.stageName, this.L.name);
     this.showStartUi();
     this.input.on('pointerdown', p => {
-      if (this.started || this.paused || this.gearOpen || this.reminder || p.worldY < 120 || p.worldY > 505 || (p.worldX < 124 && p.worldY < 198)) return;
+      if (this.started || this.paused || this.gearOpen || this.reminder || p.worldY < 84 || p.worldY > 505 || (p.worldX < 80 && p.worldY < 280)) return;
       // Saga 1: a player who bought nothing here but could have gets one reminder first.
       if (this.levelNo <= SAGA_LEVELS && !this.upgraded && !this.reminded && this.canUpgrade()) { this.remindUpgrade(); return; }
       this.beginRun();
@@ -3151,7 +3229,7 @@ class GameScene extends BaseScene {
     const steer = p => {
       if (!this.started) return;
       if (p.worldY > 636 && p.worldX > 280) return;        // special button area
-      if (this.paused || (p.worldY < 84 && p.worldX > 345)) return;         // pause button area
+      if (this.paused || (p.worldY < 84 && p.worldX > 316)) return;         // MENU button area
       this.targetX = clamp(p.worldX, CFG.steerMin, CFG.steerMax);
     };
     this.input.on('pointerdown', steer);
@@ -3205,11 +3283,12 @@ class GameScene extends BaseScene {
     });
     const hint = this.txt(W / 2, 372, 'touch the path to start', 15, '#fff', { stroke: '#000', strokeThickness: 4 });
     this.tweens.add({ targets: hint, alpha: 0.35, duration: 600, yoyo: true, repeat: -1 });
-    this.button(54, 96, 84, 34, 0x3a3050, '‹ SAGAS', 13, () => this.scene.start('Sagas'));
     const reopen = kind => this.time.delayedCall(0, () => { if (!this.started) { this.gearOpen = kind; this.showStartUi(); } });
-    this.button(64, 138, 104, 32, 0x4a3f63, 'EQUIPMENT', 12, () => reopen('weapon'));
-    this.button(64, 176, 104, 32, 0xb26a00, 'STORE', 12, () => reopen('store'));
+    this.button(42, 116, 70, 58, 0x4a3f63, 'EQUIPMENT', 9, () => reopen('weapon'), 'iconGear');
+    this.button(42, 182, 70, 58, 0xb26a00, 'STORE', 9, () => reopen('store'), 'iconStore');
+    this.button(42, 248, 70, 58, 0x00796b, 'SKILL TREE', 9, () => reopen('skills'), 'iconSkill');
     if (this.gearOpen === 'store') this.showStore(reopen);
+    else if (this.gearOpen === 'skills') this.showSkills(reopen);
     else if (this.gearOpen) this.showEquipment(reopen);
     this.startUi = this.children.list.filter(o => !before.has(o));
     this.startUi.forEach((o, i) => o.setDepth(5400 + i));
@@ -3256,6 +3335,24 @@ class GameScene extends BaseScene {
     }
     this.txt(W / 2, 350, 'COMING SOON', 26, '#fff3e0', { stroke: '#2a0a14', strokeThickness: 5 });
     this.txt(W / 2, 384, 'The merchant is still on the road.\nSave your coins!', 13, '#cfc3d6', { fontStyle: 'normal', align: 'center' });
+    this.button(W / 2, 490, 150, 44, 0x4a3f63, 'CLOSE', 16, () => reopen(null));
+  }
+
+  // The skill tree: nothing to learn yet.
+  showSkills(reopen) {
+    this.add.rectangle(W / 2, H / 2, W, H, 0x05020c, 0.6);
+    const g = this.add.graphics();
+    g.fillStyle(0x1c1220, 0.97).fillRoundedRect(20, 92, 360, 436, 14);
+    g.lineStyle(2, 0xffffff, 0.25).strokeRoundedRect(20, 92, 360, 436, 14);
+    this.txt(W / 2, 114, 'SKILL TREE', 19, '#ffd54f');
+    const nodes = [[200, 310], [200, 258], [120, 214], [280, 214], [200, 184], [120, 162], [280, 162]];
+    [[0, 1], [1, 2], [1, 3], [1, 4], [2, 5], [3, 6]].forEach(([a, b]) => g.lineStyle(5, 0x3a3046, 1).lineBetween(...nodes[a], ...nodes[b]));
+    nodes.forEach(([x, y]) => {                              // locked skills
+      g.fillStyle(0x120b18, 1).fillCircle(x, y, 19).lineStyle(2, 0xffffff, 0.2).strokeCircle(x, y, 19);
+      this.txt(x, y, '?', 20, '#4a4250');
+    });
+    this.txt(W / 2, 360, 'COMING SOON', 26, '#fff3e0', { stroke: '#2a0a14', strokeThickness: 5 });
+    this.txt(W / 2, 394, 'Your sensei is still drawing up the path.\nCome back soon!', 13, '#cfc3d6', { fontStyle: 'normal', align: 'center' });
     this.button(W / 2, 490, 150, 44, 0x4a3f63, 'CLOSE', 16, () => reopen(null));
   }
 
@@ -3492,10 +3589,7 @@ class GameScene extends BaseScene {
     this.ultHint = this.txt(130, 634, 'ULTIMATE', 10, '#ffe082', { fit: 240 }).setDepth(D).setVisible(false);
     this.add.zone(336, 676, 84, 76).setInteractive().on('pointerdown', () => this.activateSpecial());
     this.earnedText = this.txt(0, 57, '', 11, '#ffe082', { stroke: '#1a0a20', strokeThickness: 3 }).setOrigin(0, 0.5).setDepth(D).setAlpha(0.9);
-    // pause button
-    const pg = this.add.graphics().setDepth(5100);
-    pg.fillStyle(0x000000, 0.45).fillCircle(372, 58, 17).fillStyle(0xffffff, 1).fillRoundedRect(365, 50, 5, 16, 1.5).fillRoundedRect(374, 50, 5, 16, 1.5);
-    this.add.zone(372, 58, 48, 48).setDepth(5100).setInteractive({ useHandCursor: true }).on('pointerdown', () => { Sound.unlock(); this.setPaused(true); });
+    this.menuButton(() => this.setPaused(true));
   }
 
   /* ---------- main loop ---------- */
@@ -3549,9 +3643,18 @@ class GameScene extends BaseScene {
       if (y < -120) { if (o.obj.visible) o.obj.setVisible(false); return; }      // far ahead: nothing to draw yet
       const p = this.persp(y);
       const bob = o.seed !== undefined && !o.r && !o.hold && o !== this.boss ? Math.sin(this.time.now * 0.02 + o.seed) * 1.5 : 0;
-      if (WALKERS[o.kind] && !o.rolling && !o.wind && o.obj.active) {         // walking frames, faster for quicker kinds
+      if (o.kind === 'iwagame' && !o.hold && !o.wind && !o.rolling && o.obj.active) {   // Iwagame travel curled up in the shell
+        if (o.obj.texture.key !== 'iwagameBall') o.obj.setTexture('iwagameBall');
+        o.obj.setRotation(this.time.now * 0.0045 + o.seed);
+        if (this.started && this.rollG && y > -20) {
+          const p2 = this.persp(y);
+          this.rollG.fillStyle(0x000000, 0.3).fillEllipse(o.x, y + 13 * p2, 24 * p2, 6 * p2);
+          if (Math.random() < 0.06) this.fxDust(o.x, y + 10 * p2, 1);
+        }
+      } else if (WALKERS[o.kind] && !o.rolling && !o.wind && o.obj.active) {         // walking frames, faster for quicker kinds
         const key = o.kind + '_' + (Math.floor(this.time.now * WALKERS[o.kind] + o.seed * 7) % 4);
-        if (o.obj.texture.key !== key && o.obj.texture.key !== o.kind + 'Ball') o.obj.setTexture(key);
+        if (o.obj.texture.key === 'iwagameBall') { o.obj.setRotation(0); this.fxDust(o.x, y + 8, 2); }   // uncurls to fight
+        if (o.obj.texture.key !== key) o.obj.setTexture(key);
       }
       o.obj.setVisible(y > -90).setPosition(o.x, y + bob).setScale((o.obj.type === 'Container' ? 1 : S) * p * (o.size || 1)).setDepth(o.flat ? y - 30 : y);
     };
@@ -3564,6 +3667,46 @@ class GameScene extends BaseScene {
     this.decor = this.decor.filter(alive); this.spikes = this.spikes.filter(alive);
     this.enemies = this.enemies.filter(alive); this.gates = this.gates.filter(alive);
     if (!this.fight && this.boss && this.boss.y >= 330) this.startFight();
+  }
+
+  // Start screen: each samurai sharpens his blade with a whetstone (sparks on each stroke), and every few
+  // seconds raises it and cuts a practice swing, then goes back to sharpening.
+  idlePose(s, i, time, p, y) {
+    const T = (time + i * 1370) % 4400, ease = f => f * f * (3 - 2 * f), HOLD = 1.75;
+    let rot = HOLD, lift = 0, lean = 0, stone = -1;
+    if (T < 3000) {                                         // sharpening: the stone runs along the blade and back
+      const st = (T % 700) / 700, k = st < 0.5 ? st * 2 : 2 - st * 2;
+      stone = k; lean = (k - 0.5) * 0.06;
+      const stroke = Math.floor(T / 350);
+      if (stroke !== s.stroke) { s.stroke = stroke; s.sparked = false; }
+      if (!s.sparked && (k > 0.95 || k < 0.05) && stroke > 0) {
+        s.sparked = true;
+        const d = (10 + 18 * k) * p, sx = s.x + 9.5 * p + Math.sin(rot) * d, sy = y + 5.5 * p - Math.cos(rot) * d;
+        this.sparks.setParticleTint(0xfff3c4); this.sparks.explode(3, sx, sy);
+      }
+      s.swungIdle = false;
+    } else if (T < 3400) {                                  // raise the blade over the shoulder
+      const f = ease((T - 3000) / 400); rot = HOLD + (0.25 - HOLD) * f; lift = 3 * f;
+    } else if (T < 3560) {                                  // the cut, down and across
+      const f = (T - 3400) / 160; rot = 0.25 - 2.6 * f; lift = 3 - 1 * f; lean = -0.08 * f;
+      if (!s.swungIdle) {
+        s.swungIdle = true;
+        const sl = this.img(s.x - 6 * p, y - 12 * p, 'slash').setDepth(s.y + 1).setRotation(-Math.PI / 2 - 0.5).setScale(S * 0.8 * p).setTint(0xe3f2fd).setBlendMode(Phaser.BlendModes.ADD);
+        this.tweens.add({ targets: sl, alpha: 0, scale: S * 1.1 * p, duration: 260, onComplete: () => sl.destroy() });
+      }
+    } else {                                                // hold the follow-through, then bring the blade back
+      const f = ease(clamp((T - 3700) / 600, 0, 1)); rot = -2.35 + (HOLD + 2.35) * f; lift = 2 * (1 - f); lean = -0.08 * (1 - f);
+    }
+    const yy = y - lift;
+    if (s.img.texture.key !== 'samurai') s.img.setTexture('samurai');
+    s.img.setPosition(s.x, yy).setRotation(lean).setScale(S * p).setDepth(s.y);
+    s.blade.setPosition(s.x + 9.5 * p, yy + 5.5 * p).setScale(S * p).setDepth(s.y + 0.5).setRotation(rot);
+    if (!s.stone) s.stone = this.img(0, -200, 'whetstone');
+    s.stone.setVisible(stone >= 0);
+    if (stone >= 0) {
+      const d = (10 + 18 * stone) * p;
+      s.stone.setPosition(s.x + 9.5 * p + Math.sin(rot) * d, yy + 5.5 * p - Math.cos(rot) * d - 2 * p).setRotation(rot - Math.PI / 2).setScale(S * p).setDepth(s.y + 0.6);
+    }
   }
 
   // Far things are drawn smaller.
@@ -3587,9 +3730,11 @@ class GameScene extends BaseScene {
       s.x += (wx - s.x) * k; s.y += (wy - s.y) * k;
       s.lunge *= 1 - damp(14, dt);
       s.pop += (1 - s.pop) * damp(14, dt);
-      const bob = Math.sin(time * 0.018 + i * 1.7) * 1.6;
+      const bob = this.started ? Math.sin(time * 0.018 + i * 1.7) * 1.6 : 0;      // stands still on the start screen
       s.swing = Math.max(0, s.swing - dt / 0.17);
       const p = this.persp(s.y) * s.pop, y = s.y + bob - s.lunge;
+      if (!this.started) { this.idlePose(s, i, time, p, y); return; }
+      if (s.stone) { s.stone.destroy(); s.stone = null; }
       const tex = running ? 'samurai_' + (Math.floor(time * 0.011 + i * 0.37) % 4) : 'samurai';      // the run cycle
       if (s.img.texture.key !== tex) s.img.setTexture(tex);
       s.img.setPosition(s.x, y).setRotation(lean).setScale(S * p).setDepth(s.y);
@@ -4530,7 +4675,7 @@ class GameScene extends BaseScene {
     this.soldiers.splice(i, 1);
     this.burst.setParticleTint(0x5c6bc0);
     this.burst.explode(8, s.x, s.y);
-    s.img.destroy(); s.blade.destroy();
+    s.img.destroy(); s.blade.destroy(); if (s.stone) s.stone.destroy();
   }
 
   // `lightning` losses are halved by the Thunder Armor.
@@ -4907,9 +5052,7 @@ class DefenseScene extends BaseScene {
     this.specialHint = this.txt(130, 662, 'SPECIAL', 10, '#b39ddb').setDepth(D).setVisible(false);
     this.ultHint = this.txt(130, 634, 'ULTIMATE', 10, '#ffe082', { fit: 240 }).setDepth(D).setVisible(false);
     this.add.zone(336, 676, 84, 76).setInteractive().on('pointerdown', () => this.activateSpecial());
-    const pg = this.add.graphics().setDepth(5100);
-    pg.fillStyle(0x000000, 0.45).fillCircle(372, 58, 17).fillStyle(0xffffff, 1).fillRoundedRect(365, 50, 5, 16, 1.5).fillRoundedRect(374, 50, 5, 16, 1.5);
-    this.add.zone(372, 58, 48, 48).setDepth(5100).setInteractive({ useHandCursor: true }).on('pointerdown', () => { Sound.unlock(); if (this.started) this.setPaused(true); });
+    this.menuButton(() => this.setPaused(true));
 
     this.buildDoor();
     this.syncArchers();
@@ -4919,11 +5062,11 @@ class DefenseScene extends BaseScene {
     let trail = [];
     this.input.on('pointerdown', p => {
       trail = [];
-      if (!this.started && !this.paused && p.worldY > 120 && p.worldY < 505 && !(p.worldX < 124 && p.worldY < 198)) this.beginRun();
+      if (!this.started && !this.paused && p.worldY > 84 && p.worldY < 505 && !(p.worldX > 316 && p.worldY < 84)) this.beginRun();
     });
     const steer = p => {
       if (!this.started || this.paused) return;
-      if ((p.worldY > 636 && p.worldX > 280) || (p.worldY < 84 && p.worldX > 345)) return;       // the SLOW and pause buttons
+      if ((p.worldY > 636 && p.worldX > 280) || (p.worldY < 84 && p.worldX > 316)) return;       // the SLOW and MENU buttons
       this.targetX = p.worldX;
     };
     this.input.on('pointerdown', steer);
@@ -5019,7 +5162,6 @@ class DefenseScene extends BaseScene {
       });
       if (!can) b.t.setColor('#9a90a0');
     });
-    this.button(54, 96, 84, 34, 0x3a3050, '‹ SAGAS', 13, () => this.scene.start('Sagas'));
     this.startUi = this.children.list.filter(o => !before.has(o));
     this.startUi.forEach((o, i) => o.setDepth(6000 + i));
   }

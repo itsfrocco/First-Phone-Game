@@ -61,7 +61,11 @@ orange circle). Saga 1 levels also show "DON'T FORGET TO UPGRADE!" (`remindUpgra
 taps to start without buying anything but could afford a card. HOW TO PLAY above saga 1 on the sagas screen replays the pages (owner wanted it there, not in Settings).
 
 Inside `GameScene`: the pause menu (`setPaused`; music, sound effects and screen shake switches, resume, quit),
-the level start screen (upgrade cards, Equipment menu, Store), then per frame
+opened by the MENU pill at the top right (`menuButton`, also in the stronghold; there is no SAGAS button on the start
+screens any more, owner's wish: QUIT TO SAGAS in the menu is the way back),
+the level start screen (upgrade cards; square icon buttons down the left, `button(..., icon)`: EQUIPMENT `iconGear`,
+STORE `iconStore` with a gem, SKILL TREE `iconSkill`, whose panel `showSkills` is "coming soon"; while waiting the samurai
+stand still sharpening their blades with a whetstone and cut a practice swing every 4.4s, `idlePose`), then per frame
 `updateEnemies`, `updateScroll`, `updateArmy`, `updateGates`, `updateCombat`, `updateHazards`
 (lucky charms, stone walls, spikes, then `updateBoss`), `updateStorm`, `drawBolts`, `updateHud`.
 
@@ -201,7 +205,8 @@ Saga 2 level 2 (stage 6, "The Iwagame", 15 rows): a spec's `mix` (`['iwagame', 0
 common foe into the packs, a quarter of them, with 1.5 times the health. The Iwagame ("rock turtle"; drawn from the owner's picture of a
 mossy rock turtle brute: `Art.iwagame`, `Art.iwagameBall`; the owner was happy for it not to be called an oni) walks a little faster than
 the rock oni and every 4.5-7s rolls (`CFG.enemy.iwagame.roll`, `shellRoll`): it tucks into its shell, glows orange for 0.6s with a streak
-showing its aim, then rolls fast at where the army stood; a roll that reaches a samurai takes one man and stops there. Two men a roll every
+showing its aim, then rolls fast at where the army stood; a roll that reaches a samurai takes one man and stops there. It travels curled up as a
+spinning shell (owner), at 53, about 20% faster than the rock oni, and uncurls to fight on its feet once in reach (`place`). Two men a roll every
 3-5s wiped small early armies, so it was eased. The bot does not dodge rolls.
 Its boss, the Koke Oni ("moss oni", `CFG.bosses.koke`, `Art.kokeBoss`, from the owner's picture of a mossy stone oni with a club; owner:
 "pretty cool, nothing too crazy", the fancy moves are saved for saga 2 level 3's boss): two-swing club combos, the leaping ground-pound,
