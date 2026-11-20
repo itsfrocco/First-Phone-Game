@@ -255,8 +255,12 @@ bevelled rock), `moss`, `lavaCrack`, `tile` (seamless tiles), `stride` (walking 
   the strike (Koke Oni's and the Rock Oni's clubs, the giant's spiked club, the fat demon's cleaver, the tengu's staff,
   Takemikazuchi's lightning blade); both arms go up for power attacks and follow through after; legs step; the tengu's wings
   beat slowly, hard in the air. `key + 'Full'` is each boss put together (`Art.whole`), used by the tutorial pages.
-- Next: batch 4 (gates, logs, walls, cage, coins, stronghold, buttons and menus); the Genbu ball and the stronghold's oni and
-  warlord are still in the old style.
+- Batch 4 (done): gates are lacquered torii pictures (`Art.gate`, textures `gateGood`/`gateBad`, also on the tutorial pages);
+  redrawn stone walls, logs, spikes, fence posts, villagers, the cage, the coin, the lucky cat, stone chips, Genbu's ball, and the
+  stronghold (yard, lane walls, palisade, walkway, doors, crate, boxes, recruit banner, "?" box, powder barrel, chest, archer
+  seen from behind with a bow, arrow, the brute `oni` and the warlord). Wood helpers `planks` and `band`. The stronghold's
+  zombies and demons use the walking frames too. `button` draws a rim, a lit top half, a shine line and an outline.
+  The graphics overhaul is complete for everything in the game; painted art was the bigger option offered for later.
 
 ## Working with the owner
 
