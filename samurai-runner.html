@@ -225,6 +225,10 @@ const GEAR_SLOTS = [['weapon', 'WEAPON'], ['armor', 'ARMOR'], ['necklace', 'NECK
 // Kinds not listed are neutral. Future enemies (water, metal, earth, fire...) get their entry here.
 const ELEMENT = { tenguBoss: 'flying', thunder: 'metal' };      // 'metal' means armoured
 const SAGA_LEVELS = 3;                                        // ordinary levels per saga; the stage after them is the saga boss
+// Stages and strongholds are numbered in one running order on screen (owner): saga 1 is levels 1-3, its boss 4 and its stronghold 5,
+// saga 2 starts at 6. Stage numbers inside the game (LEVELS, Save.level) are unchanged.
+const stageNo = stage => stage + Math.floor((stage - 1) / (SAGA_LEVELS + 1));
+const fortNo = saga => (saga + 1) * (SAGA_LEVELS + 2);
 const GOOD_GATES = ['+3', '+3', 'x2', '+4', '+5', '+6', 'x2', '+8', '+10', '+12', '+14', '+16', '+18', '+20', '+22', '+25', '+28', '+30'];
 // Turns a spec into positions measured in distance along the path (px).
 function layoutLevel(spec, index) {
@@ -959,6 +963,204 @@ const Art = {
   },
   shadow(c, x, y, rx) { Art.ell(c, x, y, rx, rx * 0.35, 'rgba(0,0,0,0.32)'); },
 
+  // ---- The Sagas screen (owner's picture: parchment, a title plaque with a helmet crest, a banner per saga over its own
+  // scenery, an illustrated card per level, numbered in one running order). Cards are drawn by `sagaCard`. ----
+  parchment(c, w, h) {
+    const r = Art.rng(501);
+    c.fillStyle = '#efe2c2'; c.fillRect(0, 0, w, h);
+    for (let i = 0; i < 18; i++) { const x = r() * w, y = r() * h, rx = 8 + r() * 22, ry = 6 + r() * 16, col = i % 2 ? 'rgba(190,160,110,0.12)' : 'rgba(255,250,235,0.35)'; Art.tile(w, h, x, y, (X, Y) => Art.ell(c, X, Y, rx, ry, col)); }
+    for (let i = 0; i < 120; i++) { const x = r() * w, y = r() * h, a = r() * 6.28, len = 2 + r() * 6, col = i % 3 ? 'rgba(150,120,80,0.16)' : 'rgba(255,255,255,0.4)'; Art.tile(w, h, x, y, (X, Y) => { c.strokeStyle = col; c.lineWidth = 0.5; c.beginPath(); c.moveTo(X, Y); c.lineTo(X + Math.cos(a) * len, Y + Math.sin(a) * len); c.stroke(); }); }
+  },
+  // The title plaque: a cream board with a gold-and-brown double frame, diamonds at its ends and a gold helmet crest on top.
+  sagaPlaque(c, w, h) {
+    const gold = (x0, y0, x1, y1) => Art.grad(c, x0, y0, x1, y1, [[0, '#fff0b0'], [0.5, '#d9a531'], [1, '#7a5300']]);
+    [[-1], [1]].forEach(([s]) => { const x = w / 2 + s * (w / 2 - 9); Art.blob(c, () => Art.poly(c, [[x, 36], [x + 7, 43], [x, 50], [x - 7, 43]]), gold(x - 7, 36, x + 7, 50), '#4a3200', 1); });
+    Art.blob(c, () => Art.rr(c, 18, 20, w - 36, 46, 6), '#4a2f14', null);
+    Art.blob(c, () => Art.rr(c, 20, 22, w - 40, 42, 5), gold(20, 22, 20, 64), null);
+    Art.blob(c, () => Art.rr(c, 24, 26, w - 48, 34, 4), Art.grad(c, 0, 26, 0, 60, [[0, '#fbf3dc'], [1, '#e6d4a8']]), '#6d4a1c', 1.2);
+    c.strokeStyle = 'rgba(109,74,28,0.5)'; c.lineWidth = 0.8; Art.rr(c, 28, 29, w - 56, 28, 3); c.stroke();
+    // the crest: a helmet bowl between two gold horns
+    const cx = w / 2;
+    [[-1], [1]].forEach(([s]) => Art.blob(c, () => { c.moveTo(cx + s * 4, 16); c.quadraticCurveTo(cx + s * 20, 13, cx + s * 22, 0); c.quadraticCurveTo(cx + s * 15, 10, cx + s * 3, 11); c.closePath(); }, gold(cx, 0, cx + s * 22, 16), '#4a3200', 0.9));
+    Art.blob(c, () => { c.arc(cx, 21, 9, Math.PI, 0); c.closePath(); }, Art.grad(c, cx - 9, 12, cx + 9, 21, [[0, '#6a5a3a'], [1, '#2a1e0e']]), '#1a1206', 0.9);
+    Art.ell(c, cx, 13.4, 2.2, 1.6, '#ffd54f');
+  },
+  // A saga's banner ribbon: tails folded behind, a coloured band with a gold edge, and a round badge (bamboo or mountain).
+  sagaRibbon(c, w, h, kind) {
+    const cols = { bamboo: ['#3f8a3a', '#1f5a24', '#0e3312'], mountain: ['#8a6440', '#5c3e22', '#2e1d0e'], locked: ['#7a7468', '#55504a', '#2e2b28'] }[kind];
+    [[4, 1], [w - 4, -1]].forEach(([x, s]) => Art.blob(c, () => Art.poly(c, [[x, 10], [x + s * 26, 10], [x + s * 26, 38], [x, 38], [x + s * 9, 24]]), cols[2], '#120c06', 1));   // folded tails
+    Art.blob(c, () => Art.rr(c, 18, 4, w - 36, 38, 5), Art.grad(c, 0, 4, 0, 42, [[0, cols[0]], [0.55, cols[1]], [1, cols[2]]]), '#120c06', 1.4);
+    c.strokeStyle = '#e8c25a'; c.lineWidth = 1.4; Art.rr(c, 21.5, 7.5, w - 43, 31, 3.5); c.stroke();
+    c.fillStyle = 'rgba(255,255,255,0.16)'; Art.rr(c, 23, 9, w - 46, 9, 3); c.fill();
+    const bx = 44, by = 23;                                   // the badge
+    Art.blob(c, () => c.ellipse(bx, by, 16, 16, 0, 0, 7), Art.grad(c, bx - 16, by - 16, bx + 16, by + 16, [[0, '#fff0b0'], [0.5, '#d9a531'], [1, '#7a5300']]), '#3a2600', 1);
+    Art.blob(c, () => c.ellipse(bx, by, 12.4, 12.4, 0, 0, 7), cols[1], '#3a2600', 0.8);
+    if (kind === 'bamboo') {
+      [[-4, 1], [0.5, -1], [5, 0]].forEach(([dx, t]) => { c.strokeStyle = '#a5d66a'; c.lineWidth = 2.4; c.beginPath(); c.moveTo(bx + dx, by + 10); c.lineTo(bx + dx + t, by - 10); c.stroke(); c.fillStyle = '#2f6a24'; [-4, 2].forEach(k => c.fillRect(bx + dx - 1.4, by + k, 2.8, 0.9)); });
+      Art.ell(c, bx + 8, by - 6, 4, 1.4, '#a5d66a'); Art.ell(c, bx - 8, by - 2, 4, 1.4, '#a5d66a');
+    } else {
+      Art.blob(c, () => Art.poly(c, [[bx - 10, by + 7], [bx - 2, by - 7], [bx + 2, by - 2], [bx + 5, by - 5], [bx + 11, by + 7]]), '#f3ead6', null);
+      Art.blob(c, () => Art.poly(c, [[bx - 4.6, by - 2.4], [bx - 2, by - 7], [bx + 0.6, by - 3], [bx - 1.6, by - 1.4]]), '#ffffff', null);
+      c.strokeStyle = cols[2]; c.lineWidth = 0.8; c.beginPath(); c.moveTo(bx - 6, by + 3); c.lineTo(bx - 2, by + 0); c.lineTo(bx + 2, by + 3); c.stroke();
+    }
+  },
+  // The scenery behind a saga's banner: a soft-edged band of bamboo and grass, or of misty ink-wash mountains.
+  sagaBand(c, w, h, kind) {
+    const r = Art.rng(kind === 'bamboo' ? 511 : 512);
+    if (kind === 'bamboo') {
+      c.fillStyle = Art.grad(c, 0, 0, 0, h, [[0, 'rgba(200,225,170,0)'], [0.5, 'rgba(200,225,170,0.55)'], [1, 'rgba(120,170,90,0)']]); c.fillRect(0, 0, w, h);
+      [[0, 1], [w, -1]].forEach(([x0, s]) => {
+        for (let i = 0; i < 9; i++) {
+          const x = x0 + s * (6 + i * 9 + r() * 6), top = 4 + r() * 30, far = i % 3 === 0;
+          c.strokeStyle = far ? 'rgba(90,140,70,0.5)' : '#3f7a2e'; c.lineWidth = far ? 2.4 : 3.6; c.beginPath(); c.moveTo(x, h - 20); c.lineTo(x + s * 2, top); c.stroke();
+          c.fillStyle = 'rgba(20,50,15,0.6)'; for (let y = top + 10; y < h - 24; y += 14) c.fillRect(x - 2, y, 4, 1.2);
+          for (let k = 0; k < 4; k++) { const ly = top + 4 + r() * 40; c.fillStyle = far ? 'rgba(110,160,80,0.5)' : '#5a9a3c'; c.beginPath(); c.ellipse(x + s * (6 + r() * 4), ly, 7, 1.8, s * (0.3 + r() * 0.3), 0, 7); c.fill(); }
+        }
+      });
+      c.fillStyle = Art.grad(c, 0, h - 30, 0, h, [[0, 'rgba(90,150,60,0)'], [0.5, 'rgba(90,150,60,0.6)'], [1, 'rgba(90,150,60,0)']]); c.fillRect(0, h - 30, w, 30);
+      for (let i = 0; i < 70; i++) { const x = r() * w, y = h - 12 + r() * 6; c.strokeStyle = ['#3f8a35', '#5aa845', '#2f6a2b'][i % 3]; c.lineWidth = 1; c.beginPath(); c.moveTo(x, y); c.lineTo(x + (r() - 0.5) * 3, y - 4 - r() * 5); c.stroke(); }
+    } else {
+      [[0.22, 'rgba(120,125,130,0.28)', 40], [0.5, 'rgba(90,95,100,0.35)', 60], [0.8, 'rgba(70,72,76,0.4)', 80]].forEach(([k, col, base]) => {
+        c.fillStyle = col; c.beginPath(); c.moveTo(0, h);
+        for (let x = 0; x <= w; x += 20) c.lineTo(x, base + Math.sin(x * 0.03 + k * 9) * 18 + Math.sin(x * 0.11 + k * 3) * 8 - k * 20);
+        c.lineTo(w, h); c.closePath(); c.fill();
+      });
+      c.fillStyle = Art.grad(c, 0, 0, 0, h, [[0, 'rgba(239,226,194,1)'], [0.25, 'rgba(239,226,194,0)'], [0.8, 'rgba(239,226,194,0)'], [1, 'rgba(239,226,194,1)']]); c.fillRect(0, 0, w, h);
+      [[30, 70], [370, 66]].forEach(([x, y]) => Art.pine(c, x, y, 0.8, 'rgba(50,60,50,0.5)'));
+    }
+  },
+  // A Japanese pine: a bent trunk with flat layered cloud-like foliage.
+  pine(c, x, y, s, col) {
+    c.strokeStyle = col; c.lineWidth = 3 * s; c.beginPath(); c.moveTo(x, y + 30 * s); c.quadraticCurveTo(x - 4 * s, y + 14 * s, x + 3 * s, y); c.stroke();
+    [[0, -4, 16, 5], [-10, 6, 12, 4], [11, 10, 11, 4], [-3, 16, 14, 4]].forEach(([dx, dy, rx, ry]) => { c.fillStyle = col; c.beginPath(); c.ellipse(x + dx * s, y + dy * s, rx * s, ry * s, 0, 0, 7); c.fill(); });
+  },
+  // Scenes for the cards, each filling the box (x, y, w, h).
+  scene(c, kind, x, y, w, h, r) {
+    c.save(); c.translate(x, y);
+    const sky = stops => { c.fillStyle = Art.grad(c, 0, 0, 0, h, stops); c.fillRect(0, 0, w, h); };
+    const range = (base, amp, col, k) => { c.fillStyle = col; c.beginPath(); c.moveTo(0, h); for (let px = 0; px <= w; px += 6) c.lineTo(px, base - Math.abs(Math.sin(px * 0.045 + k)) * amp - Math.sin(px * 0.13 + k * 2) * amp * 0.25); c.lineTo(w, h); c.closePath(); c.fill(); };
+    const peaks = (base, amp, col, snow, k) => {
+      const pts = []; for (let px = -10; px <= w + 10; px += 22 + (k * 7) % 9) pts.push([px, base - amp * (0.5 + 0.5 * Math.abs(Math.sin(px * 0.07 + k)))]);
+      pts.forEach(([px, py], i) => { if (i % 2) return; });
+      c.fillStyle = col; c.beginPath(); c.moveTo(-10, h);
+      pts.forEach(([px, py], i) => { c.lineTo(px, py); if (i < pts.length - 1) c.lineTo((px + pts[i + 1][0]) / 2, base); });
+      c.lineTo(w + 10, h); c.closePath(); c.fill();
+      if (snow) pts.forEach(([px, py], i) => { if (i % 2 === 0) Art.poly(c, [[px, py], [px - 6, py + 9], [px - 2, py + 7], [px + 1, py + 10], [px + 6, py + 8]]); c.fillStyle = snow; c.fill(); });
+    };
+    const bamboo = (x0, col, wd, n) => { for (let i = 0; i < n; i++) { const bx = x0 + i * (w / n) + r() * 6; c.strokeStyle = col; c.lineWidth = wd; c.beginPath(); c.moveTo(bx, h); c.lineTo(bx + (r() - 0.5) * 4, -4); c.stroke(); c.fillStyle = 'rgba(0,0,0,0.25)'; for (let yy = 8 + r() * 10; yy < h; yy += 16) c.fillRect(bx - wd / 2, yy, wd, 1); c.fillStyle = col; for (let k = 0; k < 3; k++) { c.beginPath(); c.ellipse(bx + (r() < 0.5 ? -6 : 6), r() * h * 0.7, 6, 1.6, (r() - 0.5) * 1.2, 0, 7); c.fill(); } } };
+    const torii = (tx, ty, s, col) => { c.fillStyle = col; c.fillRect(tx - 14 * s, ty - 20 * s, 3 * s, 22 * s); c.fillRect(tx + 11 * s, ty - 20 * s, 3 * s, 22 * s); c.fillRect(tx - 17 * s, ty - 16 * s, 34 * s, 2.4 * s); c.beginPath(); c.moveTo(tx - 20 * s, ty - 23 * s); c.quadraticCurveTo(tx, ty - 19 * s, tx + 20 * s, ty - 23 * s); c.lineTo(tx + 18 * s, ty - 19.6 * s); c.quadraticCurveTo(tx, ty - 17 * s, tx - 18 * s, ty - 19.6 * s); c.closePath(); c.fill(); };
+    if (kind === 'bamboo') {
+      sky([[0, '#e9f2cf'], [0.6, '#b9d68e'], [1, '#6a9a44']]);
+      bamboo(0, 'rgba(120,170,90,0.45)', 3, 7); bamboo(4, 'rgba(70,125,50,0.75)', 4, 5);
+      c.fillStyle = 'rgba(240,245,220,0.35)'; c.fillRect(0, h * 0.55, w, h * 0.2);
+      range(h - 10, 6, '#3f6a2a', 1);
+      for (let i = 0; i < 40; i++) { const gx = r() * w; c.strokeStyle = ['#2f5a22', '#4f8a35'][i % 2]; c.lineWidth = 1; c.beginPath(); c.moveTo(gx, h); c.lineTo(gx + (r() - 0.5) * 3, h - 6 - r() * 8); c.stroke(); }
+      bamboo(-6, '#2f5a22', 5, 2);
+    } else if (kind === 'sunset') {
+      sky([[0, '#4a0e12'], [0.45, '#c2361e'], [0.8, '#f08a3a'], [1, '#f6c46a']]);
+      Art.ell(c, w * 0.62, h * 0.62, 22, 22, 'rgba(255,220,140,0.85)');
+      range(h * 0.82, 10, '#5a1a14', 2);
+      bamboo(0, 'rgba(40,8,8,0.9)', 4, 3); bamboo(w * 0.72, 'rgba(40,8,8,0.9)', 4, 3);
+      torii(w * 0.78, h - 8, 1.2, '#2a0606');
+      c.fillStyle = '#2a0606'; c.fillRect(0, h - 10, w, 10);
+    } else if (kind === 'fort') {
+      sky([[0, '#8cc4ec'], [0.7, '#d8ecf6'], [1, '#e8f0e0']]);
+      [[30, 16], [w - 50, 22], [w * 0.5, 12]].forEach(([cx, cy]) => { Art.ell(c, cx, cy, 20, 5, 'rgba(255,255,255,0.8)'); Art.ell(c, cx + 8, cy - 3, 12, 5, 'rgba(255,255,255,0.8)'); });
+      range(h * 0.62, 14, 'rgba(120,150,170,0.55)', 4);
+      Art.pine(c, 22, h * 0.36, 1.2, '#2e4a2a'); Art.pine(c, w - 26, h * 0.32, 1.3, '#2e4a2a');
+      c.fillStyle = '#4f8a35'; c.fillRect(0, h - 14, w, 14);
+      for (let px = 8; px < w - 8; px += 7) {                 // the palisade
+        if (Math.abs(px - w / 2) < 22) continue;
+        c.fillStyle = Art.grad(c, px, 0, px + 7, 0, [[0, '#5d4037'], [0.5, '#a07c5c'], [1, '#3e2a1c']]);
+        c.beginPath(); c.moveTo(px, h - 10); c.lineTo(px, h - 32); c.lineTo(px + 3.5, h - 37); c.lineTo(px + 7, h - 32); c.lineTo(px + 7, h - 10); c.closePath(); c.fill();
+      }
+      c.fillStyle = '#3e2a1c'; c.fillRect(8, h - 25, w - 16, 2);
+      torii(w / 2, h - 10, 1.4, '#3e2a1c'); c.fillStyle = '#2a1a10'; c.fillRect(w / 2 - 16, h - 32, 32, 22);
+      [[w / 2 - 34, 1], [w / 2 + 30, 1]].forEach(([bx]) => { c.fillStyle = '#3e2a1c'; c.fillRect(bx, h - 52, 1.6, 22); c.fillStyle = '#1e6fd0'; c.fillRect(bx + 1.6, h - 52, 7, 13); Art.ell(c, bx + 5, h - 46, 1.8, 1.8, '#fff'); });
+    } else if (kind === 'mountain' || kind === 'peak' || kind === 'summit' || kind === 'dusk' || kind === 'mfort') {
+      const dusk = kind === 'dusk' || kind === 'mfort';
+      sky(dusk ? [[0, '#2a2a3e'], [0.6, '#6a5a72'], [1, '#b08a7a']] : [[0, '#c9dbe6'], [0.7, '#eef2ee'], [1, '#d8dccc']]);
+      peaks(h * 0.55, h * 0.4, dusk ? '#3a3a4a' : '#9aa6b0', dusk ? null : '#ffffff', kind.length);
+      c.fillStyle = dusk ? 'rgba(180,150,160,0.3)' : 'rgba(255,255,255,0.45)'; c.fillRect(0, h * 0.5, w, h * 0.12);
+      range(h * 0.82, 12, dusk ? '#262632' : '#6e7468', 3);
+      Art.pine(c, 14, h * 0.6, 1, dusk ? '#14141c' : '#2e4a2a'); Art.pine(c, w - 18, h * 0.56, 1.1, dusk ? '#14141c' : '#2e4a2a');
+      if (kind === 'mountain') for (let k = 0; k < 6; k++) { c.fillStyle = k % 2 ? '#a39a86' : '#8d8472'; c.fillRect(w / 2 - 12 + k * 1.5, h - 6 - k * 5, 24 - k * 3, 4); }   // stone steps
+      if (kind === 'summit') torii(w / 2, h * 0.62, 0.9, '#8e2a1c');
+      if (kind === 'mfort') { c.fillStyle = '#14141c'; c.fillRect(w * 0.2, h - 34, w * 0.6, 24); for (let px = w * 0.2; px < w * 0.8; px += 8) c.fillRect(px, h - 39, 5, 5); c.fillRect(w * 0.45, h - 54, w * 0.1, 22); }
+      c.fillStyle = dusk ? '#1c1c26' : '#5d6458'; c.fillRect(0, h - 8, w, 8);
+    } else if (kind === 'ice') {
+      sky([[0, '#a8d4ee'], [1, '#eaf6fc']]);
+      peaks(h * 0.6, h * 0.45, '#cfe6f4', '#ffffff', 2); range(h * 0.85, 10, '#ffffff', 1);
+      for (let i = 0; i < 30; i++) Art.ell(c, r() * w, r() * h, 0.9, 0.9, '#ffffff');
+      Art.pine(c, w - 24, h * 0.55, 1, '#4a6a7a');
+    } else if (kind === 'ember') {
+      sky([[0, '#1a0806'], [0.6, '#6a1a0e'], [1, '#c2361e']]);
+      peaks(h * 0.62, h * 0.48, '#2a0e0a', null, 5);
+      c.strokeStyle = '#ff8a3a'; c.lineWidth = 1.4; c.beginPath(); c.moveTo(w * 0.42, h * 0.2); c.lineTo(w * 0.46, h * 0.45); c.lineTo(w * 0.43, h * 0.7); c.stroke();
+      c.fillStyle = '#140604'; c.fillRect(w * 0.55, h - 40, w * 0.35, 30); for (let px = w * 0.55; px < w * 0.9; px += 7) c.fillRect(px, h - 45, 4, 5);
+      for (let i = 0; i < 18; i++) Art.ell(c, r() * w, r() * h, 0.9, 0.9, '#ffb04a');
+    } else if (kind === 'demon') {
+      sky([[0, '#140a1e'], [0.7, '#3e1a4a'], [1, '#6a2a5a']]);
+      range(h * 0.8, 10, '#1a0e22', 2);
+      c.fillStyle = '#0a0410'; c.fillRect(w * 0.3, h * 0.28, 8, h * 0.6); c.fillRect(w * 0.7 - 8, h * 0.28, 8, h * 0.6);   // the gate
+      c.beginPath(); c.moveTo(w * 0.22, h * 0.24); c.quadraticCurveTo(w * 0.5, h * 0.3, w * 0.78, h * 0.24); c.lineTo(w * 0.76, h * 0.32); c.quadraticCurveTo(w * 0.5, h * 0.36, w * 0.24, h * 0.32); c.closePath(); c.fill();
+      [[0.24, -1], [0.76, 1]].forEach(([k, s]) => Art.tri(c, [w * k, h * 0.26], [w * k + s * 10, h * 0.08], [w * k + s * 2, h * 0.3], '#0a0410'));
+      Art.ell(c, w * 0.5, h * 0.62, w * 0.14, h * 0.25, 'rgba(200,60,200,0.35)');
+      c.fillStyle = '#0a0410'; c.fillRect(0, h - 8, w, 8);
+    }
+    c.restore();
+  },
+  padlock(c, x, y, s) {
+    c.strokeStyle = '#2a2a30'; c.lineWidth = 4 * s; c.beginPath(); c.arc(x, y - 3 * s, 6 * s, Math.PI, 0); c.stroke();
+    c.strokeStyle = '#b8bec6'; c.lineWidth = 2.2 * s; c.beginPath(); c.arc(x, y - 3 * s, 6 * s, Math.PI, 0); c.stroke();
+    Art.blob(c, () => Art.rr(c, x - 9 * s, y - 3 * s, 18 * s, 14 * s, 3 * s), Art.grad(c, x - 9 * s, y - 3 * s, x + 9 * s, y + 11 * s, [[0, '#8a9098'], [1, '#2e3238']]), '#16181c', 1.2);
+    Art.ell(c, x, y + 2.6 * s, 2 * s, 2 * s, '#16181c'); c.fillStyle = '#16181c'; c.fillRect(x - 0.8 * s, y + 3 * s, 1.6 * s, 4.4 * s);
+  },
+  // One level card: a framed illustration with a coloured header strip, the level's boss in it (or a dark silhouette),
+  // greyed out with a padlock when locked. The header words and the name are written over it as text.
+  sagaCard(c, w, h, o) {
+    const r = Art.rng(o.seed || 7), head = 17, pad = 4;
+    Art.rr(c, 1, 3, w - 2, h - 3, 7); c.fillStyle = 'rgba(60,40,10,0.35)'; c.fill();
+    Art.blob(c, () => Art.rr(c, 1, 1, w - 2, h - 3, 7), Art.grad(c, 0, 0, 0, h, [[0, '#f0d27a'], [0.5, '#c99a3a'], [1, '#8a6418']]), '#4a3200', 1.2);
+    Art.blob(c, () => Art.rr(c, 3.5, 3.5, w - 7, h - 8, 5), '#f6ecd2', null);
+    const ix = pad + 1, iy = pad + head, iw = w - pad * 2 - 2, ih = h - head - pad * 2 - 3;
+    c.save(); Art.rr(c, ix, iy, iw, ih, 3); c.clip();
+    Art.scene(c, o.scene, ix, iy, iw, ih, r);
+    if (o.img) {                                              // the boss, standing on the ground of the scene
+      const m = o.margin || 0, iw2 = o.img.width / R, ih2 = o.img.height / R, s = Math.min((ih * (o.fill || 0.95)) / (ih2 - m * 2), (iw * 0.9) / (iw2 - m * 2));
+      const dx = ix + iw * (o.at || 0.5) - iw2 * s / 2, dy = iy + ih - (ih2 - m) * s + 3;          // feet on the ground of the scene
+      if (o.dark) {
+        const cv = document.createElement('canvas'); cv.width = o.img.width; cv.height = o.img.height;
+        const cc = cv.getContext('2d'); cc.drawImage(o.img, 0, 0); cc.globalCompositeOperation = 'source-in'; cc.fillStyle = o.dark; cc.fillRect(0, 0, cv.width, cv.height);
+        c.save(); c.shadowColor = o.glow || 'rgba(0,0,0,0)'; c.shadowBlur = 8; c.drawImage(cv, dx, dy, iw2 * s, ih2 * s); c.restore();
+      } else c.drawImage(o.img, dx, dy, iw2 * s, ih2 * s);
+    }
+    c.fillStyle = Art.grad(c, 0, iy, 0, iy + ih, [[0, 'rgba(0,0,0,0.28)'], [0.3, 'rgba(0,0,0,0)'], [0.8, 'rgba(0,0,0,0)'], [1, 'rgba(0,0,0,0.25)']]); c.fillRect(ix, iy, iw, ih);
+    if (o.locked) {
+      c.globalAlpha = 0.65; c.globalCompositeOperation = 'saturation'; c.fillStyle = '#808080'; c.fillRect(ix, iy, iw, ih);
+      c.globalAlpha = 1; c.globalCompositeOperation = 'source-over'; c.fillStyle = 'rgba(40,30,22,0.22)'; c.fillRect(ix, iy, iw, ih);
+    }
+    c.restore();
+    c.strokeStyle = '#6d4a1c'; c.lineWidth = 1; Art.rr(c, ix, iy, iw, ih, 3); c.stroke();
+    const hc = o.locked ? ['#8a847a', '#5a554e'] : o.head;
+    Art.blob(c, () => Art.rr(c, pad, pad, w - pad * 2, head, 3), Art.grad(c, 0, pad, 0, pad + head, [[0, hc[0]], [1, hc[1]]]), '#2a1a08', 1);
+    c.fillStyle = 'rgba(255,255,255,0.2)'; c.fillRect(pad + 2, pad + 1.5, w - pad * 2 - 4, 3);
+    if (o.wide) [[pad + 10], [w - pad - 10]].forEach(([dx]) => Art.blob(c, () => Art.poly(c, [[dx, pad + 4], [dx + 4.4, pad + head / 2], [dx, pad + head - 4], [dx - 4.4, pad + head / 2]]), '#ffd54f', '#5a3a00', 0.6));
+    if (o.locked) Art.padlock(c, w / 2, iy + ih * (o.wide ? 0.62 : 0.72), o.wide ? 1.1 : 1);
+  },
+  // A green badge with a white tick for a cleared level.
+  sagaCheck(c) {
+    Art.blob(c, () => c.ellipse(13, 13, 11.5, 11.5, 0, 0, 7), Art.grad(c, 2, 2, 24, 24, [[0, '#fff0b0'], [1, '#8a6418']]), '#3a2600', 1);
+    Art.blob(c, () => c.ellipse(13, 13, 9, 9, 0, 0, 7), Art.grad(c, 4, 4, 22, 22, [[0, '#6fcf5a'], [1, '#1f6a1a']]), '#0e3a0c', 0.8);
+    c.strokeStyle = '#ffffff'; c.lineWidth = 2.6; c.beginPath(); c.moveTo(8.4, 13.4); c.lineTo(11.8, 16.6); c.lineTo(17.8, 9.6); c.stroke();
+  },
+  // The round back button: a gold ring around a cream disc with a dark arrow.
+  sagaBack(c) {
+    Art.ell(c, 22, 24, 20, 20, 'rgba(60,40,10,0.35)');
+    Art.blob(c, () => c.ellipse(22, 22, 20, 20, 0, 0, 7), Art.grad(c, 2, 2, 42, 42, [[0, '#fff0b0'], [0.5, '#d9a531'], [1, '#7a5300']]), '#3a2600', 1.2);
+    Art.blob(c, () => c.ellipse(22, 22, 15.4, 15.4, 0, 0, 7), Art.grad(c, 7, 7, 37, 37, [[0, '#fbf3dc'], [1, '#e0cc9a']]), '#6d4a1c', 1);
+    Art.blob(c, () => Art.poly(c, [[12, 22], [21, 13.4], [21, 18.6], [31, 18.6], [31, 25.4], [21, 25.4], [21, 30.6]]), '#3a2a14', null);
+  },
   // ---- Helpers for the detailed look (light from the upper left, dark outlines, flecked texture, bevelled stone) ----
   // A repeatable random sequence, so a texture comes out the same every time (and matches its overlays).
   // A boss put together at rest, for menus and the tutorial: limbs behind, the body, limbs in front.
@@ -2523,66 +2725,101 @@ class MenuScene extends MenuBase {
 
 class SagaScene extends MenuBase {
   constructor() { super('Sagas'); }
+  // Owner's design (art-reference/menu-sagas-screen.jpg): a parchment page that scrolls, a banner for each saga over its own
+  // scenery, and an illustrated card for every stage, numbered in one running order (`stageNo`, `fortNo`).
+  card(key, w, h, o) {
+    if (!this.textures.exists(key)) Art.make(this, key, w, h, (c, ww, hh) => Art.sagaCard(c, ww, hh, Object.assign({ img: o.boss ? this.textures.get(o.boss + 'Full').getSourceImage() : o.tex && this.textures.get(o.tex).getSourceImage(), margin: o.boss ? 30 : 0 }, o)));
+    return key;
+  }
   create() {
-    this.backdrop('SAGAS');
-    const numerals = ['I', 'II', 'III', 'IV', 'V'];
-    // How to play: replays the tutorial pages.
-    this.button(W / 2, 92, 368, 34, 0x00695c, '?  HOW TO PLAY', 14, () => this.scene.start('Tutorial', {}));
-    // Saga 1: open, with its three levels.
-    this.panel(W / 2, 258, 368, 272);
-    this.txt(34, 146, numerals[0] + ' · ' + SAGAS[0].toUpperCase(), 17, '#ffd54f', { fit: 190 }).setOrigin(0, 0.5);
-    if (Save.civilians > 0) this.txt(W - 34, 146, 'Civilians saved: ' + Save.civilians, 12, '#a5d6a7', { fontStyle: 'normal', fit: 136 }).setOrigin(1, 0.5);
-    this.txt(34, 168, Save.level > SAGA_LEVELS + 1 ? 'saga cleared' : Save.level > SAGA_LEVELS ? 'the saga boss awaits' : 'level ' + Save.level + ' of ' + SAGA_LEVELS, 12, '#cfc3d6', { fontStyle: 'normal' }).setOrigin(0, 0.5);
+    this.setupCamera();
+    Music.set('menu');
+    const make = (k, w, h, fn) => { if (!this.textures.exists(k)) Art.make(this, k, w, h, fn); };
+    make('parchment', 128, 128, Art.parchment); make('sagaPlaque', 240, 70, Art.sagaPlaque); make('sagaCheck', 26, 26, Art.sagaCheck); make('sagaBack', 44, 46, Art.sagaBack);
+    ['bamboo', 'mountain', 'locked'].forEach(k => make('ribbon_' + k, 320, 46, (c, w, h) => Art.sagaRibbon(c, w, h, k)));
+    ['bamboo', 'mountain'].forEach(k => make('band_' + k, 400, 130, (c, w, h) => Art.sagaBand(c, w, h, k)));
+    const PAGE = 1215;
+    this.add.tileSprite(W / 2, PAGE / 2, W, PAGE + 40, 'parchment').setTileScale(S);
+    this.add.particles(0, 0, 'petal', { x: { min: 0, max: W }, y: -10, lifespan: 9000, speedY: { min: 30, max: 70 }, speedX: { min: -25, max: 10 },
+      scale: S, rotate: { start: 0, end: 360 }, frequency: 600, alpha: 0.7 }).setScrollFactor(0).setDepth(40);
+    this.taps = [];
+    const tap = (x, y, w, h, fn) => this.taps.push({ x0: x - w / 2, y0: y - h / 2, x1: x + w / 2, y1: y + h / 2, fn });
+    let current = null;
+    // A card: its picture, the header words, the name, a tick when cleared, a glow on the next one to play.
+    const place = (x, y, w, h, key, o) => {
+      const locked = !o.open;
+      this.img(x, y, this.card(key + (locked ? '_off' : ''), w, h, Object.assign({ locked }, o.art)));
+      this.txt(x, y - h / 2 + 12.5, o.head, o.wide ? 12 : 11, '#fff8e1', { stroke: '#2a1a08', strokeThickness: 3, fit: w - 34 });
+      if (o.title) this.txt(x, y - h / 2 + (o.wide ? 34 : 33), o.title, o.wide ? 15 : 11, locked ? '#e0d8cc' : '#fff8e1',
+        Object.assign({ stroke: '#1a0e04', strokeThickness: 4, align: 'center' }, o.wide ? { fit: w - 20 } : { wordWrap: { width: w - 12 } }));
+      if (o.sub) this.txt(x, y + h / 2 - 16, o.sub, 10, '#f0e6d2', { stroke: '#1a0e04', strokeThickness: 3, fit: w - 16 });
+      if (o.done) this.img(x, y + h / 2 - 4, 'sagaCheck').setDepth(30);
+      if (o.open && !o.done && !current) {
+        current = y;
+        const g = this.add.graphics(); g.lineStyle(3, 0xffd54f, 1).strokeRoundedRect(x - w / 2 - 2, y - h / 2 - 2, w + 4, h + 1, 9);
+        this.tweens.add({ targets: g, alpha: 0.25, duration: 700, yoyo: true, repeat: -1 });
+      }
+      tap(x, y, w, h, () => { if (!o.open || !o.go) { Sound.play('deny'); return; } Sound.play('click'); o.go(); });
+    };
+    const lvl = L => L.name;
+    // How to play (owner: here, above saga 1), then saga 1.
+    this.button(W / 2, 102, 368, 30, 0x00695c, '?  HOW TO PLAY', 13, () => { if (!this.dragged && this.input.activePointer.y / R > 78) this.scene.start('Tutorial', {}); });
+    this.img(W / 2, 190, 'band_bamboo');
+    this.img(W / 2, 148, 'ribbon_bamboo');
+    this.txt(W / 2 + 18, 147, 'I · ' + SAGAS[0].toUpperCase(), 19, '#fff8e1', { stroke: '#0e2a0c', strokeThickness: 4, fit: 230 });
+    if (Save.civilians > 0) this.txt(W / 2, 178, 'Civilians saved: ' + Save.civilians, 11, '#3e5a2a', { fit: 300 });
+    const green = ['#4f9a3a', '#1f5a24'], red = ['#d84a2a', '#7a1a0e'], blue = ['#3a7ad8', '#163a7a'], brown = ['#a07a4a', '#5c3e22'];
+    const s1boss = ['giant', 'tenguBoss', 'boss'];
     LEVELS.slice(0, SAGA_LEVELS).forEach((L, i) => {
-      const n = i + 1, x = 82 + i * 118, open = n <= Save.level, done = n < Save.level;
-      const b = this.button(x, 246, 104, 96, open ? (done ? 0x2e7d32 : 0xc62828) : 0x3a3444, open ? String(n) : '—', 34, () => {
-        if (!open) { Sound.play('deny'); return; }
-        if (n === 1 && !Save.tutorial) this.scene.start('Tutorial', { then: 1 });      // first time: learn the basics first
-        else this.scene.start('Game', { level: n });
-      });
-      b.t.y -= 12; if (!open) b.t.setColor('#8a8094');
-      this.txt(x, 272, open ? L.name : 'LOCKED', 10, open ? '#fff' : '#8a8094', { align: 'center', wordWrap: { width: 96 } });
-      if (done) this.txt(x + 38, 212, '✓', 16, '#fff59d');
+      const n = i + 1, x = 73 + i * 127;
+      place(x, 268, 114, 150, 'sc_s1_' + n, { open: n <= Save.level, done: n < Save.level, head: 'LEVEL ' + stageNo(n), title: lvl(L),
+        art: { scene: 'bamboo', head: green, boss: s1boss[i], seed: n, fill: 0.66 },
+        go: () => { if (n === 1 && !Save.tutorial) this.scene.start('Tutorial', { then: 1 }); else this.scene.start('Game', { level: n }); } });
     });
-    // The saga's major boss, fought after level 3.
-    const bossOpen = Save.level > SAGA_LEVELS, bossDone = Save.level > SAGA_LEVELS + 1;
-    const boss = this.button(W / 2, 322, 340, 40, bossDone ? 0x2e7d32 : bossOpen ? 0x6a1b9a : 0x3a3444,
-      bossOpen ? 'SAGA BOSS · ' + LEVELS[SAGA_LEVELS].name.toUpperCase() + (bossDone ? '  ✓' : '') : 'SAGA BOSS · LOCKED', 14, () => {
-        if (!bossOpen) { Sound.play('deny'); return; }
-        this.scene.start('Game', { level: SAGA_LEVELS + 1 });
-      });
-    if (!bossOpen) boss.t.setColor('#8a8094');
-    // Then the land has to be held: the stronghold defence. Saga 2 stays shut until it is.
-    const fortDone = Save.forts >= 1;
-    const fort = this.button(W / 2, 368, 340, 40, !bossDone ? 0x3a3444 : fortDone ? 0x2e7d32 : 0xb26a00,
-      !bossDone ? 'DEFEND THE COMPOUND · LOCKED' : 'DEFEND THE COMPOUND' + (fortDone ? '  ✓' : ''), 14, () => {
-        if (!bossDone) { Sound.play('deny'); return; }
-        this.scene.start('Defense', { saga: 0 });
-      });
-    if (!bossDone) fort.t.setColor('#8a8094');
-    // Saga 2: opens once the first saga's boss is beaten. Its three levels exist; its saga boss does not yet.
-    const first2 = SAGA_LEVELS + 2, open2 = Save.level >= first2 && fortDone;          // stage number of saga 2, level 1
-    this.panel(W / 2, 478, 368, 156, open2 ? 0.92 : 0.7);
-    this.txt(34, 418, numerals[1] + ' · ' + SAGAS[1].toUpperCase(), 17, open2 ? '#ffd54f' : '#8a8094').setOrigin(0, 0.5);
-    this.txt(34, 438, !open2 ? (bossDone ? 'defend the compound to unlock' : 'defeat the saga boss to unlock') : Save.level > first2 + SAGA_LEVELS - 1 ? 'levels cleared · saga boss coming soon' : 'level ' + (Save.level - first2 + 1) + ' of ' + SAGA_LEVELS, 12, open2 ? '#cfc3d6' : '#6f6678', { fontStyle: 'normal' }).setOrigin(0, 0.5);
+    const bossOpen = Save.level > SAGA_LEVELS, bossDone = Save.level > SAGA_LEVELS + 1, fortDone = Save.forts >= 1;
+    place(W / 2, 400, 368, 100, 'sc_s1_boss', { wide: true, open: bossOpen, done: bossDone, head: 'LEVEL ' + stageNo(SAGA_LEVELS + 1), title: 'SAGA BOSS · ' + LEVELS[SAGA_LEVELS].name.toUpperCase(),
+      art: { scene: 'sunset', head: red, boss: 'thunder', dark: '#1a0606', glow: 'rgba(190,140,255,0.9)', at: 0.36, fill: 0.95, seed: 4, wide: true },
+      go: () => this.scene.start('Game', { level: SAGA_LEVELS + 1 }) });
+    place(W / 2, 510, 368, 100, 'sc_s1_fort', { wide: true, open: bossDone, done: fortDone, head: 'LEVEL ' + fortNo(0), title: 'DEFEND THE COMPOUND',
+      art: { scene: 'fort', head: blue, seed: 5, wide: true }, go: () => this.scene.start('Defense', { saga: 0 }) });
+    // Saga 2: opens once the compound is held. Its three levels exist; its saga boss and stronghold do not yet.
+    const first2 = SAGA_LEVELS + 2, open2 = Save.level >= first2 && fortDone;
+    this.img(W / 2, 612, 'band_mountain');
+    this.img(W / 2, 592, open2 ? 'ribbon_mountain' : 'ribbon_locked');
+    this.txt(W / 2 + 18, 591, 'II · ' + SAGAS[1].toUpperCase(), 19, open2 ? '#fff8e1' : '#e0d8cc', { stroke: '#2a1a08', strokeThickness: 4, fit: 230 });
+    const s2 = [['rockBoss', 'mountain'], ['kokeBoss', 'peak'], ['genbu', 'summit']];
     for (let k = 0; k < SAGA_LEVELS; k++) {
-      const n = first2 + k, L = LEVELS[n - 1], x = 82 + k * 118, open = !!L && open2 && Save.level >= n, done = open && Save.level > n;
-      const b = this.button(x, 498, 104, 76, open ? (done ? 0x2e7d32 : 0xc62828) : 0x3a3444, open ? String(k + 1) : '—', 28, () => {
-        if (!open) { Sound.play('deny'); return; }
-        this.scene.start('Game', { level: n });
-      });
-      b.t.y -= 10; if (!open) b.t.setColor('#8a8094');
-      this.txt(x, 520, open ? L.name : L ? 'LOCKED' : 'COMING SOON', 10, open ? '#fff' : '#8a8094', { fit: 104 });
-      if (done) this.txt(x + 38, 472, '✓', 16, '#fff59d');
+      const n = first2 + k, L = LEVELS[n - 1], x = 73 + k * 127, open = !!L && open2 && Save.level >= n;
+      place(x, 700, 114, 150, 'sc_s2_' + (k + 1), { open, done: open && Save.level > n, head: 'LEVEL ' + stageNo(n), title: L ? lvl(L) : 'COMING SOON',
+        art: { scene: s2[k][1], head: brown, boss: s2[k][0], seed: 10 + k, fill: 0.6 }, go: () => this.scene.start('Game', { level: n }) });
     }
-    // Sagas 3-5: locked.
-    for (let i = 2; i < SAGAS.length; i++) {
-      const y = 590 + (i - 2) * 45;
-      this.panel(W / 2, y, 368, 40, 0.7);
-      this.txt(34, y, numerals[i] + ' · ' + SAGAS[i].toUpperCase(), 15, '#8a8094', { fit: 176 }).setOrigin(0, 0.5);
-      this.txt(256, y, 'coming soon', 11, '#6f6678', { fontStyle: 'normal', fit: 84 });
-      this.txt(338, y, 'LOCKED', 12, '#8a8094', { fit: 64 });
-    }
+    place(W / 2, 826, 368, 80, 'sc_s2_boss', { wide: true, open: false, head: 'LEVEL ' + stageNo(first2 + SAGA_LEVELS), title: 'SAGA BOSS', sub: 'COMING SOON',
+      art: { scene: 'dusk', head: red, tex: 'warlord', dark: '#0c0c14', glow: 'rgba(255,90,60,0.7)', at: 0.5, fill: 0.85, seed: 14, wide: true } });
+    place(W / 2, 916, 368, 80, 'sc_s2_fort', { wide: true, open: false, head: 'LEVEL ' + fortNo(1), title: 'DEFEND THE COMPOUND', sub: 'COMING SOON',
+      art: { scene: 'mfort', head: blue, seed: 15, wide: true } });
+    // Sagas 3-5: locked, each with its own land.
+    [['ice', 106, 1020], ['ember', 294, 1020], ['demon', 200, 1135]].forEach(([scene, x, y], j) => {
+      const i = j + 2;
+      place(x, y, 180, 104, 'sc_saga' + (i + 1), { open: false, wide: true, head: ['I', 'II', 'III', 'IV', 'V'][i] + ' · ' + SAGAS[i].toUpperCase(), sub: 'coming soon',
+        art: { scene, head: brown, seed: 20 + i, wide: true } });
+    });
+    // The title bar stays put while the page scrolls under it.
+    const bar = [this.add.tileSprite(W / 2, 38, W, 76, 'parchment').setTileScale(S), this.add.rectangle(W / 2, 77, W, 3, 0x6d4a1c, 0.6),
+      this.img(W / 2, 40, 'sagaPlaque'), this.txt(W / 2, 47, 'SAGAS', 26, '#5a3410', { stroke: '#fff3d6', strokeThickness: 3 }), this.img(34, 40, 'sagaBack')];
+    bar.forEach((o, i) => o.setScrollFactor(0).setDepth(60 + i));
+    // Scrolling with a finger; a tap (little movement) opens the card under it.
+    const cam = this.cameras.main, maxY = PAGE - H;
+    cam.scrollY = clamp((current || 0) - 300, 0, maxY);
+    let downY = 0, startScroll = 0;
+    this.input.on('pointerdown', p => { downY = p.y / R; startScroll = cam.scrollY; this.dragged = false; });
+    this.input.on('pointermove', p => { if (!p.isDown) return; const dy = p.y / R - downY; if (Math.abs(dy) > 8) this.dragged = true; if (this.dragged) cam.scrollY = clamp(startScroll - dy, 0, maxY); });
+    this.input.on('pointerup', p => {
+      if (this.dragged) return;
+      const sx = p.x / R, sy = p.y / R;
+      if (sy < 78) { if (sx < 64) { Sound.play('click'); this.scene.start('Menu'); } return; }
+      const wy = sy + cam.scrollY, t = this.taps.find(t => sx > t.x0 && sx < t.x1 && wy > t.y0 && wy < t.y1);
+      if (t) t.fn();
+    });
   }
 }
 
@@ -2890,7 +3127,7 @@ class GameScene extends BaseScene {
     this.syncArmy(true);
     this.sagaPos = (this.levelNo - 1) % (SAGA_LEVELS + 1);                 // 0-2: levels 1-3 of the saga; 3: its boss
     this.isSagaBoss = this.sagaPos === SAGA_LEVELS;
-    this.stageName = this.isSagaBoss ? 'SAGA BOSS' : 'LEVEL ' + (this.sagaPos + 1);
+    this.stageName = this.isSagaBoss ? 'SAGA BOSS' : 'LEVEL ' + stageNo(this.levelNo);
     this.banner(this.stageName, this.L.name);
     this.showStartUi();
     this.input.on('pointerdown', p => {
@@ -4592,7 +4829,7 @@ class GameScene extends BaseScene {
     this.img(W / 2 - 62, 346, 'soul').setScale(S * 1.6).setDepth(D + 1);
     this.txt(W / 2 + 6, 346, '+' + coins(this.earned) + ' coins', 24, '#ffe082').setDepth(D + 1);
     const hasNext = this.levelNo < LEVELS.length, nextSaga = SAGAS[Math.floor(this.levelNo / (SAGA_LEVELS + 1))];
-    if (unlocked) this.txt(W / 2, 390, !hasNext ? 'MORE LEVELS COMING SOON' : this.isSagaBoss ? (Save.forts > Math.floor((this.levelNo - 1) / (SAGA_LEVELS + 1)) ? nextSaga.toUpperCase() + ' UNLOCKED' : 'NOW DEFEND THE COMPOUND') : this.sagaPos === SAGA_LEVELS - 1 ? 'SAGA BOSS UNLOCKED' : 'LEVEL ' + (this.sagaPos + 2) + ' UNLOCKED', 16, '#fff59d').setDepth(D + 1);
+    if (unlocked) this.txt(W / 2, 390, !hasNext ? 'MORE LEVELS COMING SOON' : this.isSagaBoss ? (Save.forts > Math.floor((this.levelNo - 1) / (SAGA_LEVELS + 1)) ? nextSaga.toUpperCase() + ' UNLOCKED' : 'NOW DEFEND THE COMPOUND') : this.sagaPos === SAGA_LEVELS - 1 ? 'SAGA BOSS UNLOCKED' : 'LEVEL ' + stageNo(this.levelNo + 1) + ' UNLOCKED', 16, '#fff59d').setDepth(D + 1);
     if (gearWon) this.txt(W / 2, 418, 'WON: THUNDER ARMOR  ·  FUTSU-NO-MITAMA', 13, '#d1c4e9').setDepth(D + 1);
     const tap = this.txt(W / 2, 452, 'tap to continue', 16, '#bbb', { fontStyle: 'normal' }).setDepth(D + 1).setAlpha(0);
     this.time.delayedCall(700, () => {

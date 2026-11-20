@@ -266,6 +266,18 @@ bevelled rock), `moss`, `lavaCrack`, `tile` (seamless tiles), `stride` (walking 
   zombies and demons use the walking frames too. `button` draws a rim, a lit top half, a shine line and an outline.
   The graphics overhaul is complete for everything in the game; painted art was the bigger option offered for later.
 
+## Sagas screen (owner's inspiration picture, art-reference/menu-sagas-screen.jpg)
+
+`SagaScene`: a parchment page that scrolls with a finger (camera scroll; taps are hit-tested against `taps`, a drag of more than
+8px never opens a card), under a fixed title bar (gold-crowned "SAGAS" plaque, round back button). Each saga has a banner
+(`Art.sagaRibbon`: bamboo badge green, mountain badge brown, grey while locked) over its own scenery (`Art.sagaBand`). Every stage
+is an illustrated card (`Art.sagaCard`, cached textures `sc_*`, `_off` for locked: greyed with a padlock) with the level's boss
+from its `Full` picture in a scene (`Art.scene`: bamboo, sunset, fort, mountain, peak, summit, dusk, mfort, ice, ember, demon).
+A tick for cleared, a pulsing gold outline on the next to play, and the page opens scrolled to it. Running numbers (owner):
+`stageNo(stage)` and `fortNo(saga)`: saga 1 levels 1-3, its boss 4, its stronghold 5; saga 2 levels 6-8, its boss 9 and
+stronghold 10 (both "coming soon"); sagas 3-5 locked cards. The in-game title and "LEVEL n UNLOCKED" use the same numbers;
+`Save.level` and the stage numbers in code are unchanged. No new text: it reuses translated strings.
+
 ## Working with the owner
 
 - They play on a phone and are not a programmer. Explain changes in plain words, no code.
@@ -277,7 +289,7 @@ bevelled rock), `moss`, `lavaCrack`, `tile` (seamless tiles), `stride` (walking 
   The game never loads these files. Saved so far: Saga 1's common demon (purple), goblin (small green,
   horned), fat demon (boss), Takemikazuchi (saga boss); Saga 2's common rock oni (skinny grey), Rock Oni mini boss (big grey
   with club, stage 5's boss), Iwagame, Koke Oni and Genbu. Also `menu-sagas-screen.jpg`, an AI picture the owner sent as inspiration
-  for a redesigned Sagas screen (names in it are not real; plan read back, waiting for the owner's go).
+  for the Sagas screen (names in it are not real).
 
 ## Plan: App Store release with in-app purchases
 
