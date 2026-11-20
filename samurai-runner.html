@@ -958,153 +958,375 @@ const Art = {
   },
   shadow(c, x, y, rx) { Art.ell(c, x, y, rx, rx * 0.35, 'rgba(0,0,0,0.32)'); },
 
-  samurai(c) {
+  // ---- Helpers for the detailed look (light from the upper left, dark outlines, flecked texture, bevelled stone) ----
+  // A repeatable random sequence, so a texture comes out the same every time (and matches its overlays).
+  rng(seed) { let s = (seed * 2654435761) >>> 0 || 1; return () => (s = (Math.imul(s, 1664525) + 1013904223) >>> 0) / 4294967296; },
+  poly(c, pts) { c.beginPath(); pts.forEach((p, i) => i ? c.lineTo(...p) : c.moveTo(...p)); c.closePath(); },
+  // Builds a path with `shape`, fills it and outlines it.
+  blob(c, shape, fill, ol, lw = 1) { c.beginPath(); shape(); c.fillStyle = fill; c.fill(); if (ol) { c.strokeStyle = ol; c.lineWidth = lw; c.stroke(); } },
+  // A rounded limb: a dark outline, its colour, and a thin light line along its upper-left side.
+  limb(c, pts, w, col, ol, hi) {
+    const line = (lw, s, dx = 0, dy = 0) => { c.strokeStyle = s; c.lineWidth = lw; c.beginPath(); pts.forEach(([x, y], i) => i ? c.lineTo(x + dx, y + dy) : c.moveTo(x + dx, y + dy)); c.stroke(); };
+    if (ol) line(w + 1.6, ol);
+    line(w, col);
+    if (hi) line(w * 0.32, hi, -w * 0.2, -w * 0.12);
+  },
+  // Flecks inside a path: small light and dark marks that read as texture on stone, skin or cloth.
+  speckle(c, shape, rnd, n, x, y, w, h, cols, r = 0.6) {
+    c.save(); c.beginPath(); shape(); c.clip();
+    for (let i = 0; i < n; i++) Art.ell(c, x + rnd() * w, y + rnd() * h, r * (0.5 + rnd()), r * (0.4 + rnd() * 0.8), cols[i % cols.length]);
+    c.restore();
+  },
+  // A bevel inside a path: a band of light along its upper-left edge and of shade along its lower-right edge.
+  bevel(c, shape, d, light, dark) {
+    c.save(); c.beginPath(); shape(); c.clip();
+    c.lineWidth = d * 2.2;
+    c.save(); c.translate(d, d); c.beginPath(); shape(); c.strokeStyle = light; c.stroke(); c.restore();
+    c.save(); c.translate(-d, -d); c.beginPath(); shape(); c.strokeStyle = dark; c.stroke(); c.restore();
+    c.restore();
+  },
+  // An irregular rock outline round an ellipse.
+  tile(w, h, x, y, fn) { for (const dx of w ? [-w, 0, w] : [0]) for (const dy of h ? [-h, 0, h] : [0]) fn(x + dx, y + dy); },
+  rockPts(rnd, cx, cy, rx, ry, n = 9, jag = 0.16) {
+    return [...Array(n)].map((_, i) => { const a = (i + rnd() * 0.4) / n * Math.PI * 2, k = 1 - jag + rnd() * jag * 2; return [cx + Math.cos(a) * rx * k, cy + Math.sin(a) * ry * k]; });
+  },
+  // A lit stone: outline, a gradient lit from the upper left, flecks, a bevel, and a crack.
+  stone(c, pts, rnd, o = {}) {
+    const { base = '#8c9397', lt = '#c6cdd1', dk = '#4c5357', ol = '#1d2124', lw = 1.2, fleck = 1, crack = true } = o;
+    const xs = pts.map(p => p[0]), ys = pts.map(p => p[1]);
+    const x0 = Math.min(...xs), x1 = Math.max(...xs), y0 = Math.min(...ys), y1 = Math.max(...ys), sz = Math.max(x1 - x0, y1 - y0);
+    const shape = () => pts.forEach((p, i) => i ? c.lineTo(...p) : c.moveTo(...p));
+    Art.blob(c, () => { shape(); c.closePath(); }, Art.grad(c, x0, y0, x1, y1, [[0, lt], [0.45, base], [1, dk]]), ol, lw);
+    if (fleck) Art.speckle(c, shape, rnd, Math.round(sz * sz * 0.05 * fleck) + 3, x0, y0, x1 - x0, y1 - y0, ['rgba(255,255,255,0.22)', 'rgba(0,0,0,0.18)', 'rgba(0,0,0,0.1)'], Math.max(0.35, sz * 0.025));
+    Art.bevel(c, () => { shape(); c.closePath(); }, Math.max(0.5, sz * 0.045), 'rgba(255,255,255,0.28)', 'rgba(0,0,0,0.3)');
+    if (crack && sz > 8) {
+      let cx = x0 + (x1 - x0) * (0.25 + rnd() * 0.5), cy = y0 + (y1 - y0) * (0.2 + rnd() * 0.4), a = rnd() * 6.28;
+      c.strokeStyle = 'rgba(0,0,0,0.4)'; c.lineWidth = Math.max(0.4, sz * 0.018); c.beginPath(); c.moveTo(cx, cy);
+      for (let i = 0; i < 3; i++) { a += (rnd() - 0.5) * 1.6; cx += Math.cos(a) * sz * 0.1; cy += Math.sin(a) * sz * 0.1; c.lineTo(cx, cy); }
+      c.stroke();
+    }
+  },
+  // A clump of moss: overlapping blobs in three greens with a few bright tips.
+  moss(c, rnd, x, y, w, h, n = 7) {
+    for (let i = 0; i < n; i++) Art.ell(c, x + (rnd() - 0.5) * w, y + (rnd() - 0.4) * h, w * (0.18 + rnd() * 0.16), h * (0.35 + rnd() * 0.3), '#3f6a22');
+    for (let i = 0; i < n; i++) Art.ell(c, x + (rnd() - 0.5) * w * 0.9, y + (rnd() - 0.6) * h * 0.8, w * (0.14 + rnd() * 0.12), h * (0.28 + rnd() * 0.24), '#6aa336');
+    for (let i = 0; i < n; i++) Art.ell(c, x + (rnd() - 0.5) * w * 0.8, y - h * 0.2 + (rnd() - 0.5) * h * 0.5, w * 0.06, h * 0.14, '#a5d65a');
+  },
+  // A glowing crack: a soft orange glow with a hot yellow core.
+  lavaCrack(c, pts, w = 1) {
+    const line = () => { c.beginPath(); pts.forEach((p, i) => i ? c.lineTo(...p) : c.moveTo(...p)); };
+    c.save(); c.shadowColor = '#ff6d00'; c.shadowBlur = 4 * w; line(); c.strokeStyle = '#ff6d00'; c.lineWidth = 1.6 * w; c.stroke(); c.restore();
+    line(); c.strokeStyle = '#ffd180'; c.lineWidth = 0.6 * w; c.stroke();
+  },
+  // Walking frames: `f` is 0-3 through a stride, undefined for standing. Returns how far each foot is lifted and how the arms swing.
+  stride(f) {
+    if (f === undefined) return { lL: 0, lR: 0, arm: 0, bob: 0 };
+    const ph = f * Math.PI / 2 + Math.PI / 4;
+    return { lL: Math.max(0, Math.sin(ph)), lR: Math.max(0, -Math.sin(ph)), arm: Math.sin(ph), bob: Math.abs(Math.cos(ph)) };
+  },
+
+  // The samurai, seen from behind as the clan runs up the road (the owner did not like them facing the screen). Frames 0-3 are
+  // the run, no frame is standing. The sword is its own picture, held in the right hand at (27.5, 30.5).
+  samurai(c, w, h, f) {
     c.translate(0, 4);
-    Art.shadow(c, 18, 42, 11);
-    // back banner (sashimono)
-    c.strokeStyle = '#2b2118'; c.lineWidth = 1.4; c.beginPath(); c.moveTo(11, 26); c.lineTo(11, -2); c.stroke();
-    Art.rr(c, 2.5, -2.5, 8.5, 14, 1); c.fillStyle = Art.grad(c, 0, -2, 0, 12, [[0, '#42a5f5'], [1, '#1565c0']]); c.fill();
-    Art.ell(c, 6.7, 4, 2.4, 2.4, '#fff'); Art.ell(c, 6.7, 4, 1, 1, '#1565c0');
-    // legs and shin guards
-    c.fillStyle = '#14141f'; c.fillRect(13, 33, 4.4, 8); c.fillRect(18.6, 33, 4.4, 8);
-    c.fillStyle = '#ffca28'; c.fillRect(13, 37, 4.4, 1); c.fillRect(18.6, 37, 4.4, 1);
-    // armoured skirt (kusazuri)
-    [10.5, 15.5, 20.5].forEach(x => { Art.rr(c, x, 27, 5, 7.5, 1.5); c.fillStyle = '#1e2a78'; c.fill(); });
-    c.strokeStyle = 'rgba(255,202,40,0.85)'; c.lineWidth = 0.7;
-    [30.5, 33].forEach(y => { c.beginPath(); c.moveTo(11, y); c.lineTo(25, y); c.stroke(); });
-    // black lacquer cuirass
-    Art.rr(c, 11, 16.5, 14, 12, 3); c.fillStyle = Art.grad(c, 11, 16, 25, 29, [[0, '#3a3a52'], [1, '#0d0d16']]); c.fill();
-    c.strokeStyle = '#42a5f5'; c.lineWidth = 0.8;
-    [20, 23.5].forEach(y => { c.beginPath(); c.moveTo(12, y); c.lineTo(24, y); c.stroke(); });
-    Art.ell(c, 18, 21.7, 1.7, 1.7, '#ffca28');
-    c.fillStyle = '#1976d2'; c.fillRect(11, 26.5, 14, 1.8);
-    // layered shoulder plates (sode)
-    [4.5, 23.5].forEach(x => {
-      Art.rr(c, x, 15.5, 8, 9.5, 2.5); c.fillStyle = Art.grad(c, 0, 15, 0, 25, [[0, '#3f51b5'], [1, '#1a237e']]); c.fill();
-      c.strokeStyle = '#ffca28'; c.lineWidth = 0.8;
-      [18.8, 21.8].forEach(y => { c.beginPath(); c.moveTo(x + 1, y); c.lineTo(x + 7, y); c.stroke(); });
+    const S2 = Art.stride(f), ol = '#07080f', gold = '#ffca28', goldD = '#a87a00', silk = '#3d7bf0', silkD = '#1e4fb8';
+    const lac = (x0, y0, x1, y1) => Art.grad(c, x0, y0, x1, y1, [[0, '#5a6191'], [0.4, '#272b47'], [1, '#0b0c16']]);
+    c.translate(0, -S2.bob * 0.8);
+    Art.ell(c, 18, 42 + S2.bob * 0.8, 10.5, 3.4, 'rgba(0,0,0,0.32)');
+    // legs: wide hakama, black shin guards with a gold band, straw sandals; a lifted foot shows its sole
+    [[14, S2.lL, -1], [22, S2.lR, 1]].forEach(([x, l, s]) => {
+      const knee = 34.5 - l * 2.2, foot = 41 - l * 4.2;
+      Art.blob(c, () => Art.poly(c, [[x - 3.8, 28.5], [x + 3.8, 28.5], [x + 3.2 + s * 0.5, knee], [x - 3.2 + s * 0.5, knee]]), Art.grad(c, x - 4, 0, x + 4, 0, [[0, '#33407a'], [1, '#121834']]), ol, 0.8);
+      Art.rr(c, x - 2.2 + s * 0.4, knee - 0.8, 4.4, foot - knee + 0.6, 1.3); c.fillStyle = Art.grad(c, x - 2, 0, x + 2, 0, [[0, '#33343f'], [1, '#0c0c12']]); c.fill(); c.strokeStyle = ol; c.lineWidth = 0.6; c.stroke();
+      c.fillStyle = gold; c.fillRect(x - 2.2 + s * 0.4, knee + 1.2, 4.4, 0.7);
+      if (l > 0.35) { Art.ell(c, x + s * 0.4, foot + 0.6, 2.4, 1.7, '#7a5a2e'); Art.ell(c, x + s * 0.4, foot + 0.4, 1.9, 1.3, '#d9b36e'); }   // sole of the lifted foot
+      else Art.ell(c, x + s * 0.4, foot + 0.7, 2.7, 1.2, '#2a2118');
     });
-    Art.ell(c, 8.5, 26.5, 2, 2, '#14141f'); Art.ell(c, 27.5, 26.5, 2, 2, '#14141f');
-    // neck guard, war mask, glowing eyes
-    Art.tri(c, [10, 10], [6, 16.5], [14, 15], '#1a237e'); Art.tri(c, [26, 10], [30, 16.5], [22, 15], '#1a237e');
-    Art.ell(c, 18, 12.5, 5.4, 5.2, '#1b1b26');
-    Art.rr(c, 13.6, 12.8, 8.8, 4.6, 2); c.fillStyle = '#a32020'; c.fill();
-    c.fillStyle = '#fff'; c.fillRect(15.4, 15, 5.2, 1.1);
-    c.fillStyle = '#a32020'; [16.6, 18, 19.4].forEach(x => c.fillRect(x - 0.2, 15, 0.4, 1.1));
-    c.shadowColor = '#40c4ff'; c.shadowBlur = 5;
-    Art.tri(c, [13.8, 10.2], [17, 11.5], [14.3, 12.2], '#e1f5fe'); Art.tri(c, [22.2, 10.2], [19, 11.5], [21.7, 12.2], '#e1f5fe');
-    c.shadowBlur = 0;
-    // helmet (kabuto) with gold crescent crest
-    c.beginPath(); c.arc(18, 9.6, 7.4, Math.PI, 0); c.closePath(); c.fillStyle = Art.grad(c, 11, 2, 25, 10, [[0, '#3a3a52'], [1, '#0d0d16']]); c.fill();
-    c.strokeStyle = 'rgba(255,255,255,0.16)'; c.lineWidth = 0.6;
-    [-0.9, -0.45, 0, 0.45, 0.9].forEach(a => { c.beginPath(); c.moveTo(18, 3); c.lineTo(18 + Math.sin(a) * 7, 9.4); c.stroke(); });
-    Art.rr(c, 9.6, 8.6, 16.8, 2.4, 1); c.fillStyle = '#0d0d16'; c.fill();
-    c.fillStyle = '#ffca28'; c.fillRect(10.4, 10.4, 15.2, 0.6);
-    c.beginPath(); c.arc(18, -1.5, 8.5, 0.06 * Math.PI, 0.94 * Math.PI); c.arc(18, -4.5, 8.6, 0.86 * Math.PI, 0.14 * Math.PI, true); c.closePath();
-    c.fillStyle = '#ffd54f'; c.fill(); c.strokeStyle = '#b28704'; c.lineWidth = 0.5; c.stroke();
+    // left arm, swinging with the stride (behind the body when it swings forward)
+    const ah = 25.5 + S2.arm * 1.8, ax = 7.6 - S2.arm * 0.5;
+    Art.limb(c, [[9.5, 18.5], [ax, ah]], 3.6, '#1f2a5c', ol, 'rgba(120,150,255,0.35)');
+    Art.ell(c, ax, ah + 0.8, 2, 1.8, ol); Art.ell(c, ax - 0.2, ah + 0.6, 1.5, 1.3, '#2a2b38');
+    // armoured skirt (kusazuri): five laced plates that swing a little
+    [9.6, 13, 16.2, 19.4, 22.8].forEach((x, i) => {
+      c.save(); c.translate(x + 2.2, 26.2); c.rotate((i - 2) * 0.07 + (f !== undefined ? Math.sin(f * 1.57 + i) * 0.05 : 0));
+      Art.rr(c, -2.4, 0, 4.8, 8, 1.2); c.fillStyle = lac(-2, 0, 2, 8); c.fill(); c.strokeStyle = ol; c.lineWidth = 0.6; c.stroke();
+      c.strokeStyle = 'rgba(0,0,0,0.6)'; c.lineWidth = 0.5; [2.7, 5.3].forEach(y => { c.beginPath(); c.moveTo(-2.2, y); c.lineTo(2.2, y); c.stroke(); });
+      c.strokeStyle = silk; c.lineWidth = 0.45; [-1.2, 0, 1.2].forEach(dx => { c.beginPath(); c.moveTo(dx, 0.4); c.lineTo(dx, 7.4); c.stroke(); });
+      c.fillStyle = gold; c.fillRect(-2.4, 7.3, 4.8, 0.7);
+      c.restore();
+    });
+    // the back of the cuirass: laced rows of lacquered plates, light from the upper left
+    const back = () => { c.moveTo(11, 15.6); c.lineTo(25, 15.6); c.quadraticCurveTo(26.8, 22, 25.2, 28); c.lineTo(10.8, 28); c.quadraticCurveTo(9.2, 22, 11, 15.6); c.closePath(); };
+    Art.blob(c, back, lac(10, 15, 26, 29), ol, 0.9);
+    c.save(); c.beginPath(); back(); c.clip();
+    [18.4, 21.2, 24, 26.8].forEach((y, i) => {
+      c.fillStyle = 'rgba(255,255,255,0.13)'; c.fillRect(9, y - 2.7, 18, 0.8);
+      c.strokeStyle = ol; c.lineWidth = 0.7; c.beginPath(); c.moveTo(9, y); c.lineTo(27, y); c.stroke();
+      c.strokeStyle = silk; c.lineWidth = 0.45;
+      for (let x = 11.2 + (i % 2) * 1.2; x < 25.5; x += 2.4) { c.beginPath(); c.moveTo(x, y - 2.2); c.lineTo(x, y - 0.5); c.stroke(); }
+    });
+    c.fillStyle = 'rgba(255,255,255,0.08)'; c.beginPath(); c.ellipse(13.5, 19, 2.6, 5.5, -0.2, 0, 7); c.fill();
+    c.restore();
+    // the agemaki, a big silk bow tied at the back
+    Art.ell(c, 16.3, 21.6, 2.1, 1.4, silkD); Art.ell(c, 19.7, 21.6, 2.1, 1.4, silkD); Art.ell(c, 16.3, 21.4, 1.5, 0.9, silk); Art.ell(c, 19.7, 21.4, 1.5, 0.9, silk);
+    c.strokeStyle = silk; c.lineWidth = 0.9; c.beginPath(); c.moveTo(17.4, 22.2); c.lineTo(16.6, 25.4); c.moveTo(18.6, 22.2); c.lineTo(19.4, 25.4); c.stroke();
+    Art.ell(c, 18, 21.7, 0.9, 0.9, gold);
+    // sash
+    c.fillStyle = '#16255e'; c.fillRect(10.6, 26.6, 14.8, 2); c.fillStyle = gold; c.fillRect(10.6, 26.6, 14.8, 0.45);
+    // right arm, forward to the sword's hilt
+    Art.limb(c, [[26.5, 18.5], [27.8, 25.8]], 3.6, '#1f2a5c', ol, 'rgba(120,150,255,0.35)');
+    // shoulder plates (sode)
+    [[8, -1], [28, 1]].forEach(([x, s]) => {
+      c.save(); c.translate(x, 15); c.rotate(s * 0.13);
+      Art.blob(c, () => Art.rr(c, -4.4, 0, 8.8, 10.2, 1.6), lac(-4, 0, 4, 10), ol, 0.8);
+      c.strokeStyle = 'rgba(0,0,0,0.7)'; c.lineWidth = 0.6; [3.4, 6.8].forEach(y => { c.beginPath(); c.moveTo(-4.2, y); c.lineTo(4.2, y); c.stroke(); });
+      c.fillStyle = 'rgba(255,255,255,0.14)'; [0.9, 4.2, 7.6].forEach(y => c.fillRect(-4, y, 8, 0.6));
+      c.strokeStyle = silk; c.lineWidth = 0.45; [-2.6, -0.9, 0.9, 2.6].forEach(dx => { c.beginPath(); c.moveTo(dx, 0.8); c.lineTo(dx, 9.6); c.stroke(); });
+      c.fillStyle = gold; c.fillRect(-4.4, 0, 8.8, 0.7);
+      c.restore();
+    });
+    // the sword hand
+    Art.ell(c, 27.8, 26.6, 2.1, 1.9, ol); Art.ell(c, 27.6, 26.4, 1.6, 1.4, '#2a2b38'); Art.ell(c, 27.2, 26, 0.6, 0.5, 'rgba(255,255,255,0.25)');
+    // gold crest horns (kuwagata) peeking out each side of the helmet
+    [[-1], [1]].forEach(([s]) => {
+      c.beginPath(); c.moveTo(18 + s * 3.4, 6); c.quadraticCurveTo(18 + s * 7.6, 3.6, 18 + s * 8.4, -2.6); c.quadraticCurveTo(18 + s * 6.4, 2.6, 18 + s * 2.4, 4.4); c.closePath();
+      c.fillStyle = Art.grad(c, 18, -3, 18 + s * 8, 6, [[0, '#fff3b0'], [1, goldD]]); c.fill(); c.strokeStyle = '#5c4300'; c.lineWidth = 0.5; c.stroke();
+    });
+    // neck guard (shikoro): four flaring lames, the top one turned back at the ends (fukigaeshi)
+    for (let i = 3; i >= 0; i--) {
+      const y = 8.4 + i * 1.95, hw = 6.4 + i * 1.35;
+      Art.blob(c, () => Art.rr(c, 18 - hw, y, hw * 2, 2.7, 1.1), Art.grad(c, 18 - hw, y, 18 + hw, y + 3, [[0, '#4d5480'], [0.5, '#1e2138'], [1, '#090a12']]), ol, 0.6);
+      c.fillStyle = silk; for (let x = 18 - hw + 1.2; x < 18 + hw - 0.8; x += 1.9) c.fillRect(x, y + 1.1, 0.5, 0.9);
+      c.fillStyle = 'rgba(255,255,255,0.15)'; c.fillRect(18 - hw + 0.8, y + 0.3, hw * 2 - 1.6, 0.45);
+    }
+    [[-1], [1]].forEach(([s]) => { Art.tri(c, [18 + s * 6, 8.2], [18 + s * 9.6, 7.4], [18 + s * 7.2, 11.2], '#1e2138'); c.strokeStyle = gold; c.lineWidth = 0.5; c.beginPath(); c.moveTo(18 + s * 6, 8.2); c.lineTo(18 + s * 9.6, 7.4); c.stroke(); });
+    // the helmet bowl: riveted plates converging on a gold ring at the top
+    c.beginPath(); c.arc(18, 9, 6.4, Math.PI, 0); c.closePath();
+    c.fillStyle = Art.grad(c, 12, 2, 24, 10, [[0, '#6a719c'], [0.35, '#2a2e4a'], [1, '#07080f']]); c.fill(); c.strokeStyle = ol; c.lineWidth = 0.8; c.stroke();
+    c.strokeStyle = 'rgba(0,0,0,0.6)'; c.lineWidth = 0.5;
+    [-1.1, -0.55, 0, 0.55, 1.1].forEach(a => { c.beginPath(); c.moveTo(18, 2.9); c.lineTo(18 + Math.sin(a) * 6.2, 9); c.stroke(); });
+    c.fillStyle = 'rgba(255,255,255,0.5)'; [-0.8, -0.27, 0.27, 0.8].forEach(a => [5, 7].forEach(y => { const r = (y - 2.6) / 6.4 * 6.2; c.fillRect(18 + Math.sin(a) * r - 0.2, y, 0.4, 0.4); }));
+    Art.ell(c, 18, 2.9, 1.3, 0.8, goldD); Art.ell(c, 18, 2.7, 0.9, 0.5, '#ffe082');
+    c.fillStyle = 'rgba(255,255,255,0.18)'; c.beginPath(); c.ellipse(15.2, 5.6, 1.8, 1.1, -0.6, 0, 7); c.fill();
+    // banner on its pole at the back (sashimono), fluttering with the stride
+    const fl = f !== undefined ? Math.sin(f * 1.57) : 0;
+    c.strokeStyle = '#2b2118'; c.lineWidth = 1.2; c.beginPath(); c.moveTo(10.6, 24); c.lineTo(10.6, -3.6); c.stroke();
+    c.strokeStyle = '#6d5236'; c.lineWidth = 0.4; c.beginPath(); c.moveTo(10.3, 22); c.lineTo(10.3, -3); c.stroke();
+    c.beginPath(); c.moveTo(10.2, -3.2); c.lineTo(10.2, 10.4);
+    c.quadraticCurveTo(6.6, 10.4 + fl, 2.6 + fl * 0.5, 10.6); c.quadraticCurveTo(3.4, 3.6, 2.6 - fl * 0.5, -3.2); c.closePath();
+    c.fillStyle = Art.grad(c, 2, -3, 10, 10, [[0, '#64b5f6'], [1, '#1150b8']]); c.fill(); c.strokeStyle = '#0a2a6e'; c.lineWidth = 0.6; c.stroke();
+    Art.ell(c, 6.4, 3.6, 2.3, 2.3, '#fff'); Art.ell(c, 6.4, 3.6, 1.5, 1.5, '#1150b8'); Art.ell(c, 6.4, 3.6, 0.6, 0.6, '#fff');
+    c.fillStyle = 'rgba(255,255,255,0.25)'; c.fillRect(3, -2.6, 0.7, 12.6);
   },
   katana(c) {
-    c.fillStyle = '#1b1b26'; c.fillRect(5, 26, 2.4, 9);
-    c.fillStyle = '#ffca28'; [28, 30.5, 33].forEach(y => c.fillRect(5, y, 2.4, 0.8));
-    Art.ell(c, 6.2, 26, 3.4, 1.3, '#ffca28');
-    c.shadowColor = '#40c4ff'; c.shadowBlur = 4;
-    c.beginPath(); c.moveTo(4.9, 25.5); c.quadraticCurveTo(4.4, 11, 8.8, 1); c.quadraticCurveTo(8, 12, 7.6, 25.5); c.closePath();
-    c.fillStyle = Art.grad(c, 4, 0, 9, 0, [[0, '#ffffff'], [1, '#90caf9']]); c.fill();
-    c.shadowBlur = 0;
+    // hilt wrapped in dark silk over white ray skin, a gold guard, a blade with a bright edge and a temper line
+    Art.rr(c, 4.6, 26, 3.2, 9.4, 1); c.fillStyle = '#e8e2d0'; c.fill();
+    c.strokeStyle = '#14141c'; c.lineWidth = 0.9;
+    for (let y = 26.6; y < 35; y += 1.7) { c.beginPath(); c.moveTo(4.6, y); c.lineTo(7.8, y + 1.2); c.moveTo(7.8, y); c.lineTo(4.6, y + 1.2); c.stroke(); }
+    Art.rr(c, 4.4, 34.6, 3.6, 1.2, 0.5); c.fillStyle = '#ffca28'; c.fill();
+    Art.ell(c, 6.2, 26, 3.6, 1.4, '#7a5800'); Art.ell(c, 6.2, 25.8, 3.2, 1.05, '#ffca28');
+    c.fillStyle = '#ffe9a0'; c.fillRect(4.6, 25.4, 3.2, 0.4);
+    c.save(); c.shadowColor = '#40c4ff'; c.shadowBlur = 4;
+    c.beginPath(); c.moveTo(4.9, 25.3); c.quadraticCurveTo(4.4, 11, 8.8, 0.8); c.quadraticCurveTo(8, 12, 7.6, 25.3); c.closePath();
+    c.fillStyle = Art.grad(c, 4, 0, 9, 0, [[0, '#ffffff'], [0.5, '#cfe3f5'], [1, '#7fa8d0']]); c.fill(); c.restore();
+    c.strokeStyle = 'rgba(255,255,255,0.95)'; c.lineWidth = 0.5; c.beginPath(); c.moveTo(5.2, 24.6); c.quadraticCurveTo(4.8, 11, 8.6, 1.4); c.stroke();
+    c.strokeStyle = 'rgba(80,110,150,0.6)'; c.lineWidth = 0.35; c.beginPath(); c.moveTo(6.6, 24.6); c.quadraticCurveTo(6.2, 13, 8.4, 3); c.stroke();
   },
-  demon(c) {
-    Art.shadow(c, 16, 36, 10);
-    c.fillStyle = '#38006b'; c.fillRect(11, 29, 4, 6); c.fillRect(17, 29, 4, 6);
-    Art.rr(c, 8, 15, 16, 16, 5); c.fillStyle = Art.grad(c, 8, 15, 24, 31, [[0, '#8e24aa'], [1, '#4a148c']]); c.fill();
-    Art.ell(c, 6.5, 22, 2.6, 5, '#6a1b9a'); Art.ell(c, 25.5, 22, 2.6, 5, '#6a1b9a');       // arms
-    Art.tri(c, [9, 7], [7, 0], [13, 5], '#ffe0b2'); Art.tri(c, [23, 7], [25, 0], [19, 5], '#ffe0b2');   // horns
-    Art.ell(c, 16, 11, 7.5, 6.8, '#ab47bc');
-    c.shadowColor = '#ff1744'; c.shadowBlur = 4;
-    Art.tri(c, [11, 9], [15, 11], [11.5, 12], '#ff5252'); Art.tri(c, [21, 9], [17, 11], [20.5, 12], '#ff5252');  // eyes
-    c.shadowBlur = 0;
-    c.fillStyle = '#2a0038'; c.fillRect(12.5, 14, 7, 2);
-    Art.tri(c, [13, 14], [14.5, 14], [13.7, 16.4], '#fff'); Art.tri(c, [17.5, 14], [19, 14], [18.3, 16.4], '#fff');
+
+  // ---- Common enemies, each with four walking frames ----
+  // Saga 1's demon: a purple oni imp with ivory horns, a wild mane, a tiger-skin loincloth, red eyes and fangs.
+  demon(c, w, h, f) {
+    const S2 = Art.stride(f), ol = '#1a0524', sk = '#9c3fc0', skL = '#d08ae8', skD = '#5a1878', r = Art.rng(11);
+    c.translate(0, -S2.bob * 0.7);
+    Art.ell(c, 16, 36.4 + S2.bob * 0.7, 9.5, 2.8, 'rgba(0,0,0,0.32)');
+    // legs and clawed feet
+    [[12.4, S2.lL], [19.6, S2.lR]].forEach(([x, l]) => {
+      const fy = 34.4 - l * 2.6;
+      Art.limb(c, [[x, 27], [x + (x < 16 ? -0.4 : 0.4), fy]], 3.6, skD, ol, 'rgba(255,255,255,0.15)');
+      Art.ell(c, x, fy + 0.6, 2.7, 1.5, ol); Art.ell(c, x, fy + 0.4, 2.1, 1, '#3d0f52');
+      [-1.3, 0, 1.3].forEach(dx => Art.tri(c, [x + dx - 0.5, fy + 1], [x + dx + 0.5, fy + 1], [x + dx, fy + 2.2], '#f5e6c8'));
+    });
+    // arms swinging, clawed hands
+    [[9, -1, S2.arm], [23, 1, -S2.arm]].forEach(([x, s, a]) => {
+      const hx = x + s * 2.6, hy = 25.2 + a * 1.6;
+      Art.limb(c, [[x, 18], [x + s * 2.4, 21.5], [hx, hy]], 3.4, sk, ol, skL);
+      Art.ell(c, hx, hy + 0.6, 2, 1.8, ol); Art.ell(c, hx, hy + 0.4, 1.5, 1.3, sk);
+      [-1, 0, 1].forEach(dx => Art.tri(c, [hx + dx - 0.4, hy + 1.4], [hx + dx + 0.4, hy + 1.4], [hx + dx * 1.3, hy + 2.8], '#f5e6c8'));
+    });
+    // muscular body: chest, belly and the tiger-skin loincloth
+    const body = () => { c.moveTo(9.6, 16.4); c.quadraticCurveTo(16, 13.6, 22.4, 16.4); c.quadraticCurveTo(24, 23, 21.2, 28.6); c.lineTo(10.8, 28.6); c.quadraticCurveTo(8, 23, 9.6, 16.4); c.closePath(); };
+    Art.blob(c, body, Art.grad(c, 9, 15, 23, 29, [[0, skL], [0.45, sk], [1, skD]]), ol, 0.9);
+    Art.speckle(c, body, r, 10, 9, 15, 15, 14, ['rgba(255,255,255,0.12)', 'rgba(40,0,60,0.18)'], 0.5);
+    c.strokeStyle = 'rgba(40,0,60,0.55)'; c.lineWidth = 0.6; c.beginPath(); c.moveTo(16, 17.6); c.lineTo(16, 21); c.moveTo(11.4, 19.6); c.quadraticCurveTo(13.6, 21.2, 16, 20.4); c.quadraticCurveTo(18.4, 21.2, 20.6, 19.6); c.stroke();
+    Art.ell(c, 16, 23.6, 3.4, 2.4, 'rgba(255,220,255,0.22)');
+    const cloth = () => { c.moveTo(10.4, 25.6); c.lineTo(21.6, 25.6); c.lineTo(22.2, 29.2); c.lineTo(19.6, 31.2); c.lineTo(18.2, 29.4); c.lineTo(16, 31.8); c.lineTo(13.8, 29.4); c.lineTo(12.2, 31.2); c.lineTo(9.8, 29.2); c.closePath(); };
+    Art.blob(c, cloth, Art.grad(c, 10, 25, 10, 32, [[0, '#ffc23d'], [1, '#d47f00']]), ol, 0.7);
+    c.save(); c.beginPath(); cloth(); c.clip(); c.strokeStyle = '#2a1500'; c.lineWidth = 0.8;
+    [11.6, 14.4, 17.4, 20.2].forEach(x => { c.beginPath(); c.moveTo(x, 25.6); c.quadraticCurveTo(x + 1, 27.4, x - 0.2, 30); c.stroke(); }); c.restore();
+    c.fillStyle = '#5e3a14'; c.fillRect(10.2, 25.2, 11.6, 1.1);
+    // head: wild mane, ivory horns, pointed ears, red glowing eyes, fangs
+    [[-1], [1]].forEach(([s]) => Art.tri(c, [16 + s * 6.6, 10], [16 + s * 9.6, 8], [16 + s * 7, 12.6], sk));
+    for (let i = 0; i < 7; i++) { const a = -2.6 + i * 0.36; Art.tri(c, [16 + Math.cos(a) * 3, 6 + Math.sin(a) * 2], [16 + Math.cos(a + 0.4) * 3, 6 + Math.sin(a + 0.4) * 2], [16 + Math.cos(a + 0.2) * 8, 6.4 + Math.sin(a + 0.2) * 5.6], i % 2 ? '#2a0838' : '#3d0f52'); }
+    const head = () => { c.ellipse(16, 10.8, 7.4, 6.6, 0, 0, 7); };
+    Art.blob(c, head, Art.grad(c, 10, 4, 22, 17, [[0, skL], [0.5, sk], [1, skD]]), ol, 0.9);
+    [[-1], [1]].forEach(([s]) => {
+      c.beginPath(); c.moveTo(16 + s * 3.2, 5.6); c.quadraticCurveTo(16 + s * 6.6, 3.6, 16 + s * 6.4, -0.2); c.quadraticCurveTo(16 + s * 5, 3, 16 + s * 1.6, 5.2); c.closePath();
+      c.fillStyle = Art.grad(c, 16, 0, 16 + s * 6, 6, [[0, '#fffaf0'], [1, '#c9a978']]); c.fill(); c.strokeStyle = ol; c.lineWidth = 0.6; c.stroke();
+      c.strokeStyle = 'rgba(120,80,40,0.5)'; c.lineWidth = 0.4; c.beginPath(); c.moveTo(16 + s * 3.6, 4); c.lineTo(16 + s * 5.2, 4.4); c.moveTo(16 + s * 4.6, 2.4); c.lineTo(16 + s * 5.8, 2.8); c.stroke();
+    });
+    c.strokeStyle = ol; c.lineWidth = 1.2; c.beginPath(); c.moveTo(10.6, 8.4); c.lineTo(15, 10.2); c.moveTo(21.4, 8.4); c.lineTo(17, 10.2); c.stroke();      // scowl
+    c.save(); c.shadowColor = '#ff1744'; c.shadowBlur = 4;
+    Art.tri(c, [11, 9.2], [15, 10.9], [11.6, 12.2], '#ff3d3d'); Art.tri(c, [21, 9.2], [17, 10.9], [20.4, 12.2], '#ff3d3d'); c.restore();
+    Art.ell(c, 12.6, 10.8, 0.6, 0.6, '#ffeb3b'); Art.ell(c, 19.4, 10.8, 0.6, 0.6, '#ffeb3b');
+    Art.ell(c, 16, 12.6, 1.2, 0.8, skD);
+    Art.rr(c, 11.8, 13.8, 8.4, 2.6, 1.2); c.fillStyle = '#2a0038'; c.fill();
+    Art.tri(c, [12.6, 13.8], [14.2, 13.8], [13.4, 16.6], '#fff'); Art.tri(c, [17.8, 13.8], [19.4, 13.8], [18.6, 16.6], '#fff');
+    c.fillStyle = '#ff8a80'; c.fillRect(14.6, 15.6, 2.8, 0.6);
+    c.fillStyle = 'rgba(255,255,255,0.22)'; c.beginPath(); c.ellipse(13, 7.2, 2.6, 1.3, -0.4, 0, 7); c.fill();
   },
-  zombie(c) {
-    Art.shadow(c, 16, 36, 9);
-    c.fillStyle = '#3e2723'; c.fillRect(11, 29, 4, 6); c.fillRect(17, 30, 4, 5);
-    Art.rr(c, 9, 15, 14, 15, 3); c.fillStyle = Art.grad(c, 9, 15, 23, 30, [[0, '#6d4c41'], [1, '#4e342e']]); c.fill(); // rags
-    Art.tri(c, [9, 30], [13, 30], [11, 33], '#4e342e'); Art.tri(c, [16, 30], [21, 30], [19, 34], '#4e342e');
-    c.fillStyle = '#7cb342'; Art.rr(c, 4, 17, 4.5, 13, 2); c.fill(); Art.rr(c, 23.5, 17, 4.5, 11, 2); c.fill();   // reaching arms
-    Art.ell(c, 16, 11, 6.6, 6.4, '#9ccc65');
-    Art.ell(c, 12, 7, 3, 2, '#558b2f');                                                      // rot patch
-    Art.ell(c, 13.4, 10.4, 1.9, 1.9, '#fffde7'); Art.ell(c, 13.6, 10.6, 0.7, 0.7, '#111');
-    Art.ell(c, 19, 10.6, 1.4, 1.4, '#1b1b1b');
-    c.strokeStyle = '#33401a'; c.lineWidth = 1.2; c.beginPath(); c.moveTo(13, 14.6); c.lineTo(15, 13.8); c.lineTo(17, 14.8); c.lineTo(19, 14); c.stroke();
+  // Saga 1's zombie: a shambling corpse in a torn grey kimono, arms out in front, one eye glowing, head lolling as it walks.
+  zombie(c, w, h, f) {
+    const S2 = Art.stride(f), ol = '#121a08', sk = '#8fbf57', skL = '#c5e68f', skD = '#567a2c', r = Art.rng(23);
+    const tilt = f === undefined ? 0.06 : Math.sin(f * 1.57 + 0.8) * 0.12;
+    Art.ell(c, 16, 36.4, 9, 2.7, 'rgba(0,0,0,0.32)');
+    // legs: one drags, one steps
+    [[12.4, S2.lL], [19.6, S2.lR]].forEach(([x, l], i) => {
+      const fy = 34.6 - l * 2.4;
+      Art.limb(c, [[x, 28], [x + (i ? 0.6 : -0.6), fy]], 3.4, skD, ol, 'rgba(255,255,255,0.15)');
+      Art.ell(c, x + (i ? 0.6 : -0.6), fy + 0.8, 2.6, 1.4, ol); Art.ell(c, x + (i ? 0.6 : -0.6), fy + 0.6, 2, 0.9, '#4a3a2a');
+    });
+    // torn kimono over the body
+    const robe = () => { c.moveTo(9.4, 16); c.lineTo(22.6, 16); c.lineTo(23.4, 29); c.lineTo(21.6, 31.4); c.lineTo(20.4, 29.6); c.lineTo(18.6, 32); c.lineTo(16.8, 29.8); c.lineTo(14.6, 31.6); c.lineTo(13, 29.6); c.lineTo(10.6, 31.8); c.lineTo(8.6, 29); c.closePath(); };
+    Art.blob(c, robe, Art.grad(c, 8, 15, 24, 32, [[0, '#9a9488'], [0.5, '#6b655b'], [1, '#3e3a33']]), ol, 0.8);
+    Art.speckle(c, robe, r, 16, 8, 15, 16, 17, ['rgba(255,255,255,0.12)', 'rgba(60,40,20,0.3)', 'rgba(80,110,40,0.25)'], 0.7);
+    c.fillStyle = Art.grad(c, 13, 16, 19, 22, [[0, skL], [1, sk]]); c.beginPath(); c.moveTo(13.4, 16); c.lineTo(18.6, 16); c.lineTo(16, 22); c.closePath(); c.fill();   // open collar
+    c.strokeStyle = 'rgba(40,60,20,0.6)'; c.lineWidth = 0.5; c.beginPath(); c.moveTo(14.4, 17.6); c.lineTo(17.6, 17.6); c.moveTo(14.9, 19); c.lineTo(17.1, 19); c.stroke();   // ribs
+    c.strokeStyle = ol; c.lineWidth = 0.7; c.beginPath(); c.moveTo(13.4, 16); c.lineTo(16, 22); c.lineTo(18.6, 16); c.stroke();
+    c.fillStyle = '#4e3b26'; c.fillRect(9, 23, 14, 1.6); c.strokeStyle = '#2a1f12'; c.lineWidth = 0.6; c.beginPath(); c.moveTo(17, 24.6); c.lineTo(18, 27.6); c.stroke();   // rope belt
+    // arms reaching out in front, rising and falling in turn
+    [[9.6, -1, S2.arm], [22.4, 1, -S2.arm]].forEach(([x, s, a]) => {
+      const hx = x + s * 1.8, hy = 21.4 + a * 1.6;
+      Art.limb(c, [[x, 17.6], [hx, hy]], 3.8, '#6b655b', ol);
+      Art.ell(c, hx, hy + 1, 2.6, 2.3, ol); Art.ell(c, hx - 0.2, hy + 0.8, 2.1, 1.8, sk); Art.ell(c, hx - 0.8, hy + 0.2, 0.8, 0.6, skL);
+      [-1.2, 0, 1.2].forEach(dx => Art.limb(c, [[hx + dx, hy + 1.8], [hx + dx * 1.1, hy + 3.4]], 0.8, skD));
+    });
+    // head, lolling to one side
+    c.save(); c.translate(16, 11); c.rotate(tilt); c.translate(-16, -11);
+    const head = () => { c.ellipse(16, 10.8, 6.6, 6.4, 0, 0, 7); };
+    Art.blob(c, head, Art.grad(c, 10, 4, 22, 17, [[0, skL], [0.5, sk], [1, skD]]), ol, 0.9);
+    Art.speckle(c, head, r, 8, 10, 4, 12, 13, ['rgba(60,90,20,0.35)', 'rgba(255,255,255,0.18)'], 0.7);
+    Art.ell(c, 12.4, 6.8, 2.8, 1.8, '#5d7f2e'); Art.ell(c, 19.6, 13.6, 1.6, 1, '#6d4a3a');        // rot patch, a wound
+    c.strokeStyle = '#1d1d14'; c.lineWidth = 0.6; for (let i = 0; i < 6; i++) { const x = 11 + i * 2; c.beginPath(); c.moveTo(x, 5.6 + (i % 2)); c.quadraticCurveTo(x - 1, 3, x - 0.4, 1.8 + (i % 3)); c.stroke(); }   // stringy hair
+    Art.ell(c, 13.4, 10.2, 2.2, 2.1, '#1d2a10'); c.save(); c.shadowColor = '#e6ee9c'; c.shadowBlur = 4; Art.ell(c, 13.4, 10.2, 1.6, 1.6, '#f4ffb0'); c.restore();
+    Art.ell(c, 13.7, 10.5, 0.6, 0.6, '#111');
+    Art.ell(c, 19, 10.4, 1.7, 1.5, '#141a0a');
+    c.strokeStyle = 'rgba(30,40,10,0.7)'; c.lineWidth = 0.5; c.beginPath(); c.moveTo(18.4, 11.8); c.lineTo(18.6, 13); c.moveTo(19.4, 11.9); c.lineTo(19.6, 12.8); c.stroke();   // stitches
+    Art.blob(c, () => { c.moveTo(12.6, 14.2); c.lineTo(14.4, 13.6); c.lineTo(16, 14.4); c.lineTo(17.8, 13.6); c.lineTo(19.2, 14.4); c.lineTo(18.4, 15.8); c.lineTo(13.6, 15.8); c.closePath(); }, '#2a1a12', ol, 0.5);
+    c.fillStyle = '#e8e4c8'; [13.8, 15.4, 17.2].forEach(x => c.fillRect(x, 14.2, 0.8, 0.9));
+    c.fillStyle = 'rgba(255,255,255,0.2)'; c.beginPath(); c.ellipse(13.6, 6.6, 2.4, 1.2, -0.4, 0, 7); c.fill();
+    c.restore();
   },
-  // Saga 2's common foe: a thin creature of cracked grey stone, small horns, pale glowing eyes, a rag at the waist.
-  rockOni(c) {
-    Art.shadow(c, 16, 37, 9);
-    const st = '#8d949c', dk = '#5b6168', lt = '#b4bbc3', ol = '#2b2f34';
-    c.strokeStyle = ol; c.lineWidth = 4.4; c.beginPath(); c.moveTo(13, 26); c.lineTo(11.5, 35); c.moveTo(19, 26); c.lineTo(20.5, 35);     // legs
-    c.moveTo(10.5, 16.5); c.lineTo(6, 23); c.lineTo(5.5, 29); c.moveTo(21.5, 16.5); c.lineTo(26, 23); c.lineTo(26.5, 29); c.stroke();    // long arms
-    c.strokeStyle = st; c.lineWidth = 2.6; c.beginPath(); c.moveTo(13, 26); c.lineTo(11.5, 35); c.moveTo(19, 26); c.lineTo(20.5, 35);
-    c.moveTo(10.5, 16.5); c.lineTo(6, 23); c.lineTo(5.5, 29); c.moveTo(21.5, 16.5); c.lineTo(26, 23); c.lineTo(26.5, 29); c.stroke();
-    [[5.5, 29], [26.5, 29]].forEach(([x, y]) => [-1.6, 0, 1.6].forEach(dx => Art.tri(c, [x + dx - 0.8, y], [x + dx + 0.8, y], [x + dx * 1.3, y + 3.6], '#d7dce1')));   // claws
-    [[11.5, 35.5], [20.5, 35.5]].forEach(([x, y]) => Art.ell(c, x, y, 3, 1.6, dk));
-    c.fillStyle = ol; c.beginPath(); c.moveTo(9.5, 14.5); c.lineTo(22.5, 14.5); c.lineTo(20.5, 27); c.lineTo(11.5, 27); c.closePath(); c.fill();                // thin chest
-    c.fillStyle = Art.grad(c, 10, 15, 22, 27, [[0, lt], [1, dk]]); c.beginPath(); c.moveTo(10.8, 15.5); c.lineTo(21.2, 15.5); c.lineTo(19.6, 26); c.lineTo(12.4, 26); c.closePath(); c.fill();
-    c.strokeStyle = ol; c.lineWidth = 0.7; c.beginPath(); c.moveTo(16, 16); c.lineTo(15.4, 20); c.lineTo(16.6, 23); c.moveTo(12.6, 19); c.lineTo(15.4, 20); c.moveTo(19.4, 21); c.lineTo(16.6, 23); c.stroke();   // cracks
-    c.fillStyle = '#5d4037'; c.beginPath(); c.moveTo(10.5, 24); c.lineTo(21.5, 24); c.lineTo(22, 29); c.lineTo(19.5, 32); c.lineTo(18, 29.5); c.lineTo(16, 33); c.lineTo(14, 29.5); c.lineTo(12, 31.5); c.lineTo(10, 29); c.closePath(); c.fill();   // rag
-    c.fillStyle = '#795548'; c.fillRect(10.5, 24, 11, 2);
-    Art.tri(c, [9.5, 6.5], [7.5, 1], [12.5, 4.5], '#4a4f55'); Art.tri(c, [22.5, 6.5], [24.5, 1], [19.5, 4.5], '#4a4f55');                                      // horns
-    Art.rr(c, 9, 3, 14, 13, 4.5); c.fillStyle = ol; c.fill(); Art.rr(c, 10, 4, 12, 11, 3.6); c.fillStyle = st; c.fill();
-    Art.ell(c, 14.5, 6.6, 3.6, 1.9, lt);
-    c.strokeStyle = ol; c.lineWidth = 0.7; c.beginPath(); c.moveTo(17, 4.2); c.lineTo(18, 6.6); c.lineTo(20.5, 7.4); c.stroke();
-    c.strokeStyle = ol; c.lineWidth = 1.3; c.beginPath(); c.moveTo(10.8, 8); c.lineTo(15, 9.6); c.moveTo(21.2, 8); c.lineTo(17, 9.6); c.stroke();               // brow
-    c.shadowColor = '#fff9c4'; c.shadowBlur = 4; Art.ell(c, 13.3, 10.3, 1.7, 1.2, '#fffde7'); Art.ell(c, 18.7, 10.3, 1.7, 1.2, '#fffde7'); c.shadowBlur = 0;
-    Art.rr(c, 12.2, 12.4, 7.6, 2.8, 1); c.fillStyle = '#1b1d20'; c.fill();
+  // Saga 2's common foe: a thin creature of cracked grey stone, small horns, pale glowing eyes, long arms, a rag at the waist.
+  rockOni(c, w, h, f) {
+    const S2 = Art.stride(f), r = Art.rng(37), ol = '#1f2226', st = '#8d949c', lt = '#c9d0d6', dk = '#50565d';
+    c.translate(0, -S2.bob * 0.6);
+    Art.ell(c, 16, 37 + S2.bob * 0.6, 9, 2.7, 'rgba(0,0,0,0.32)');
+    // long arms swinging, stone claws
+    [[10.6, -1, S2.arm], [21.4, 1, -S2.arm]].forEach(([x, s, a]) => {
+      const ex = x + s * 4.4, ey = 22.6, hx = x + s * 5, hy = 28.6 + a * 2;
+      Art.limb(c, [[x, 16.6], [ex, ey], [hx, hy]], 2.8, st, ol, lt);
+      Art.ell(c, ex, ey, 1.6, 1.6, dk);
+      [-1.6, 0, 1.6].forEach(dx => Art.tri(c, [hx + dx - 0.8, hy], [hx + dx + 0.8, hy], [hx + dx * 1.3, hy + 3.6], '#e1e6ea'));
+    });
+    // legs
+    [[13, S2.lL], [19, S2.lR]].forEach(([x, l], i) => {
+      const fy = 35 - l * 2.8;
+      Art.limb(c, [[x, 26], [x + (i ? 1.3 : -1.3), fy]], 2.8, st, ol, lt);
+      Art.ell(c, x + (i ? 1.3 : -1.3), fy + 0.6, 3, 1.6, ol); Art.ell(c, x + (i ? 1.3 : -1.3), fy + 0.4, 2.4, 1.1, dk);
+    });
+    // thin chest of stone with cracks
+    Art.stone(c, [[9.6, 14.6], [22.4, 14.6], [21, 21], [20.4, 27], [11.6, 27], [11, 21]], r, { base: st, lt, dk, ol, lw: 1, crack: false });
+    c.strokeStyle = 'rgba(20,22,26,0.8)'; c.lineWidth = 0.6; c.beginPath(); c.moveTo(16, 15.4); c.lineTo(15.3, 19.6); c.lineTo(16.8, 22.8); c.moveTo(12.4, 18.6); c.lineTo(15.3, 19.6); c.moveTo(19.8, 21); c.lineTo(16.8, 22.8); c.stroke();
+    Art.moss(c, r, 11.4, 15.4, 4, 1.6, 3);
+    // rag at the waist
+    const rag = () => { c.moveTo(10.4, 24); c.lineTo(21.6, 24); c.lineTo(22.2, 29); c.lineTo(19.6, 32); c.lineTo(18, 29.5); c.lineTo(16, 33); c.lineTo(14, 29.5); c.lineTo(12, 31.6); c.lineTo(9.8, 29); c.closePath(); };
+    Art.blob(c, rag, Art.grad(c, 10, 24, 10, 33, [[0, '#8a6448'], [1, '#4a3222']]), ol, 0.6);
+    Art.speckle(c, rag, r, 8, 10, 24, 12, 9, ['rgba(0,0,0,0.25)', 'rgba(255,255,255,0.12)'], 0.6);
+    c.fillStyle = '#6d4c33'; c.fillRect(10.4, 24, 11.2, 1.8);
+    // head of stone with horns, brow and glowing eyes
+    Art.tri(c, [9.6, 6.6], [7.2, 0.6], [12.6, 4.4], '#3f444a'); Art.tri(c, [22.4, 6.6], [24.8, 0.6], [19.4, 4.4], '#3f444a');
+    c.strokeStyle = 'rgba(255,255,255,0.3)'; c.lineWidth = 0.5; c.beginPath(); c.moveTo(8.4, 2.8); c.lineTo(10, 5.4); c.moveTo(23.6, 2.8); c.lineTo(22, 5.4); c.stroke();
+    Art.stone(c, [[10.6, 3.2], [16, 2.4], [21.4, 3.2], [22.6, 9], [21, 15], [11, 15], [9.4, 9]], r, { base: st, lt, dk, ol, lw: 1, crack: false });
+    c.strokeStyle = ol; c.lineWidth = 0.6; c.beginPath(); c.moveTo(17, 3.4); c.lineTo(18, 6.2); c.lineTo(20.4, 7); c.stroke();
+    Art.moss(c, r, 13.2, 3.6, 5, 1.8, 3);
+    c.strokeStyle = ol; c.lineWidth = 1.4; c.beginPath(); c.moveTo(10.8, 8); c.lineTo(15, 9.6); c.moveTo(21.2, 8); c.lineTo(17, 9.6); c.stroke();
+    c.save(); c.shadowColor = '#fff59d'; c.shadowBlur = 5; Art.ell(c, 13.3, 10.4, 1.7, 1.2, '#fffde7'); Art.ell(c, 18.7, 10.4, 1.7, 1.2, '#fffde7'); c.restore();
+    Art.ell(c, 13.5, 10.5, 0.5, 0.5, '#ff8f00'); Art.ell(c, 18.9, 10.5, 0.5, 0.5, '#ff8f00');
+    Art.rr(c, 12.2, 12.4, 7.6, 2.8, 1); c.fillStyle = '#121416'; c.fill();
     for (let x = 12.6; x < 19; x += 1.9) Art.tri(c, [x, 12.4], [x + 1.6, 12.4], [x + 0.8, 14.2], '#e6eaee');
   },
-  // Saga 2 level 2's second foe, the Iwagame: hunched brown rock under a domed shell of stone plates, moss on head and shell,
-  // orange glowing cracks and eyes, a torn loincloth, long dark claws. Seen from the front, shell humped up behind the head.
-  iwagame(c) {
-    Art.shadow(c, 18, 38, 12);
-    const ol = '#1f120c', dk = '#3e2518', st = '#5d3a28', lt = '#80553c', fire = '#ff8f00', moss = '#7cb342', mossDk = '#4e7a22';
-    const crack = pts => { c.strokeStyle = fire; c.lineWidth = 0.6; c.beginPath(); pts.forEach(([a, b, x, y]) => { c.moveTo(a, b); c.lineTo(x, y); }); c.stroke(); };
-    // the shell, humped up behind
-    Art.ell(c, 18, 13, 16, 12, ol); Art.ell(c, 18, 12.6, 14.6, 10.8, Art.grad(c, 0, 2, 0, 24, [[0, lt], [1, dk]]));
-    c.strokeStyle = ol; c.lineWidth = 0.8; c.beginPath();
-    [[8, 8, 13, 5], [13, 5, 19, 4], [19, 4, 25, 6], [25, 6, 29, 10], [8, 8, 6, 15], [13, 5, 13, 11], [19, 4, 19, 10], [25, 6, 26, 12], [29, 10, 30, 16]].forEach(([a, b, x, y]) => { c.moveTo(a, b); c.lineTo(x, y); });
-    c.stroke();
-    crack([[10, 10, 12, 13], [24, 9, 27, 12], [16, 6, 17, 9]]);
-    Art.ell(c, 8, 8, 4, 2.2, moss); Art.ell(c, 27, 7, 3.4, 2, moss); Art.ell(c, 8, 7.4, 2.4, 1.2, mossDk);
-    // legs and claws
-    [[11, 33], [25, 33]].forEach(([x, y]) => { Art.ell(c, x, y, 4.6, 4.2, ol); Art.ell(c, x, y - 0.4, 3.6, 3.2, st); [-2.4, 0, 2.4].forEach(dx => Art.tri(c, [x + dx - 0.8, y + 2.6], [x + dx + 0.8, y + 2.6], [x + dx, y + 5.2], '#2b211c')); });
-    // body
-    Art.ell(c, 18, 25, 10, 8, ol); Art.ell(c, 18, 24.6, 8.8, 7, Art.grad(c, 0, 18, 0, 32, [[0, lt], [1, st]]));
-    crack([[14, 21, 16, 24], [16, 24, 15, 27], [21, 22, 22, 25]]);
-    c.fillStyle = '#6d5638'; c.beginPath(); c.moveTo(11, 27); c.lineTo(25, 27); c.lineTo(24, 32); c.lineTo(21.5, 30); c.lineTo(19.5, 33); c.lineTo(17, 30.5); c.lineTo(14.5, 33); c.lineTo(12, 30.5); c.closePath(); c.fill();
-    // arms hanging forward with long claws
-    [[5.5, 21], [30.5, 21]].forEach(([x, y]) => {
-      Art.ell(c, x, y, 4.2, 6, ol); Art.ell(c, x, y - 0.3, 3.2, 5, st);
-      [-2, 0, 2].forEach(dx => Art.tri(c, [x + dx - 0.9, y + 4.6], [x + dx + 0.9, y + 4.6], [x + dx * 1.4, y + 9], '#3a2e27'));
+  // Saga 2's Iwagame: hunched brown rock under a domed shell of stone plates, moss on head and shell, glowing cracks and eyes,
+  // a torn loincloth, long dark claws. Seen from the front, shell humped up behind the head; it stomps as it walks.
+  iwagame(c, w, h, f) {
+    const S2 = Art.stride(f), r = Art.rng(51), ol = '#1f120c', dk = '#3b2316', st = '#64402b', lt = '#9a6c4c';
+    c.translate(0, -S2.bob * 0.6);
+    Art.ell(c, 18, 38.2 + S2.bob * 0.6, 12, 3.2, 'rgba(0,0,0,0.32)');
+    // the shell: bevelled plates of stone, moss on top, glowing seams
+    const shell = () => c.ellipse(18, 12.8, 15.6, 11.6, 0, 0, 7);
+    Art.blob(c, shell, Art.grad(c, 4, 1, 30, 24, [[0, lt], [0.5, st], [1, dk]]), ol, 1.1);
+    c.save(); c.beginPath(); shell(); c.clip();
+    [[6, 6, 5.5, 4.5], [13.5, 3.6, 5.6, 4], [21, 3.6, 5.6, 4], [28.4, 6.4, 5, 4.5], [5, 13.6, 4.2, 4], [11.6, 10.6, 4.6, 4], [18, 9.6, 4.8, 3.8], [24.6, 10.8, 4.6, 4], [30.6, 14, 4, 4]].forEach(([x, y, rx, ry]) =>
+      Art.stone(c, Art.rockPts(r, x, y, rx, ry, 7, 0.12), r, { base: st, lt, dk, ol: '#2a170e', lw: 0.7, fleck: 0.6, crack: false }));
+    c.restore();
+    Art.lavaCrack(c, [[10, 9.6], [11.6, 12], [10.8, 14]], 0.6); Art.lavaCrack(c, [[25, 8.6], [26.4, 11.4]], 0.6);
+    Art.moss(c, r, 8.4, 5.6, 7, 2.6, 4); Art.moss(c, r, 26.6, 5.6, 6, 2.4, 4); Art.moss(c, r, 18, 2.8, 6, 1.8, 3);
+    // stomping legs with claws
+    [[11, S2.lL], [25, S2.lR]].forEach(([x, l]) => {
+      const y = 33 - l * 2.6;
+      Art.blob(c, () => c.ellipse(x, y, 4.6, 4.4, 0, 0, 7), Art.grad(c, x - 4, y - 4, x + 4, y + 4, [[0, lt], [1, dk]]), ol, 0.9);
+      [-2.4, 0, 2.4].forEach(dx => Art.tri(c, [x + dx - 0.9, y + 2.8], [x + dx + 0.9, y + 2.8], [x + dx, y + 5.4], '#241812'));
     });
-    // head, low under the shell's front rim
-    Art.ell(c, 18, 16, 7.4, 6, ol); Art.ell(c, 18, 15.8, 6.4, 5, Art.grad(c, 0, 11, 0, 21, [[0, lt], [1, st]]));
-    Art.ell(c, 18, 11.6, 4.6, 1.8, moss); Art.ell(c, 17, 11.2, 2.4, 1, '#9ccc65');
-    c.strokeStyle = ol; c.lineWidth = 1.2; c.beginPath(); c.moveTo(12.6, 14.2); c.lineTo(16.6, 15.6); c.moveTo(23.4, 14.2); c.lineTo(19.4, 15.6); c.stroke();     // scowl
-    c.shadowColor = '#ff6d00'; c.shadowBlur = 5; Art.ell(c, 15, 16.4, 1.7, 1.3, '#ffb300'); Art.ell(c, 21, 16.4, 1.7, 1.3, '#ffb300'); c.shadowBlur = 0;
+    // belly and loincloth
+    const belly = () => c.ellipse(18, 25, 9.6, 7.6, 0, 0, 7);
+    Art.blob(c, belly, Art.grad(c, 10, 18, 26, 32, [[0, lt], [0.5, st], [1, dk]]), ol, 1);
+    Art.speckle(c, belly, r, 14, 8, 17, 20, 16, ['rgba(255,255,255,0.15)', 'rgba(0,0,0,0.2)'], 0.6);
+    Art.lavaCrack(c, [[14, 21.4], [16, 24], [15, 27]], 0.6); Art.lavaCrack(c, [[21.4, 22], [22.4, 25]], 0.5);
+    const cloth = () => { c.moveTo(11, 27); c.lineTo(25, 27); c.lineTo(24, 32); c.lineTo(21.5, 30); c.lineTo(19.5, 33); c.lineTo(17, 30.5); c.lineTo(14.5, 33); c.lineTo(12, 30.5); c.closePath(); };
+    Art.blob(c, cloth, Art.grad(c, 11, 27, 11, 33, [[0, '#8a7048'], [1, '#4f3d22']]), ol, 0.6);
+    // arms hanging forward with long claws, swaying with the stride
+    [[5.4, S2.arm], [30.6, -S2.arm]].forEach(([x, a]) => {
+      const y = 21 + a * 1.4;
+      Art.blob(c, () => c.ellipse(x, y, 4.2, 6, 0, 0, 7), Art.grad(c, x - 4, y - 6, x + 4, y + 6, [[0, lt], [1, dk]]), ol, 0.9);
+      Art.speckle(c, () => c.ellipse(x, y, 4.2, 6, 0, 0, 7), r, 5, x - 4, y - 6, 8, 12, ['rgba(0,0,0,0.25)', 'rgba(255,255,255,0.15)'], 0.5);
+      [-2, 0, 2].forEach(dx => Art.tri(c, [x + dx - 0.9, y + 4.6], [x + dx + 0.9, y + 4.6], [x + dx * 1.4, y + 9.2], '#2e231d'));
+    });
+    // head under the shell's rim: moss cap, scowl, glowing eyes
+    const head = () => c.ellipse(18, 16, 7.4, 6, 0, 0, 7);
+    Art.blob(c, head, Art.grad(c, 11, 10, 25, 22, [[0, lt], [0.5, st], [1, dk]]), ol, 1);
+    Art.speckle(c, head, r, 8, 10, 10, 16, 12, ['rgba(0,0,0,0.2)', 'rgba(255,255,255,0.15)'], 0.5);
+    Art.moss(c, r, 18, 11.4, 9, 2, 5);
+    c.strokeStyle = ol; c.lineWidth = 1.3; c.beginPath(); c.moveTo(12.6, 14.2); c.lineTo(16.6, 15.6); c.moveTo(23.4, 14.2); c.lineTo(19.4, 15.6); c.stroke();
+    c.save(); c.shadowColor = '#ff6d00'; c.shadowBlur = 5; Art.ell(c, 15, 16.4, 1.8, 1.3, '#ffb300'); Art.ell(c, 21, 16.4, 1.8, 1.3, '#ffb300'); c.restore();
     Art.ell(c, 15, 16.4, 0.7, 0.6, '#fff3e0'); Art.ell(c, 21, 16.4, 0.7, 0.6, '#fff3e0');
-    c.strokeStyle = ol; c.lineWidth = 0.9; c.beginPath(); c.moveTo(15.6, 19.6); c.quadraticCurveTo(18, 18.6, 20.4, 19.6); c.stroke();                            // frown
+    Art.rr(c, 15.2, 18.6, 5.6, 1.8, 0.8); c.fillStyle = '#140b07'; c.fill();
+    Art.tri(c, [15.6, 18.6], [16.6, 18.6], [16.1, 20.2], '#efe6d6'); Art.tri(c, [19.4, 18.6], [20.4, 18.6], [19.9, 20.2], '#efe6d6');
   },
-  // The same Iwagame pulled into its shell to roll: a ball of stone plates, glowing cracks, moss, claw tips peeking out.
+  // The Iwagame pulled into its shell to roll: a ball of bevelled stone plates, glowing seams, moss, claw tips peeking out.
+  // No shadow of its own: it spins, so the scene draws one.
   iwagameBall(c) {
-    Art.shadow(c, 16, 30, 11);
-    const ol = '#1f120c', dk = '#3e2518', lt = '#80553c';
-    Art.ell(c, 16, 16, 14, 13, ol); Art.ell(c, 16, 15.6, 12.6, 11.6, Art.grad(c, 4, 4, 28, 28, [[0, lt], [1, dk]]));
-    c.strokeStyle = ol; c.lineWidth = 0.9; c.beginPath();
-    [[6, 10, 26, 10], [5, 18, 27, 18], [11, 5, 10, 26], [21, 5, 22, 26]].forEach(([a, b, x, y]) => { c.moveTo(a, b); c.lineTo(x, y); }); c.stroke();
-    c.shadowColor = '#ff6d00'; c.shadowBlur = 4; c.strokeStyle = '#ff9800'; c.lineWidth = 0.9; c.beginPath();
-    [[13, 12, 16, 15], [16, 15, 15, 18], [23, 13, 25, 16], [8, 20, 11, 22]].forEach(([a, b, x, y]) => { c.moveTo(a, b); c.lineTo(x, y); }); c.stroke(); c.shadowBlur = 0;
-    Art.ell(c, 12, 6, 4.2, 2, '#7cb342'); Art.ell(c, 23, 22, 3, 1.6, '#7cb342');
-    [[4, 22], [28, 22], [16, 28.5]].forEach(([x, y]) => Art.tri(c, [x - 1, y - 1], [x + 1, y - 1], [x, y + 2], '#3a2e27'));
+    const r = Art.rng(52), ol = '#1f120c', dk = '#3b2316', st = '#64402b', lt = '#9a6c4c';
+    const ball = () => c.ellipse(16, 16, 14, 13.4, 0, 0, 7);
+    Art.blob(c, ball, Art.grad(c, 3, 3, 29, 29, [[0, lt], [0.5, st], [1, dk]]), ol, 1.2);
+    c.save(); c.beginPath(); ball(); c.clip();
+    [[9, 7, 5, 4.4], [17, 5.6, 4.6, 4], [24.4, 8.6, 4.6, 4.4], [6.4, 15.6, 4.4, 4.6], [14, 14, 5, 4.6], [22, 16.4, 4.8, 4.4], [9.6, 23.6, 4.6, 4], [17.4, 22.8, 4.4, 4.2], [25, 23.4, 4, 4]].forEach(([x, y, rx, ry]) =>
+      Art.stone(c, Art.rockPts(r, x, y, rx, ry, 7, 0.12), r, { base: st, lt, dk, ol: '#2a170e', lw: 0.7, fleck: 0.6, crack: false }));
+    c.restore();
+    Art.lavaCrack(c, [[12, 11], [14.6, 13.6], [13.6, 17]], 0.7); Art.lavaCrack(c, [[22.4, 12], [24.6, 15]], 0.7); Art.lavaCrack(c, [[8, 19.6], [11, 21.6]], 0.6);
+    Art.moss(c, r, 11, 5.4, 7, 2.4, 4); Art.moss(c, r, 23, 22.6, 5, 2, 3);
+    [[3.4, 21], [28.6, 21], [16, 29]].forEach(([x, y]) => Art.tri(c, [x - 1, y - 1], [x + 1, y - 1], [x, y + 2], '#2e231d'));
+    c.fillStyle = 'rgba(255,255,255,0.16)'; c.beginPath(); c.ellipse(10.4, 8.4, 4.4, 2.4, -0.6, 0, 7); c.fill();
   },
+
   // Saga 2's first big fight: a hulking stone oni with heavy horns, tusks, a torn hide and a crude stone club.
   rockBoss(c) {
     Art.shadow(c, 65, 122, 46);
@@ -1288,39 +1510,6 @@ const Art = {
     [[48, 42, 56, 52], [56, 52, 52, 62], [82, 44, 90, 52], [20, 72, 30, 78], [64, 76, 72, 86]].forEach(([a, b, x, y]) => { c.moveTo(a, b); c.lineTo(x, y); }); c.stroke(); c.restore();
     Art.ell(c, 46, 14, 14, 5, '#7cb342'); Art.ell(c, 42, 13, 6, 2, '#a5d65a');
     [[8, 76], [102, 76], [55, 101]].forEach(([x, y]) => Art.tri(c, [x - 3, y - 2], [x + 3, y - 2], [x, y + 6], '#3b3f42'));
-  },
-  // Mountain pass scenery.
-  rockGround(c, w, h) {
-    c.fillStyle = '#6f7268'; c.fillRect(0, 0, w, h);
-    for (let i = 0; i < 26; i++) Art.ell(c, Math.random() * w, Math.random() * h, 3 + Math.random() * 7, 2 + Math.random() * 4, ['rgba(140,145,135,0.5)', 'rgba(70,74,68,0.45)', 'rgba(106,120,84,0.5)'][i % 3]);
-    for (let i = 0; i < 12; i++) { const x = 4 + Math.random() * (w - 8), y = 4 + Math.random() * (h - 8), r = 1.5 + Math.random() * 2.5; Art.ell(c, x, y + 0.8, r, r * 0.7, '#3d4040'); Art.ell(c, x, y, r, r * 0.7, '#a7adb0'); }
-    for (let i = 0; i < 14; i++) { const x = Math.random() * w, y = 6 + Math.random() * (h - 6); c.strokeStyle = i % 2 ? '#7f9a56' : '#5f7a44'; c.lineWidth = 1.2; c.beginPath(); c.moveTo(x, y); c.lineTo(x - 1.5, y - 5); c.moveTo(x, y); c.lineTo(x + 2, y - 4); c.stroke(); }
-  },
-  stonePath(c, w, h) {
-    c.fillStyle = Art.grad(c, 0, 0, w, 0, [[0, '#7a7466'], [0.1, '#a79f8c'], [0.9, '#a79f8c'], [1, '#7a7466']]); c.fillRect(0, 0, w, h);
-    for (let i = 0; i < 26; i++) {                           // worn flagstones
-      const x = 18 + Math.random() * (w - 60), y = Math.random() * (h - 14), sw = 18 + Math.random() * 22, sh = 9 + Math.random() * 8;
-      Art.rr(c, x, y, sw, sh, 3.5); c.fillStyle = ['rgba(190,184,168,0.55)', 'rgba(140,134,120,0.5)', 'rgba(170,166,156,0.5)'][i % 3]; c.fill();
-      c.strokeStyle = 'rgba(70,64,54,0.35)'; c.lineWidth = 1; c.stroke();
-    }
-    for (let i = 0; i < 50; i++) Art.ell(c, 14 + Math.random() * (w - 28), 3 + Math.random() * (h - 6), 1 + Math.random() * 2, 0.8 + Math.random() * 1.2, ['rgba(60,56,50,0.4)', 'rgba(215,210,198,0.45)'][i % 2]);
-    for (let y = 0; y < h; y += 16) [1, w - 13].forEach((x, k) => { Art.ell(c, x + 6, y + 8, 6.5, 7, '#3d4040'); Art.ell(c, x + 6, y + 7.4, 5.3, 5.8, (y / 16 + k) % 2 ? '#8d949c' : '#7a8088'); Art.ell(c, x + 5, y + 5.6, 3, 2.2, '#b4bbc3'); });   // rough stone kerbs
-  },
-  cliff(c) {
-    Art.ell(c, 36, 72, 34, 8, 'rgba(0,0,0,0.35)');
-    const face = (pts, fill) => { c.fillStyle = fill; c.beginPath(); pts.forEach(p => c.lineTo(...p)); c.closePath(); c.fill(); };
-    face([[4, 72], [2, 40], [12, 16], [26, 4], [44, 2], [60, 14], [70, 38], [68, 72]], '#2b2f34');
-    face([[6, 70], [5, 41], [14, 18], [27, 7], [43, 5], [58, 16], [67, 39], [65, 70]], '#6b7178');
-    face([[14, 18], [27, 7], [43, 5], [58, 16], [46, 26], [30, 30]], '#aab1b9');              // lit top
-    face([[5, 41], [14, 18], [30, 30], [26, 52], [6, 70]], '#858c94');
-    face([[46, 26], [58, 16], [67, 39], [65, 70], [44, 70], [50, 46]], '#565c63');            // shaded side
-    c.strokeStyle = '#2b2f34'; c.lineWidth = 1.3; c.beginPath(); c.moveTo(30, 30); c.lineTo(26, 52); c.lineTo(34, 70); c.moveTo(26, 52); c.lineTo(50, 46); c.moveTo(46, 26); c.lineTo(50, 46); c.lineTo(44, 70); c.moveTo(12, 44); c.lineTo(20, 40); c.stroke();
-    [[10, 70], [58, 71], [30, 72]].forEach(([x, y]) => { c.strokeStyle = '#6f8a4c'; c.lineWidth = 1.4; c.beginPath(); c.moveTo(x, y); c.lineTo(x - 2, y - 7); c.moveTo(x, y); c.lineTo(x + 2.5, y - 6); c.stroke(); });
-  },
-  boulder(c) {
-    Art.ell(c, 15, 20, 14, 4, 'rgba(0,0,0,0.38)');
-    Art.ell(c, 15, 13, 13, 9.5, '#2b2f34'); Art.ell(c, 15, 12.6, 11.4, 8, '#7a8088'); Art.ell(c, 12.5, 9.6, 6.5, 3.6, '#aab1b9');
-    c.strokeStyle = '#2b2f34'; c.lineWidth = 1; c.beginPath(); c.moveTo(18, 6); c.lineTo(16, 12); c.lineTo(21, 17); c.stroke();
   },
   giant(c) {
     Art.shadow(c, 55, 122, 40);
@@ -1657,70 +1846,185 @@ const Art = {
     c.beginPath(); c.arc(24, 1.5, 7, 0.08 * Math.PI, 0.92 * Math.PI); c.arc(24, -1.2, 7.2, 0.84 * Math.PI, 0.16 * Math.PI, true); c.closePath(); c.fillStyle = '#ffd54f'; c.fill();
   },
   rock(c) { Art.ell(c, 6, 6, 6, 5, '#2e3238'); Art.ell(c, 6, 5.6, 4.6, 3.8, '#7d848d'); Art.ell(c, 5, 4.4, 2.6, 1.6, '#a9b0b8'); },
-  slash(c) {
-    c.beginPath(); c.arc(24, 24, 20, -1.2, 1.2); c.arc(15, 24, 21, 1.0, -1.0, true); c.closePath();
-    c.fillStyle = Art.grad(c, 24, 4, 24, 44, [[0, 'rgba(255,255,255,0)'], [0.5, 'rgba(255,255,255,1)'], [1, 'rgba(255,255,255,0)']]);
-    c.fill();
-  },
   // The currency: a gold coin with a square hole, like an old mon. (Kept under its old key, 'soul'.)
   soul(c) {
     Art.ell(c, 8, 8.6, 7.2, 7.2, '#8a5a00'); Art.ell(c, 8, 7.6, 7.2, 7.2, '#f9a825'); Art.ell(c, 8, 7.6, 5.6, 5.6, '#ffd54f');
     c.fillStyle = '#b26a00'; c.fillRect(6, 5.6, 4, 4); c.fillStyle = '#fff8e1'; c.fillRect(6, 9, 4, 0.7);
     c.strokeStyle = 'rgba(255,255,255,0.8)'; c.lineWidth = 1.1; c.beginPath(); c.arc(8, 7.6, 5.4, 3.5, 4.7); c.stroke();
   },
+  // A soft dot for sparks, and a soft round puff for dust and smoke (tinted where used).
   dot(c) { Art.ell(c, 4, 4, 4, 4, '#fff'); },
+  puff(c) {
+    const g = c.createRadialGradient(16, 16, 0, 16, 16, 16);
+    g.addColorStop(0, 'rgba(255,255,255,0.9)'); g.addColorStop(0.45, 'rgba(255,255,255,0.55)'); g.addColorStop(1, 'rgba(255,255,255,0)');
+    c.fillStyle = g; c.fillRect(0, 0, 32, 32);
+  },
   petal(c) { Art.ell(c, 4, 3, 4, 2.4, '#ffc1d9'); Art.ell(c, 3, 2.6, 1.8, 1, '#ffe3ee'); },
+  // Saga 1's meadow, a seamless tile: soft light and dark patches, clumps of blades in three greens, clover and a few flowers.
   grass(c, w, h) {
-    c.fillStyle = '#2f5d2a'; c.fillRect(0, 0, w, h);
-    for (let i = 0; i < 90; i++) {
-      const x = Math.random() * w, y = 4 + Math.random() * (h - 4);
-      c.strokeStyle = ['#3c7a33', '#27501f', '#4b8f3c'][i % 3]; c.lineWidth = 1.2;
-      c.beginPath(); c.moveTo(x, y); c.lineTo(x + 1.5, y - 4); c.stroke();
+    const r = Art.rng(101);
+    c.fillStyle = '#2f6a2b'; c.fillRect(0, 0, w, h);
+    for (let i = 0; i < 14; i++) { const x = r() * w, y = r() * h, rx = 6 + r() * 12, ry = 4 + r() * 8, col = i % 2 ? 'rgba(90,160,70,0.22)' : 'rgba(20,60,20,0.25)'; Art.tile(w, h, x, y, (X, Y) => Art.ell(c, X, Y, rx, ry, col)); }
+    for (let i = 0; i < 60; i++) { const x = r() * w, y = r() * h; Art.tile(w, h, x, y, (X, Y) => Art.ell(c, X, Y + 1, 1.6, 0.8, 'rgba(10,40,10,0.35)')); }
+    for (let i = 0; i < 26; i++) {                           // clumps: dark blades behind, bright ones in front
+      const x = r() * w, y = r() * h, n = 4 + Math.floor(r() * 4);
+      const blades = [...Array(n)].map(() => [(r() - 0.5) * 5, 3 + r() * 4, (r() - 0.5) * 3]);
+      Art.tile(w, h, x, y, (X, Y) => blades.forEach(([dx, len, lean], k) => {
+        c.strokeStyle = ['#1f4d1c', '#3f8a35', '#5aa845', '#86c95e'][Math.min(3, k % 4)]; c.lineWidth = 1.1;
+        c.beginPath(); c.moveTo(X + dx, Y); c.quadraticCurveTo(X + dx + lean * 0.3, Y - len * 0.6, X + dx + lean, Y - len); c.stroke();
+      }));
+    }
+    for (let i = 0; i < 6; i++) { const x = r() * w, y = r() * h; Art.tile(w, h, x, y, (X, Y) => [0, 2.1, 4.2].forEach(a => Art.ell(c, X + Math.cos(a) * 1.2, Y + Math.sin(a) * 1.2, 1.2, 1.2, '#4f9a40'))); }
+    for (let i = 0; i < 5; i++) {
+      const x = r() * w, y = r() * h, col = ['#fffde7', '#ffe082', '#f8bbd0'][i % 3];
+      Art.tile(w, h, x, y, (X, Y) => { [0, 1.26, 2.5, 3.8, 5].forEach(a => Art.ell(c, X + Math.cos(a) * 1.1, Y + Math.sin(a) * 1.1, 0.9, 0.9, col)); Art.ell(c, X, Y, 0.6, 0.6, '#f9a825'); });
     }
   },
+  // Saga 1's dirt road, a tile that repeats down the screen: packed earth darker at the edges, two worn wheel ruts, pebbles with
+  // shadows, grass creeping over the edges, and rounded stone kerbs.
   path(c, w, h) {
-    c.fillStyle = Art.grad(c, 0, 0, w, 0, [[0, '#6a4a3a'], [0.12, '#8a6650'], [0.88, '#8a6650'], [1, '#6a4a3a']]);
-    c.fillRect(0, 0, w, h);
-    for (let i = 0; i < 70; i++) {
-      Art.ell(c, 16 + Math.random() * (w - 32), 3 + Math.random() * (h - 6), 1 + Math.random() * 2.2, 0.8 + Math.random() * 1.2,
-        ['rgba(60,40,30,0.35)', 'rgba(190,160,130,0.3)'][i % 2]);
+    const r = Art.rng(102);
+    c.fillStyle = Art.grad(c, 0, 0, w, 0, [[0, '#5e4030'], [0.1, '#8d6a50'], [0.5, '#9a775a'], [0.9, '#8d6a50'], [1, '#5e4030']]); c.fillRect(0, 0, w, h);
+    [0.3, 0.7].forEach(fx => { c.fillStyle = Art.grad(c, w * fx - 12, 0, w * fx + 12, 0, [[0, 'rgba(70,45,30,0)'], [0.5, 'rgba(70,45,30,0.13)'], [1, 'rgba(70,45,30,0)']]); c.fillRect(w * fx - 12, 0, 24, h); });
+    for (let i = 0; i < 40; i++) { const x = 18 + r() * (w - 36), y = r() * h, rx = 4 + r() * 10, ry = 2 + r() * 5, col = i % 2 ? 'rgba(60,38,24,0.18)' : 'rgba(210,180,140,0.14)'; Art.tile(0, h, x, y, (X, Y) => Art.ell(c, X, Y, rx, ry, col)); }
+    for (let i = 0; i < 120; i++) { const x = 16 + r() * (w - 32), y = r() * h, s = 0.5 + r() * 0.9, col = ['rgba(50,32,20,0.4)', 'rgba(220,195,160,0.35)'][i % 2]; Art.tile(0, h, x, y, (X, Y) => Art.ell(c, X, Y, s, s * 0.7, col)); }
+    for (let i = 0; i < 22; i++) {                           // pebbles
+      const x = 20 + r() * (w - 40), y = r() * h, s = 1.2 + r() * 2.2, col = ['#9e9a92', '#b8ae9c', '#857c70'][i % 3];
+      Art.tile(0, h, x, y, (X, Y) => { Art.ell(c, X + 0.6, Y + 0.8, s, s * 0.7, 'rgba(40,25,15,0.45)'); Art.ell(c, X, Y, s, s * 0.7, col); Art.ell(c, X - s * 0.3, Y - s * 0.25, s * 0.45, s * 0.25, 'rgba(255,255,255,0.5)'); });
     }
-    for (let y = 0; y < h; y += 16) {                    // stone kerbs
-      [2, w - 12].forEach(x => { Art.rr(c, x, y + 2, 10, 12, 3); c.fillStyle = (y / 16) % 2 ? '#9e9e9e' : '#868686'; c.fill(); });
-    }
+    for (let y = 0; y < h; y += 4) [[13, 1], [w - 13, -1]].forEach(([x, s]) => {      // grass creeping over the edges
+      const len = 3 + r() * 5; c.strokeStyle = ['#2f6a2b', '#4f9a40', '#3f8a35'][Math.floor(r() * 3)]; c.lineWidth = 1.1;
+      c.beginPath(); c.moveTo(x - s * 2, y); c.quadraticCurveTo(x + s * len * 0.5, y - 1, x + s * len, y - 2 - r() * 2); c.stroke();
+    });
+    for (let y = 0; y < h; y += 16) [[1, 0], [w - 13, 1]].forEach(([x, k]) => {       // rounded stone kerbs
+      const tone = ((y / 16) + k) % 2 ? ['#a8a49c', '#7f7a72', '#cdc9c0'] : ['#97938b', '#6e6a63', '#bdb9b0'];
+      Art.ell(c, x + 6.5, y + 9.4, 6.6, 7, 'rgba(30,20,10,0.55)');
+      Art.blob(c, () => Art.rr(c, x + 0.5, y + 1.6, 12, 12.6, 4.5), Art.grad(c, x, y, x + 12, y + 14, [[0, tone[2]], [0.5, tone[0]], [1, tone[1]]]), '#3a3530', 0.8);
+      Art.ell(c, x + 4.4, y + 4.6, 2.6, 1.4, 'rgba(255,255,255,0.35)');
+      if ((y / 16 + k) % 3 === 0) Art.moss(c, r, x + 4, y + 2.6, 5, 1.6, 3);
+    });
+  },
+  // A cherry tree in bloom: a dark trunk and branches, then blossom clusters shaded from pink to white.
+  tree(c) {
+    const r = Art.rng(103);
+    Art.ell(c, 30, 52, 22, 6, 'rgba(0,0,0,0.32)');
+    Art.limb(c, [[30, 54], [29, 40], [30, 30]], 6, '#4a2f25', '#1e130e', 'rgba(255,220,200,0.25)');
+    Art.limb(c, [[29.6, 38], [20, 28], [14, 26]], 3, '#4a2f25', '#1e130e'); Art.limb(c, [[30, 34], [40, 26], [46, 24]], 3, '#4a2f25', '#1e130e');
+    Art.limb(c, [[30, 31], [27, 20], [24, 14]], 2.4, '#4a2f25', '#1e130e'); Art.limb(c, [[30, 31], [34, 18], [38, 12]], 2.4, '#4a2f25', '#1e130e');
+    const clusters = [[30, 16, 13], [16, 25, 10], [44, 23, 10], [24, 30, 9], [37, 30, 9], [30, 26, 10], [20, 14, 8], [41, 13, 8]];
+    clusters.forEach(([x, y, s]) => Art.ell(c, x + 1.5, y + 2.5, s, s * 0.8, 'rgba(120,40,70,0.55)'));
+    clusters.forEach(([x, y, s]) => Art.ell(c, x, y, s, s * 0.82, '#e5739e'));
+    clusters.forEach(([x, y, s]) => { for (let i = 0; i < 9; i++) { const a = r() * 6.28, d = r() * s * 0.75; Art.ell(c, x + Math.cos(a) * d - s * 0.12, y + Math.sin(a) * d * 0.8 - s * 0.14, s * 0.32, s * 0.27, i % 3 ? '#f7a8c6' : '#f48fb1'); } });
+    clusters.forEach(([x, y, s]) => { for (let i = 0; i < 6; i++) { const a = r() * 6.28, d = r() * s * 0.6; Art.ell(c, x + Math.cos(a) * d - s * 0.25, y + Math.sin(a) * d * 0.7 - s * 0.3, s * 0.16, s * 0.13, i % 2 ? '#ffe4ef' : '#ffffff'); } });
+    for (let i = 0; i < 10; i++) Art.ell(c, 10 + r() * 40, 8 + r() * 30, 0.7, 0.7, '#fff');
+  },
+  // A stone lantern (toro): a stepped base, a post, a lit firebox and a curved roof with a finial.
+  lantern(c) {
+    Art.ell(c, 12, 39, 10, 3, 'rgba(0,0,0,0.35)');
+    const sto = (x0, y0, x1, y1) => Art.grad(c, x0, y0, x1, y1, [[0, '#d6d3cc'], [0.5, '#a19d95'], [1, '#6c6862']]);
+    Art.blob(c, () => Art.rr(c, 4, 34, 16, 4.6, 1.5), sto(4, 34, 20, 39), '#3a3732', 0.7);
+    Art.blob(c, () => Art.rr(c, 8.6, 22, 6.8, 13, 1.2), sto(8, 22, 16, 35), '#3a3732', 0.7);
+    c.strokeStyle = 'rgba(0,0,0,0.25)'; c.lineWidth = 0.5; c.beginPath(); c.moveTo(9, 26); c.lineTo(15, 26); c.moveTo(9, 30); c.lineTo(15, 30); c.stroke();
+    Art.blob(c, () => Art.rr(c, 5.4, 20.2, 13.2, 2.8, 1), sto(5, 20, 19, 23), '#3a3732', 0.7);
+    Art.blob(c, () => Art.rr(c, 6, 11.4, 12, 9.2, 1.4), sto(6, 11, 18, 21), '#3a3732', 0.7);
+    c.save(); c.shadowColor = '#ffb300'; c.shadowBlur = 10; Art.rr(c, 8.6, 13.2, 6.8, 5.6, 1); c.fillStyle = '#ffd54f'; c.fill(); c.restore();
+    Art.rr(c, 9.8, 14, 4.4, 4, 0.8); c.fillStyle = '#fff8e1'; c.fill();
+    c.fillStyle = '#5a554e'; c.fillRect(11.6, 13.2, 0.8, 5.6);
+    c.beginPath(); c.moveTo(0.6, 12.4); c.quadraticCurveTo(6, 10.6, 9, 6.6); c.lineTo(15, 6.6); c.quadraticCurveTo(18, 10.6, 23.4, 12.4); c.closePath();
+    c.fillStyle = sto(1, 6, 23, 13); c.fill(); c.strokeStyle = '#3a3732'; c.lineWidth = 0.7; c.stroke();
+    Art.ell(c, 12, 5.6, 2.2, 1.6, '#8a867e'); Art.ell(c, 12, 3.6, 1.4, 1.6, '#a19d95'); Art.ell(c, 11.6, 3.2, 0.6, 0.5, 'rgba(255,255,255,0.6)');
+    Art.moss(c, Art.rng(104), 7, 10.8, 5, 1.4, 3);
   },
   deadTree(c) {
-    Art.shadow(c, 30, 54, 16);
-    c.strokeStyle = '#1c1512'; c.lineWidth = 6; c.beginPath(); c.moveTo(30, 54); c.lineTo(29, 26); c.stroke();
-    c.lineWidth = 3; c.beginPath();
-    [[29, 36, 14, 22], [29, 30, 46, 16], [29, 26, 22, 6], [29, 28, 38, 4], [14, 22, 6, 14], [46, 16, 54, 6], [22, 6, 16, 0]].forEach(([a, b, x, y]) => { c.moveTo(a, b); c.lineTo(x, y); });
-    c.stroke();
-    c.strokeStyle = 'rgba(255,120,60,0.55)'; c.lineWidth = 1; c.beginPath(); c.moveTo(29, 46); c.lineTo(27, 38); c.lineTo(30, 32); c.stroke();   // ember crack
+    Art.ell(c, 30, 54, 18, 5, 'rgba(0,0,0,0.35)');
+    Art.limb(c, [[30, 56], [29, 40], [29, 26]], 6, '#2a201b', '#0c0907', 'rgba(255,255,255,0.12)');
+    [[[29, 36], [20, 28], [14, 22], [6, 14]], [[29, 30], [38, 22], [46, 16], [54, 6]], [[29, 26], [25, 14], [22, 6], [16, 0]], [[29, 28], [34, 14], [38, 4]]].forEach(pts => Art.limb(c, pts, 2.6, '#2a201b', '#0c0907'));
+    Art.lavaCrack(c, [[29, 48], [27.4, 40], [30, 33]], 0.6);
   },
   rubble(c) {
+    const r = Art.rng(105);
     Art.ell(c, 15, 20, 14, 4, 'rgba(0,0,0,0.4)');
-    [[4, 12, 10, 9, '#4a4a52'], [12, 8, 12, 12, '#5d5d66'], [20, 14, 8, 7, '#3b3b44']].forEach(([x, y, w, h, col]) => { Art.rr(c, x, y, w, h, 2.5); c.fillStyle = col; c.fill(); });
-    c.strokeStyle = '#1c1c22'; c.lineWidth = 1; c.beginPath(); c.moveTo(14, 9); c.lineTo(18, 14); c.lineTo(16, 19); c.stroke();
+    [[9, 14, 6, 5], [17, 11, 7, 6.4], [23, 16, 5, 4]].forEach(([x, y, rx, ry]) => Art.stone(c, Art.rockPts(r, x, y, rx, ry, 8), r, { base: '#56565f', lt: '#8a8a94', dk: '#2c2c33', ol: '#141418', lw: 0.8 }));
   },
   crack(c) {
-    Art.ell(c, 30, 20, 26, 14, 'rgba(10,6,14,0.45)');                                         // scorch mark
+    Art.ell(c, 30, 20, 26, 14, 'rgba(10,6,14,0.4)');                                          // scorch mark
     c.strokeStyle = '#0e0a12'; c.lineWidth = 2.2; c.beginPath();
     [[4, 22], [16, 17], [22, 23], [32, 15], [41, 22], [56, 16]].forEach((p, i) => i ? c.lineTo(...p) : c.moveTo(...p));
     c.moveTo(22, 23); c.lineTo(20, 34); c.moveTo(32, 15); c.lineTo(36, 5); c.stroke();
-    c.strokeStyle = 'rgba(179,136,255,0.5)'; c.lineWidth = 0.8; c.beginPath(); c.moveTo(16, 17); c.lineTo(22, 23); c.lineTo(32, 15); c.stroke();
+    c.strokeStyle = 'rgba(255,255,255,0.12)'; c.lineWidth = 0.8; c.beginPath(); c.moveTo(4, 23.4); c.lineTo(16, 18.4); c.lineTo(22, 24.4); c.stroke();
   },
-  lantern(c) {
-    Art.shadow(c, 12, 38, 9);
-    c.fillStyle = '#8d8d8d'; c.fillRect(9, 22, 6, 15); Art.rr(c, 5, 34, 14, 4, 1.5); c.fill();
-    Art.rr(c, 5, 12, 14, 11, 2); c.fillStyle = '#a5a5a5'; c.fill();
-    c.shadowColor = '#ffb300'; c.shadowBlur = 8; Art.rr(c, 8, 14, 8, 7, 1); c.fillStyle = '#ffd54f'; c.fill(); c.shadowBlur = 0;
-    Art.tri(c, [1, 13], [12, 3], [23, 13], '#6d6d6d');
+  // Mountain ground, a seamless tile: grey-green earth, gravel with shadows, moss patches and tufts of hardy grass.
+  rockGround(c, w, h) {
+    const r = Art.rng(106);
+    c.fillStyle = '#6a6e64'; c.fillRect(0, 0, w, h);
+    for (let i = 0; i < 16; i++) { const x = r() * w, y = r() * h, rx = 5 + r() * 10, ry = 3 + r() * 6, col = ['rgba(150,155,140,0.28)', 'rgba(50,54,48,0.28)', 'rgba(100,125,70,0.3)'][i % 3]; Art.tile(w, h, x, y, (X, Y) => Art.ell(c, X, Y, rx, ry, col)); }
+    for (let i = 0; i < 70; i++) { const x = r() * w, y = r() * h, s = 0.4 + r() * 0.8, col = ['rgba(30,32,28,0.4)', 'rgba(210,214,200,0.3)'][i % 2]; Art.tile(w, h, x, y, (X, Y) => Art.ell(c, X, Y, s, s * 0.7, col)); }
+    for (let i = 0; i < 14; i++) {
+      const x = r() * w, y = r() * h, s = 1.3 + r() * 2.2, col = ['#9aa0a3', '#868c8f', '#b0b5b8'][i % 3];
+      Art.tile(w, h, x, y, (X, Y) => { Art.ell(c, X + 0.6, Y + 0.9, s, s * 0.7, 'rgba(20,22,20,0.5)'); Art.ell(c, X, Y, s, s * 0.7, col); Art.ell(c, X - s * 0.3, Y - s * 0.25, s * 0.45, s * 0.22, 'rgba(255,255,255,0.45)'); });
+    }
+    for (let i = 0; i < 4; i++) { const x = r() * w, y = r() * h; Art.tile(w, h, x, y, (X, Y) => Art.moss(c, Art.rng(200 + i), X, Y, 9, 3, 5)); }
+    for (let i = 0; i < 10; i++) {
+      const x = r() * w, y = r() * h;
+      Art.tile(w, h, x, y, (X, Y) => { [-1.5, 0, 1.6].forEach((dx, k) => { c.strokeStyle = ['#56703c', '#7f9a56', '#9cb86a'][k]; c.lineWidth = 1; c.beginPath(); c.moveTo(X + dx * 0.4, Y); c.lineTo(X + dx, Y - 3 - k); c.stroke(); }); });
+    }
   },
-  tree(c) {
-    Art.shadow(c, 30, 52, 20);
-    c.fillStyle = '#4e342e'; c.fillRect(27, 34, 6, 18);
-    [[30, 22, 19], [17, 29, 12], [43, 28, 12], [30, 34, 13]].forEach(([x, y, r], i) => Art.ell(c, x, y, r, r * 0.85, ['#f48fb1', '#f8bbd0', '#f06292', '#f8bbd0'][i]));
-    for (let i = 0; i < 16; i++) Art.ell(c, 14 + Math.random() * 32, 10 + Math.random() * 30, 1.6, 1.2, 'rgba(255,255,255,0.6)');
+  // The mountain road, a tile that repeats down the screen: worn flagstones with bevelled edges, moss in the joints, rough kerbs.
+  stonePath(c, w, h) {
+    const r = Art.rng(107);
+    c.fillStyle = Art.grad(c, 0, 0, w, 0, [[0, '#5d5a50'], [0.08, '#7d796c'], [0.92, '#7d796c'], [1, '#5d5a50']]); c.fillRect(0, 0, w, h);
+    const rows = 5, rh = h / rows;
+    for (let row = 0; row < rows; row++) {                     // uneven courses of worn flagstones; joints show the dark ground
+      let x = 14 - r() * 20;
+      while (x < w - 14) {
+        const sw = 15 + r() * 17, y = row * rh, x0 = Math.max(14, x + 1.6), x1 = Math.min(w - 14, x + sw - 1.6);
+        if (x1 - x0 > 6) {
+          const j = () => (r() - 0.5) * 3, top = row ? y + 1.6 : 1.6, bot = row < rows - 1 ? y + rh - 1.6 : h - 1.6;
+          const pts = [[x0 + j(), top + j() * 0.5], [(x0 + x1) / 2 + j(), top + j() * 0.3], [x1 + j(), top + j() * 0.5], [x1 + j(), (top + bot) / 2 + j() * 0.4], [x1 + j(), bot], [x0 + j(), bot], [x0 + j(), (top + bot) / 2]];
+          const tone = ['#a39d8b', '#958f7e', '#ada795', '#8c8676', '#9c9a8c'][Math.floor(r() * 5)];
+          Art.stone(c, pts, r, { base: tone, lt: '#c9c3b0', dk: '#615d52', ol: '#33302a', lw: 0.8, fleck: 0.7, crack: r() < 0.22 });
+          if (r() < 0.3) Art.moss(c, r, x0 + 3 + r() * (x1 - x0 - 6), y + rh - 2, 6, 1.5, 3);
+        }
+        x += sw;
+      }
+    }
+    for (let y = 0; y < h; y += 16) [[1, 0], [w - 13, 1]].forEach(([x, k]) => {
+      const pts = Art.rockPts(r, x + 6, y + 8, 6.2, 7.4, 8, 0.14);
+      Art.stone(c, pts, r, { base: (y / 16 + k) % 2 ? '#8d949c' : '#7a8088', lt: '#bfc6cd', dk: '#4a5056', ol: '#26292d', lw: 0.8, fleck: 0.6, crack: false });
+      if ((y / 16 + k) % 3 === 1) Art.moss(c, r, x + 6, y + 3, 7, 1.8, 3);
+    });
+  },
+  // A crag at the roadside: a faceted boulder face lit from the upper left, cracks, moss on its shoulders and grass at its foot.
+  cliff(c) {
+    const r = Art.rng(108);
+    Art.ell(c, 36, 72, 34, 8, 'rgba(0,0,0,0.38)');
+    const face = (pts, fill) => { Art.poly(c, pts); c.fillStyle = fill; c.fill(); };
+    face([[4, 72], [2, 40], [12, 16], [26, 4], [44, 2], [60, 14], [70, 38], [68, 72]], '#23272b');
+    face([[6, 70], [5, 41], [14, 18], [27, 7], [43, 5], [58, 16], [67, 39], [65, 70]], '#6b7178');
+    face([[14, 18], [27, 7], [43, 5], [58, 16], [46, 26], [30, 30]], Art.grad(c, 14, 4, 50, 30, [[0, '#d0d6dc'], [1, '#9aa1a8']]));     // lit top
+    face([[5, 41], [14, 18], [30, 30], [26, 52], [6, 70]], Art.grad(c, 5, 20, 28, 60, [[0, '#a4abb2'], [1, '#757c83']]));
+    face([[30, 30], [46, 26], [50, 46], [26, 52]], Art.grad(c, 30, 28, 48, 50, [[0, '#8a9198'], [1, '#666d74']]));
+    face([[26, 52], [50, 46], [44, 70], [34, 70]], '#5c6269');
+    face([[46, 26], [58, 16], [67, 39], [65, 70], [44, 70], [50, 46]], Art.grad(c, 50, 20, 66, 70, [[0, '#5d636a'], [1, '#3a3f45']]));   // shaded side
+    Art.speckle(c, () => { [[6, 70], [5, 41], [14, 18], [27, 7], [43, 5], [58, 16], [67, 39], [65, 70]].forEach((p, i) => i ? c.lineTo(...p) : c.moveTo(...p)); }, r, 140, 4, 4, 64, 68, ['rgba(255,255,255,0.18)', 'rgba(0,0,0,0.2)', 'rgba(0,0,0,0.12)'], 0.8);
+    c.strokeStyle = 'rgba(255,255,255,0.45)'; c.lineWidth = 0.9; c.beginPath(); c.moveTo(14, 18); c.lineTo(27, 7); c.lineTo(43, 5); c.lineTo(58, 16); c.moveTo(5, 41); c.lineTo(14, 18); c.stroke();
+    c.strokeStyle = '#23272b'; c.lineWidth = 1.3; c.beginPath(); c.moveTo(30, 30); c.lineTo(26, 52); c.lineTo(34, 70); c.moveTo(26, 52); c.lineTo(50, 46); c.moveTo(46, 26); c.lineTo(50, 46); c.lineTo(44, 70); c.moveTo(12, 44); c.lineTo(20, 40); c.lineTo(22, 47); c.moveTo(55, 30); c.lineTo(60, 40); c.stroke();
+    Art.moss(c, r, 30, 9, 18, 4, 8); Art.moss(c, r, 12, 22, 8, 3, 5); Art.moss(c, r, 54, 17, 8, 3, 4);
+    for (const x of [8, 14, 22, 32, 40, 52, 60]) { [-1.5, 0, 1.8].forEach((dx, k) => { c.strokeStyle = ['#4d6a34', '#6f8a4c', '#93b064'][k]; c.lineWidth = 1.3; c.beginPath(); c.moveTo(x + dx * 0.4, 71); c.lineTo(x + dx * 1.4, 71 - 4 - r() * 4); c.stroke(); }); }
+  },
+  boulder(c) {
+    const r = Art.rng(109);
+    Art.ell(c, 15, 20.5, 13, 3.6, 'rgba(0,0,0,0.38)');
+    Art.stone(c, Art.rockPts(r, 15, 12.6, 12.4, 8.8, 10, 0.12), r, { base: '#7f868e', lt: '#c3c9cf', dk: '#41464c', ol: '#202428', lw: 1 });
+    Art.moss(c, r, 11, 5.6, 7, 1.8, 4);
+  },
+  slash(c) {
+    // a bright crescent with a soft glow round it
+    c.save(); c.shadowColor = '#ffffff'; c.shadowBlur = 6;
+    c.beginPath(); c.arc(24, 24, 20, -1.25, 1.25); c.arc(14, 24, 21.5, 1.0, -1.0, true); c.closePath();
+    c.fillStyle = Art.grad(c, 24, 3, 24, 45, [[0, 'rgba(255,255,255,0)'], [0.5, 'rgba(255,255,255,1)'], [1, 'rgba(255,255,255,0)']]); c.fill(); c.restore();
+    c.beginPath(); c.arc(24, 24, 19.2, -0.9, 0.9); c.arc(19, 24, 19.6, 0.7, -0.7, true); c.closePath();
+    c.fillStyle = 'rgba(255,255,255,0.9)'; c.fill();
   },
   // The menu backdrop: a dirt road winding up through a forest, seen from above, with a torii and a stone lantern.
   menuBg(c, w, h) {
@@ -1785,6 +2089,10 @@ const Art = {
   },
   buildAll(scene) {
     const m = (k, w, h) => Art.make(scene, k, w, h, Art[k]);
+    [['samurai', 36, 50], ['demon', 32, 40], ['zombie', 32, 40], ['rockOni', 32, 40], ['iwagame', 36, 40]].forEach(([k, w, h]) => {   // walking frames
+      for (let f = 0; f < 4; f++) Art.make(scene, k + '_' + f, w, h, (c, ww, hh) => Art[k](c, ww, hh, f));
+    });
+    m('puff', 32, 32);
     m('samurai', 36, 50); m('katana', 12, 36); m('demon', 32, 40); m('zombie', 32, 40); m('boss', 130, 126); m('giant', 110, 130); m('thunder', 130, 134);
     Art.make(scene, 'tenguBoss', 130, 120, Art.tengu); m('charm', 40, 44); m('glow', 64, 64);
     m('rockOni', 32, 40); m('iwagame', 36, 40); m('iwagameBall', 32, 32); m('rockBoss', 130, 130); m('genbu', 150, 150); m('genbuBall', 110, 110);
@@ -2167,6 +2475,11 @@ const RIGS = {
 Object.keys(RIGS).forEach(k => {                             // the left side mirrors the right
   RIGS[k] = RIGS[k].flatMap(p => [p, Object.assign({}, p, { key: p.key + 'L', side: -1, x: -p.x, o: [p.w - p.o[0], p.o[1]], hand: p.hand && [-p.hand[0], p.hand[1]] })]);
 });
+
+// Common enemies that walk with four frames, and how quickly they step (frames per millisecond).
+// Kinds made of rock: hits on them throw stone chips.
+const STONY = { rockOni: 1, iwagame: 1, rockBoss: 1, kokeBoss: 1, genbu: 1 };
+const WALKERS = { zombie: 0.0075, demon: 0.011, rockOni: 0.009, iwagame: 0.0085 };
 
 class GameScene extends BaseScene {
   constructor() { super('Game'); }
@@ -2559,6 +2872,18 @@ class GameScene extends BaseScene {
     this.burst = this.add.particles(0, 0, 'dot', {
       speed: { min: 40, max: 150 }, lifespan: { min: 250, max: 480 }, scale: { start: S, end: 0 }, emitting: false,
     }).setDepth(3000);
+    // Effects (`fxHit`, `fxDust`): glowing sparks where blades land, stone chips that fly up and fall, soft dust and smoke.
+    this.sparks = this.add.particles(0, 0, 'dot', {
+      speed: { min: 90, max: 240 }, lifespan: { min: 140, max: 300 }, scale: { start: S * 0.55, end: 0 }, blendMode: 'ADD', emitting: false,
+    }).setDepth(3001);
+    this.chips = this.add.particles(0, 0, 'rock', {
+      speed: { min: 60, max: 170 }, angle: { min: 200, max: 340 }, gravityY: 520, lifespan: { min: 380, max: 620 },
+      scale: { start: S * 0.7, end: S * 0.4 }, rotate: { min: 0, max: 360 }, alpha: { start: 1, end: 0.5 }, emitting: false,
+    }).setDepth(2995);
+    this.smoke = this.add.particles(0, 0, 'puff', {
+      speed: { min: 8, max: 42 }, lifespan: { min: 500, max: 950 }, scale: { start: S * 0.5, end: S * 1.7 }, alpha: { start: 0.5, end: 0 }, emitting: false,
+    }).setDepth(2990);
+    this.dustTint = this.L.theme === 'mountain' ? 0xa7abad : 0xb89f80;
     if (this.L.storm) this.add.particles(0, 0, 'dot', {      // rain
       x: { min: 0, max: W + 80 }, y: -10, lifespan: 900, speedY: { min: 760, max: 900 }, speedX: -90,
       scaleX: S * 0.25, scaleY: S * 2.6, frequency: 28, alpha: 0.28, tint: 0xb0bec5,
@@ -2644,6 +2969,10 @@ class GameScene extends BaseScene {
       if (y < -120) { if (o.obj.visible) o.obj.setVisible(false); return; }      // far ahead: nothing to draw yet
       const p = this.persp(y);
       const bob = o.seed !== undefined && !o.r && !o.hold && o !== this.boss ? Math.sin(this.time.now * 0.02 + o.seed) * 1.5 : 0;
+      if (WALKERS[o.kind] && !o.rolling && !o.wind && o.obj.active) {         // walking frames, faster for quicker kinds
+        const key = o.kind + '_' + (Math.floor(this.time.now * WALKERS[o.kind] + o.seed * 7) % 4);
+        if (o.obj.texture.key !== key && o.obj.texture.key !== o.kind + 'Ball') o.obj.setTexture(key);
+      }
       o.obj.setVisible(y > -90).setPosition(o.x, y + bob).setScale((o.obj.type === 'Container' ? 1 : S) * p * (o.size || 1)).setDepth(o.flat ? y - 30 : y);
     };
     const alive = o => !o.gone;
@@ -2667,6 +2996,7 @@ class GameScene extends BaseScene {
     this.formY += (wantForm - this.formY) * damp(5, dt);
     if (this.blockedBy) this.formY = Math.max(this.formY, this.blockedBy.y + 26);          // pressed against a stone wall
     const n = this.soldiers.length, cols = Math.min(5, Math.ceil(Math.sqrt(n || 1)));
+    const running = this.started && !this.fight && !this.over;
     this.soldiers.forEach((s, i) => {
       const col = i % cols, row = Math.floor(i / cols);
       const inRow = Math.min(cols, n - row * cols);
@@ -2680,6 +3010,8 @@ class GameScene extends BaseScene {
       const bob = Math.sin(time * 0.018 + i * 1.7) * 1.6;
       s.swing = Math.max(0, s.swing - dt / 0.17);
       const p = this.persp(s.y) * s.pop, y = s.y + bob - s.lunge;
+      const tex = running ? 'samurai_' + (Math.floor(time * 0.011 + i * 0.37) % 4) : 'samurai';      // the run cycle
+      if (s.img.texture.key !== tex) s.img.setTexture(tex);
       s.img.setPosition(s.x, y).setRotation(lean).setScale(S * p).setDepth(s.y);
       s.blade.setPosition(s.x + 9.5 * p, y + 5.5 * p).setScale(S * p).setDepth(s.y + 0.5)
         .setRotation(0.45 + lean - Math.sin(s.swing * Math.PI) * 2.4);
@@ -2760,6 +3092,7 @@ class GameScene extends BaseScene {
     const sl = this.img(hx, hy, 'slash').setDepth(2900).setRotation(Math.atan2(e.y - s.y, e.x - s.x) + (Math.random() - 0.5))
       .setScale(S * (e.r ? 1.1 : 0.75));
     this.tweens.add({ targets: sl, alpha: 0, scaleX: sl.scaleX * 1.5, scaleY: sl.scaleY * 1.5, duration: 140, onComplete: () => sl.destroy() });
+    this.fxHit(hx, hy, e, e.r ? 5 : 3);
     if (!e.prof) {                 // small enemies flash white
       const sp = e.sprite || e.obj;
       sp.setTintFill(0xffffff);
@@ -2787,6 +3120,8 @@ class GameScene extends BaseScene {
       if (was < this.ultMax && this.ultCharge >= this.ultMax) { Sound.play('ultReady'); this.float(130, 628, 'ULTIMATE READY!', '#ffe082', 15); }
     }
     const tint = { demon: 0xab47bc, zombie: 0x9ccc65, giant: 0x9ccc65, thunder: 0xb388ff, charm: 0xffd54f, wall: 0x9aa1a9, rockOni: 0x9aa1a9, iwagame: 0x8d6e63, rockBoss: 0x9aa1a9, genbu: 0xff9100, kokeBoss: 0x8fa07c, tenguBoss: 0xef5350, boss: 0xab47bc }[e.kind];
+    this.fxDust(e.x, e.y + 6, e.prof ? 22 : e.r ? 8 : 2);
+    if (STONY[e.kind] || e.kind === 'wall') this.chips.explode(e.prof ? 16 : e.r ? 8 : 3, e.x, e.y);
     this.burst.setParticleTint(e.mat === 'log' ? 0x8d6e63 : tint);
     this.burst.explode(e.r ? 40 : 10, e.x, e.y);
     const orb = this.img(e.x, e.y, 'soul').setDepth(5001).setScale(S * (e.r ? 2 : 1.2));
@@ -2862,6 +3197,11 @@ class GameScene extends BaseScene {
   // The Iwagame's roll: count down, wind up in its shell (aim shown), roll; true while it is busy with that.
   shellRoll(e, R, wdt, backRow) {
     const ms = wdt * 1000;
+    if (e.rolling || e.wind) {                               // the ball has no shadow of its own (it spins)
+      const p = e.obj.scaleX / S;
+      this.rollG.fillStyle(0x000000, 0.3).fillEllipse(e.x, e.y + 13 * p, 24 * p, 6 * p);
+      if (e.rolling && Math.random() < 0.35) this.fxDust(e.x, e.y + 10 * p, 1);
+    }
     if (e.rolling) {
       e.rolling -= ms; e.spin = (e.spin || 0) + wdt * 14;
       e.x = clamp(e.x + e.rvx * wdt, CFG.pathLeft + 12, CFG.pathRight - 12); e.d -= e.rvy * wdt;
@@ -2896,6 +3236,7 @@ class GameScene extends BaseScene {
     if (e.rollT > 0 || e.y < 40 || e.y > backRow - 70) return false;
     e.wind = R.windMs; e.tx = this.armyX; e.ty = this.formY;       // aimed at where the army is now
     e.obj.setTexture('iwagameBall');
+    this.fxDust(e.x, e.y + 8, 2);
     return true;
   }
   endRoll(e, R) {
@@ -3162,7 +3503,7 @@ class GameScene extends BaseScene {
         b.obj.setRotation(Math.sin(this.time.now * 0.06) * 0.12 * k).setTint(Phaser.Display.Color.GetColor(255, 255 - 90 * k, 255 - 190 * k));
         if (k > 0.45 && b.obj.texture.key === B.key) {           // limbs drawn in (updateRigs), then he is all shell
           b.obj.setTexture(B.key + 'Ball');
-          Sound.play('slam'); this.shake(120, 0.008);
+          Sound.play('slam'); this.shake(120, 0.008); this.fxDust(b.x, b.y + 50, 10);
           this.burst.setParticleTint(0x8d8d8d); this.burst.explode(14, b.x, b.y + 40);
         }
         this.danger.fillStyle(0xff6d00, 0.12 + 0.28 * k).fillRect(b.aimX - R.half, b.y + 30, R.half * 2, H);
@@ -3190,7 +3531,13 @@ class GameScene extends BaseScene {
       if (style === 'bolt') {
         for (let i = 0; i < 4; i++) this.zap(b.aimX + (Math.random() - 0.5) * 30, b.y - 60, b.aimX + (Math.random() - 0.5) * reach * 1.6, H, 260);
         this.cameras.main.flash(120, 200, 170, 255);
-      } else this.enemySlash(b.x, b.y + 75, style ? 4.4 : 3.2, B.linger ? 0xd1c4e9 : style ? 0xffab91 : 0xffffff);
+      } else {
+        this.enemySlash(b.x, b.y + 75, style ? 4.4 : 3.2, B.linger ? 0xd1c4e9 : style ? 0xffab91 : 0xffffff);
+        if (!style && B.key === 'genbu') this.clawTrail(b.x + (b.swings % 2 ? -14 : 14), b.y + 80, b.swings % 2 ? 1 : -1);
+        this.fxDust(b.aimX, b.y + 100, style ? 16 : 6);
+        if (STONY[B.key] || style) this.chips.explode(style ? 10 : 4, b.aimX, b.y + 100);
+        if (style) this.cameras.main.flash(90, 255, 225, 190);
+      }
       Sound.play(style ? 'slam' : 'swing');
       this.shake(style ? 320 : 200, style ? 0.03 : 0.012);
       if (style && style !== 'bolt') { this.burst.setParticleTint(B.linger ? 0xb388ff : 0xffab91); this.burst.explode(36, b.x, b.y + 95); }
@@ -3225,6 +3572,8 @@ class GameScene extends BaseScene {
     b.obj.y -= k * 28;
     b.obj.setScale(b.obj.scaleX * (1 + 0.22 * k)).setTint(k > 0.25 ? (B.lava ? 0xffc28a : 0xd9c2ff) : 0xffffff);
     if (B.lava) {                                            // the mountain shakes and lava wells up through his cracks
+      if (Math.random() < 0.35) this.fxDust(b.x + (Math.random() - 0.5) * 110, b.obj.y + Math.random() * 50, 1, 0x3a3634);
+      if (Math.random() < 0.5) { this.sparks.setParticleTint(Math.random() < 0.5 ? 0xff6d00 : 0xffd180); this.sparks.explode(2, b.x + (Math.random() - 0.5) * 100, b.obj.y + 20 + Math.random() * 50); }
       if (Math.random() < 0.7) { this.burst.setParticleTint(Math.random() < 0.5 ? 0xff6d00 : 0xffd180); this.burst.explode(3, b.x + (Math.random() - 0.5) * 120, b.obj.y + 30 + Math.random() * 40); }
     } else if (Math.random() < 0.25 + k * 0.6) this.zap(b.x + (Math.random() - 0.5) * 320, -10, b.x + (Math.random() - 0.5) * 40, b.obj.y - 20, 200);
     if (!B.lava && Math.random() < 0.6) { const a = Math.random() * 6.28, r = 40 + k * 40; this.zap(b.x + Math.cos(a) * r, b.obj.y + Math.sin(a) * r, b.x + Math.cos(a + 1.2) * r, b.obj.y + Math.sin(a + 1.2) * r, 120); }
@@ -3268,6 +3617,8 @@ class GameScene extends BaseScene {
     else if (hop > 3 * sc) b.landed = false;
     this.danger.fillStyle(0xff6d00, 0.1).fillRect(b.x - R.half, b.y + 30, R.half * 2, down);
     if (Math.random() < 0.6) { this.burst.setParticleTint(0x8d8d8d); this.burst.explode(2, b.x + (Math.random() - 0.5) * 50, ground - 4); }
+    if (Math.random() < 0.45) this.fxDust(b.x + (Math.random() - 0.5) * 40, ground - 2, 1);
+    if (b.lastMark === undefined || Math.abs(ground - b.lastMark) > 26) { b.lastMark = ground; this.fxMark(b.x, ground, 'puff', 2.2, 1600, 0x1a1410); }
     if (Math.random() < 0.12) {                              // chips of stone thrown off to the sides
       const rk = this.img(b.x + (Math.random() - 0.5) * 40, ground - 6, 'rock').setDepth(ground).setScale(S * (0.7 + Math.random() * 0.6));
       this.tweens.add({ targets: rk, x: rk.x + (Math.random() < 0.5 ? -1 : 1) * (40 + Math.random() * 50), y: rk.y - 20 - Math.random() * 20, rotation: 6, alpha: 0, duration: 450, ease: 'Cubic.out', onComplete: () => rk.destroy() });
@@ -3279,6 +3630,7 @@ class GameScene extends BaseScene {
     }
     if (b.t > 0) return;
     b.obj.setTexture(B.key).setRotation(0);                  // he unfolds again (updateRigs)
+    b.lastMark = undefined; this.fxDust(b.x, b.y + 50, 12);
     this.burst.setParticleTint(0x9e9e9e); this.burst.explode(16, b.x, b.y + 40);
     b.swings++; b.state = 'recover'; b.t = B.recoverMs;
   }
@@ -3303,6 +3655,10 @@ class GameScene extends BaseScene {
       g.walk += (want - g.walk) * Math.min(1, ms / 150);
       g.phase += ms * 0.008 * (0.4 + g.walk);
       const sw = Math.sin(g.phase);
+      if (fighting && g.walk > 0.4 && g.out > 0.98 && Math.sign(sw) !== Math.sign(g.lastSw || 0)) {      // a foot comes down
+        this.fxDust(o.x + Math.sign(sw) * 20 * R * o.scaleX, o.y + 62 * R * o.scaleY, 2);
+      }
+      g.lastSw = sw;
       // limbs out (1) or drawn into the shell (0)
       let out = o.texture.key === b.kind ? 1 : 0;
       if (st === 'wind' && b.style === 'shellroll') out = Math.min(out, clamp(1 - (1 - b.t / b.windFull) / 0.45, 0, 1));
@@ -3399,6 +3755,7 @@ class GameScene extends BaseScene {
       r.done = true;
       if (r.drop) { const d = r.drop; this.tweens.add({ targets: d, alpha: 0, duration: 250, onComplete: () => d.destroy() }); }
       this.burst.setParticleTint(0x9e9e9e); this.burst.explode(16, r.x, r.y); this.shake(160, 0.012); Sound.play('slam');
+      this.fxDust(r.x, r.y, 10); this.chips.explode(8, r.x, r.y - 4); this.fxMark(r.x, r.y + 2, 'crack', 0.75);
       if (Math.abs(this.armyX - r.x) < A.r) this.lose(Math.max(A.hit, Math.ceil(this.count * A.share)));
       else if (i === b.rocks.length - 1) { Sound.play('dodge'); this.float(this.armyX, this.formY - 46, 'DODGED', '#80d8ff', 18); }
       if (b.phase2) this.hazards.push({ x: r.x, y: r.y + 4, rx: A.r, ry: 13, t: A.pool, tick: A.poolTick, every: A.poolTick, share: A.poolShare, lava: true });
@@ -3763,6 +4120,30 @@ class GameScene extends BaseScene {
 
   /* ---------- fx ---------- */
   shake(ms, amount) { if (Save.shake && CFG.shake > 0) this.cameras.main.shake(ms, amount * CFG.shake); }
+
+  // Sparks where a blade lands, and stone chips off anything made of rock.
+  fxHit(x, y, e, n = 3) {
+    const stony = STONY[e.kind] || e.mat === 'stone' || (e.kind === 'wall' && e.mat !== 'log');
+    this.sparks.setParticleTint(stony ? 0xffd9a0 : 0xfff6c8); this.sparks.explode(n, x, y);
+    if (stony && Math.random() < 0.6) this.chips.explode(Math.ceil(n / 3), x, y);
+  }
+  // Three glowing claw marks raked across the ground (Genbu's front claws).
+  clawTrail(x, y, dir) {
+    [-11, 0, 11].forEach((dx, i) => {
+      const sl = this.img(x + dx, y + i * 3 - 3, 'slash').setDepth(2951).setScale(S * 1.9, S * 2.6).setTint(0xffab40).setBlendMode(Phaser.BlendModes.ADD)
+        .setRotation(Math.PI / 2 - 0.6 * dir);
+      this.tweens.add({ targets: sl, rotation: Math.PI / 2 + 0.6 * dir, alpha: 0, duration: 260, delay: i * 25, onComplete: () => sl.destroy() });
+    });
+    this.sparks.setParticleTint(0xffab40); this.sparks.explode(10, x, y);
+  }
+  // A cloud of dust or smoke (`tint` defaults to the colour of this level's ground).
+  fxDust(x, y, n, tint = this.dustTint) { this.smoke.setParticleTint(tint); this.smoke.explode(n, x, y); }
+  // A mark left on the ground for a moment: a crack, or a scorch from the shell roll.
+  fxMark(x, y, key, scale, ms = 2400, tint) {
+    const m = this.img(x, y, key).setDepth(-8).setScale(S * scale).setRotation(Math.random() * 6.28);
+    if (tint !== undefined) m.setTint(tint).setAlpha(0.4);
+    this.tweens.add({ targets: m, alpha: 0, delay: ms * 0.7, duration: ms * 0.3, onComplete: () => m.destroy() });
+  }
 
   enemySlash(x, y, scale, tint) {
     const sl = this.img(x, y, 'slash').setDepth(2950).setRotation(Math.PI / 2 - 0.8).setScale(S * scale).setTint(tint);

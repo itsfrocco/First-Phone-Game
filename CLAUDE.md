@@ -231,6 +231,26 @@ cost curve. Ranged swings take `CFG.rangedSwing` (1.5) times a normal swing: the
 players to progress fast. At 1.5 the bot at level 3 with speed/damage 2 wins or loses narrowly with Range 5-10
 (Range is a modest help, never a shortcut); at 2 it never helped, so the card was a waste of coins.
 
+## Graphics overhaul (owner: the whole game should look better quality, done in batches, owner checks each)
+
+Still drawn in code (option 1; painted picture files were offered as a later, bigger step). Shared drawing helpers in `Art`:
+`rng` (repeatable random, so textures match), `poly`, `blob`, `limb` (outlined rounded limb with a highlight), `speckle`
+(texture flecks clipped to a shape), `bevel` (light upper-left edge, shade lower-right), `rockPts`, `stone` (a lit, flecked,
+bevelled rock), `moss`, `lavaCrack`, `tile` (seamless tiles), `stride` (walking frame poses). Light comes from the upper left.
+- Batch 1 (done): the samurai are seen from BEHIND (owner did not like them facing the screen): helmet with neck guard and gold
+  crest tips, laced armour, a silk bow, the banner on the back; four run frames `samurai_0..3` (`updateArmy` swaps them while
+  running; plain `samurai` is the standing pose, used in fights and menus). Sword hand still at the old spot. Redrawn: katana,
+  grass, dirt road (ruts, pebbles, grass over the edges, kerbs), mountain ground, cobbled mountain road, cliffs, boulders, cherry
+  trees, stone lanterns, dead trees, rubble, the slash. Effects: `sparks` (glowing dots where blades land), `chips` (stone chips
+  off rock kinds, `STONY`), `smoke` (dust and smoke, `fxDust`, tinted to the level's ground), `fxMark` (cracks and scorch marks
+  that fade), `clawTrail` (Genbu's orange claw marks), a short flash on boss power hits, dust on Genbu's steps, and smoke and fire
+  in his power-up.
+- Batch 2 (done): zombie, demon, rock oni and Iwagame redrawn with four walking frames each (`WALKERS` sets their step speed;
+  `place` in `updateScroll` swaps frames, not while an Iwagame is rolling). The Iwagame ball has no shadow of its own (it spins);
+  `shellRoll` draws one, and a dust trail.
+- Next: batch 3, every boss with more detail and moving parts (Koke Oni's club swing; Genbu's detailed redraw), then batch 4
+  (gates, logs, walls, cage, coins, stronghold, buttons and menus).
+
 ## Working with the owner
 
 - They play on a phone and are not a programmer. Explain changes in plain words, no code.
