@@ -124,10 +124,11 @@ const CFG = {
     // The saga boss. Phase 1 is measured: two-swing combos and an occasional lightning slash down a lane.
     // At `phase2` of his health he powers up (a short cutscene; he cannot be hurt and regains `powerUpHeal` of his health).
     // Phase 2 runs `phase2Haste` times faster with three-swing combos, his swings leave lightning on the ground
-    // for `linger` ms, and he sometimes dashes to where the army stands.
+    // for `linger` ms, and he sometimes dashes to where the army stands. Thunder Drums are slow on purpose (owner: no time to reach
+    // the safe lane): 2.3s to read them, 2s for the second roll in phase 2, and his phase 2 haste does not speed them up.
     thunder: { key: 'thunder', name: 'TAKEMIKAZUCHI', slain: 'THE THUNDER GOD FALLS', r: 48, souls: 150, speed: 80, chaseMs: 1000, windMs: 650, recoverMs: 470,
       reach: 85, cleave: 3, cleaveShare: 0.06, combo: 2, phase2Combo: 3, comboWindMs: 600, comboStep: 55,
-      powerChance: 0.3, powers: [['bolt', 'drums'], ['bolt', 'dash', 'drums']], powerWind: { bolt: 1100, dash: 600, drums: 1300 }, drumsAgainMs: 950,
+      powerChance: 0.3, powers: [['bolt', 'drums'], ['bolt', 'dash', 'drums']], powerWind: { bolt: 1100, dash: 600, drums: 2300 }, drumsAgainMs: 2000,
       powerReach: 85, boltHalf: 48, powerMult: 2,
       phase2: 0.5, phase2Haste: 1.33, phase2Name: 'THE STORM AWAKENS', powerUpMs: 2400, powerUpHeal: 0.2, linger: 1000, lingerTick: 500, lingerShare: 0.03 },
     // Saga 2, level 1. Slow and heavy: long wind-ups that are easy to read, but a club that takes a big bite, and a wider ground-pound.
@@ -144,7 +145,7 @@ const CFG = {
     // blazes (`lava`): faster, three-swing combos, bigger barrages, and each rock leaves a lava pool for a moment.
     genbu: { key: 'genbu', name: 'GENBU', slain: 'GENBU FALLS', r: 56, souls: 120, speed: 52, chaseMs: 1150, windMs: 850, recoverMs: 520,
       reach: 92, cleave: 5, cleaveShare: 0.09, combo: 2, phase2Combo: 3, comboWindMs: 620, comboStep: 50,
-      powerChance: 0.4, powers: [['barrage', 'shellroll'], ['barrage', 'shellroll', 'barrage']], powerWind: { barrage: 900, shellroll: 1000 },
+      powerChance: 0.65, powers: [['barrage', 'shellroll'], ['barrage', 'shellroll', 'barrage']], powerWind: { barrage: 900, shellroll: 1000 },
       powerReach: 70, powerMult: 2,
       phase2: 0.5, phase2Haste: 1.25, phase2Name: 'THE MOUNTAIN BURNS', powerUpMs: 2200, powerUpHeal: 0.1, lava: true,
       barrage: { n: 4, n2: 5, gap: 420, fall: 800, r: 30, hit: 2, share: 0.05, pool: 1800, poolTick: 500, poolShare: 0.03 },
@@ -201,7 +202,7 @@ const LEVEL_SPECS = [
     charms: [[5, 11], 15, 4], walls: [[6], 130, 0], bosses: [{ type: 'koke', after: 'end', hp: 6200 }] },
   // Saga 2 level 3: more Iwagame, the Koke Oni again half way, and Genbu at the end.
   { name: 'Genbu', theme: 'mountain', foe: 'rockOni', mix: ['iwagame', 0.33, 1.5], demons: false, rows: 15, seg: 370, pack: [8, 3.2, 0.26], crowd: 0.15, hp: 16,
-    charms: [[5, 12], 16, 4], walls: [[10], 150, 0], bosses: [{ type: 'koke', after: 7, hp: 3600 }, { type: 'genbu', after: 'end', hp: 9000 }] },
+    charms: [[5, 12], 16, 4], walls: [[10], 150, 0], bosses: [{ type: 'koke', after: 7, hp: 3600 }, { type: 'genbu', after: 'end', hp: 12000 }] },
 ];
 // Equipment, chosen on a level's start screen: one weapon, one armor, one necklace. `boss: true` items are won by beating the saga boss.
 const GEAR = {
@@ -3814,7 +3815,7 @@ class GameScene extends BaseScene {
     if (b.state === 'powerup') { this.powerUp(b, wdt); return; }
     const haste = b.phase2 ? B.phase2Haste || 1 : 1;
     this.updateLightning(b, wdt);
-    b.t -= wdt * 1000 * haste;
+    b.t -= wdt * 1000 * (b.state === 'wind' && b.style === 'drums' ? 1 : haste);   // the drums keep their full warning in phase 2
     if (b.state === 'roll') { this.bossRoll(b); return; }
     if (b.state === 'barrage') { this.updateBarrage(b, wdt * 1000 * haste); return; }
     if (b.state === 'chase') {

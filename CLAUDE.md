@@ -216,7 +216,11 @@ thrown, drawn above the soldiers (`rockG`) or they hide it; Shell Roll (`bossRol
 through the army and back. Phase 2 at half health ("THE MOUNTAIN BURNS", `lava: true`: embers instead of lightning in `powerUp` and
 `updateLightning`): faster, and each rock leaves a lava pool for 1.8s (`hazards` with `lava`, `every`, `share`). The owner was promised
 Iwagame trickling in, but during a fight the samurai always strike the boss, so helpers chip away unopposed and made him unwinnable;
-he fights alone (the field clears when the fight starts). The bot dodges the barrage and roll. As tuned: 6 loses (once won), 7 wins,
+he fights alone (the field clears when the fight starts). The bot dodges the barrage and roll.
+Owner's follow-up: Genbu rolls and throws rocks far more often (`powerChance` 0.65, nearly always in phase 2; a power move still
+never follows another) and has 12000 health (owner chose "more health"). The fight now lasts about 36-40s at level 7 (was 27-31);
+7 and 8 win, 6 loses before reaching him. Takemikazuchi's Thunder Drums were too fast to reach the safe lane (owner): 2.3s warning,
+2s for the phase 2 second roll, and phase 2 haste no longer shortens them. As tuned: 6 loses (once won), 7 wins,
 the bot that never dodges loses at 7. The sagas screen now says "level n of 3" and "levels cleared · saga boss coming soon" for saga 2.
 Genbu moves (owner: the boss was lacking, wanted rolling, arms moving and throwing; graphics overhaul starts here, in parts, owner to
 approve each): he is drawn in pieces (`RIGS`, `updateRigs`; body `Art.genbu`, limbs `genbuArmB`, `genbuArmF`, `genbuLeg`, mirrored `...L`).
