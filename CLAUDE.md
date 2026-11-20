@@ -18,9 +18,9 @@ Only open or merge a pull request yourself if they ask for it in that message.
 Always resend the game link with a fresh cache-busting number on the end, one higher than
 the last one used, so their phone downloads the new copy:
 
-    https://itsfrocco.github.io/First-Phone-Game/samurai-runner.html?v=40
+    https://itsfrocco.github.io/First-Phone-Game/samurai-runner.html?v=41
 
-Last number sent: `?v=39`. Update this line each time a new link is sent.
+Last number sent: `?v=40`. Update this line each time a new link is sent.
 
 Before sending the link, check that the "pages build and deployment" run for the merge commit has
 finished (GitHub MCP `actions_list`); a link opened earlier caches the old game for about ten minutes.
@@ -216,20 +216,51 @@ thrown, drawn above the soldiers (`rockG`) or they hide it; Shell Roll (`bossRol
 through the army and back. Phase 2 at half health ("THE MOUNTAIN BURNS", `lava: true`: embers instead of lightning in `powerUp` and
 `updateLightning`): faster, and each rock leaves a lava pool for 1.8s (`hazards` with `lava`, `every`, `share`). The owner was promised
 Iwagame trickling in, but during a fight the samurai always strike the boss, so helpers chip away unopposed and made him unwinnable;
-he fights alone (the field clears when the fight starts). The bot dodges the barrage and roll.
+he fights alone (the field clears when the fight starts). The bot dodges the barrage and roll. As tuned: 6 loses (once won), 7 wins,
+the bot that never dodges loses at 7. The sagas screen now says "level n of 3" and "levels cleared · saga boss coming soon" for saga 2.
 Genbu moves (owner: the boss was lacking, wanted rolling, arms moving and throwing; graphics overhaul starts here, in parts, owner to
 approve each): he is drawn in pieces (`RIGS`, `updateRigs`; body `Art.genbu`, limbs `genbuArmB`, `genbuArmF`, `genbuLeg`, mirrored `...L`).
 Legs step and the body bobs while he walks; a front claw rears up on each plain swing and follows through across his body; in the
 barrage each back arm reaches back with a rock in its claw and hurls it (the thrown rock starts at the hand); before a roll his limbs
 draw into the shell, then he becomes the ball, which spins with the distance rolled, hops, throws off stone chips and keeps its shadow
 on the ground; after it he unfolds. Gameplay and timings unchanged. Planned next (part 2): Iwagame walk and a real tuck-and-roll, rock
-oni walk and attack wind-up, Koke Oni club swing. Then saga 1 enemies and bosses, if the owner likes it. As tuned: 6 loses (once won), 7 wins,
-the bot that never dodges loses at 7. The sagas screen now says "level n of 3" and "levels cleared · saga boss coming soon" for saga 2.
+oni walk and attack wind-up, Koke Oni club swing. Then saga 1 enemies and bosses, if the owner likes it.
 Range is an extra, optional card: spending coins on it helps about as much as the same coins on speed and
 damage (level 3: speed/damage 2 loses, adding Range 5 wins). Range grows 1m (9px) a level and has its own cheaper
 cost curve. Ranged swings take `CFG.rangedSwing` (1.5) times a normal swing: the owner does not want early
 players to progress fast. At 1.5 the bot at level 3 with speed/damage 2 wins or loses narrowly with Range 5-10
 (Range is a modest help, never a shortcut); at 2 it never helped, so the card was a waste of coins.
+
+## Graphics overhaul (owner: the whole game should look better quality, done in batches, owner checks each)
+
+Still drawn in code (option 1; painted picture files were offered as a later, bigger step). Shared drawing helpers in `Art`:
+`rng` (repeatable random, so textures match), `poly`, `blob`, `limb` (outlined rounded limb with a highlight), `speckle`
+(texture flecks clipped to a shape), `bevel` (light upper-left edge, shade lower-right), `rockPts`, `stone` (a lit, flecked,
+bevelled rock), `moss`, `lavaCrack`, `tile` (seamless tiles), `stride` (walking frame poses). Light comes from the upper left.
+- Batch 1 (done): the samurai are seen from BEHIND (owner did not like them facing the screen): helmet with neck guard and gold
+  crest tips, laced armour, a silk bow, the banner on the back; four run frames `samurai_0..3` (`updateArmy` swaps them while
+  running; plain `samurai` is the standing pose, used in fights and menus). Sword hand still at the old spot. Redrawn: katana,
+  grass, dirt road (ruts, pebbles, grass over the edges, kerbs), mountain ground, cobbled mountain road, cliffs, boulders, cherry
+  trees, stone lanterns, dead trees, rubble, the slash. Effects: `sparks` (glowing dots where blades land), `chips` (stone chips
+  off rock kinds, `STONY`), `smoke` (dust and smoke, `fxDust`, tinted to the level's ground), `fxMark` (cracks and scorch marks
+  that fade), `clawTrail` (Genbu's orange claw marks), a short flash on boss power hits, dust on Genbu's steps, and smoke and fire
+  in his power-up.
+- Batch 2 (done): zombie, demon, rock oni and Iwagame redrawn with four walking frames each (`WALKERS` sets their step speed;
+  `place` in `updateScroll` swaps frames, not while an Iwagame is rolling). The Iwagame ball has no shadow of its own (it spins);
+  `shellRoll` draws one, and a dust trail.
+- Batch 3 (done): every boss redrawn in detail and drawn in pieces like Genbu (`RIGS` now has an entry per boss: `strike` side,
+  `foot` for dust, parts with roles `leg`, `arm`, `wing`, `throw`; limbs are drawn for the right of the screen and mirrored with
+  key + 'L'; a part with `side: -1` only exists mirrored). Stone bosses use `Art.slab` (bevelled, flecked stone blocks), `club`,
+  `hide`, `cracks`, `surface`, `hatch`. The weapon arm rears up over the head on a wind-up and swings down across the body on
+  the strike (Koke Oni's and the Rock Oni's clubs, the giant's spiked club, the fat demon's cleaver, the tengu's staff,
+  Takemikazuchi's lightning blade); both arms go up for power attacks and follow through after; legs step; the tengu's wings
+  beat slowly, hard in the air. `key + 'Full'` is each boss put together (`Art.whole`), used by the tutorial pages.
+- Batch 4 (done): gates are lacquered torii pictures (`Art.gate`, textures `gateGood`/`gateBad`, also on the tutorial pages);
+  redrawn stone walls, logs, spikes, fence posts, villagers, the cage, the coin, the lucky cat, stone chips, Genbu's ball, and the
+  stronghold (yard, lane walls, palisade, walkway, doors, crate, boxes, recruit banner, "?" box, powder barrel, chest, archer
+  seen from behind with a bow, arrow, the brute `oni` and the warlord). Wood helpers `planks` and `band`. The stronghold's
+  zombies and demons use the walking frames too. `button` draws a rim, a lit top half, a shine line and an outline.
+  The graphics overhaul is complete for everything in the game; painted art was the bigger option offered for later.
 
 ## Working with the owner
 
