@@ -1212,34 +1212,30 @@ const Art = {
   },
   // Saga 2 level 3's boss, Genbu the stone tortoise (from the owner's picture): grey stone blocks with glowing lava cracks, a domed
   // shell, a moss cap on the head, fiery eyes and fangs, two clawed front arms hanging low and two great arms raised from his back.
+  // Genbu is drawn in pieces so his limbs can move (`rigs` in GameScene): this body (shell, torso, head) plus two back arms,
+  // two front arms and two legs, each drawn for his right side and mirrored for the left. `genbuKit` holds the shared strokes.
+  genbuKit(c) {
+    const ol = '#1d2124', dk = '#4c5357', st = '#8c9397', lt = '#bcc3c7', lava = '#ff9100';
+    return {
+      ol, dk, st, lt,
+      slab(x, y, rx, ry, rot = 0) {
+        c.save(); c.translate(x, y); c.rotate(rot);
+        Art.ell(c, 0, 0, rx, ry, ol); Art.ell(c, 0, -0.5, rx - 2, ry - 2, Art.grad(c, 0, -ry, 0, ry, [[0, st], [1, dk]]));
+        Art.ell(c, -rx * 0.18, -ry * 0.38, rx * 0.56, ry * 0.3, lt); c.restore();
+      },
+      glow(pts) { c.save(); c.shadowColor = '#ff6d00'; c.shadowBlur = 5; c.strokeStyle = lava; c.lineWidth = 1.5; c.beginPath(); pts.forEach(([a, b, x, y]) => { c.moveTo(a, b); c.lineTo(x, y); }); c.stroke(); c.restore(); },
+      claws(x, y, dir) { [-5, 0, 5].forEach(dx => Art.tri(c, [x + dx - 2.2, y], [x + dx + 2.2, y], [x + dx * 1.3, y + 9 * dir], '#3b3f42')); },
+    };
+  },
   genbu(c) {
     Art.shadow(c, 75, 142, 54);
-    const ol = '#1d2124', dk = '#4c5357', st = '#8c9397', lt = '#bcc3c7', lava = '#ff9100';
-    const slab = (x, y, rx, ry, rot = 0) => {
-      c.save(); c.translate(x, y); c.rotate(rot);
-      Art.ell(c, 0, 0, rx, ry, ol); Art.ell(c, 0, -0.5, rx - 2, ry - 2, Art.grad(c, 0, -ry, 0, ry, [[0, st], [1, dk]]));
-      Art.ell(c, -rx * 0.18, -ry * 0.38, rx * 0.56, ry * 0.3, lt); c.restore();
-    };
-    const glow = pts => { c.save(); c.shadowColor = '#ff6d00'; c.shadowBlur = 5; c.strokeStyle = lava; c.lineWidth = 1.5; c.beginPath(); pts.forEach(([a, b, x, y]) => { c.moveTo(a, b); c.lineTo(x, y); }); c.stroke(); c.restore(); };
-    const claws = (x, y, dir) => [-5, 0, 5].forEach(dx => Art.tri(c, [x + dx - 2.2, y], [x + dx + 2.2, y], [x + dx * 1.3, y + 9 * dir], '#3b3f42'));
+    const { ol, dk, st, lt, glow } = Art.genbuKit(c);
     // the shell, humped up behind him
     Art.ell(c, 75, 58, 52, 34, ol); Art.ell(c, 75, 57, 49, 31, Art.grad(c, 0, 26, 0, 88, [[0, lt], [1, dk]]));
     c.strokeStyle = ol; c.lineWidth = 1.4; c.beginPath();
     [[35, 50, 52, 36], [52, 36, 75, 31], [75, 31, 98, 36], [98, 36, 115, 50], [52, 36, 50, 60], [75, 31, 75, 50], [98, 36, 100, 60]].forEach(([a, b, x, y]) => { c.moveTo(a, b); c.lineTo(x, y); });
     c.stroke();
     glow([[44, 46, 50, 54], [104, 46, 98, 54], [86, 36, 90, 44]]);
-    // the great back arms, raised high with claws spread
-    [[1, 0], [-1, 0]].forEach(([side]) => {
-      c.save(); c.translate(75, 0); c.scale(side, 1);
-      slab(42, 46, 13, 15, 0.3); slab(52, 24, 11, 15, 0.15); slab(57, 9, 10, 8);
-      claws(57, 3, -1);
-      glow([[38, 42, 46, 50], [50, 18, 55, 28]]);
-      c.restore();
-    });
-    // legs
-    slab(55, 122, 16, 17); slab(95, 122, 16, 17);
-    claws(55, 136, 1); claws(95, 136, 1);
-    glow([[50, 116, 58, 126], [98, 114, 92, 124]]);
     // torso
     Art.rr(c, 42, 62, 66, 52, 20); c.fillStyle = ol; c.fill();
     Art.rr(c, 44.5, 64, 61, 47, 18); c.fillStyle = Art.grad(c, 44, 64, 106, 112, [[0, st], [1, '#474d51']]); c.fill();
@@ -1247,11 +1243,6 @@ const Art = {
     glow([[75, 66, 75, 104], [52, 88, 98, 88], [75, 76, 68, 70], [75, 76, 82, 70], [60, 104, 66, 96]]);
     c.fillStyle = '#5d4433'; c.beginPath(); c.moveTo(48, 106); c.lineTo(102, 106); c.lineTo(103, 114); [[96, 122], [90, 114], [84, 128], [77, 116], [71, 130], [64, 116], [58, 124], [52, 114]].forEach(p => c.lineTo(...p)); c.lineTo(47, 114); c.closePath(); c.fill();
     c.fillStyle = '#7a5a41'; c.fillRect(47, 104, 56, 5); Art.ell(c, 82, 107, 4, 3.6, '#5d4433');
-    // front arms hanging low
-    slab(36, 74, 14, 13); slab(28, 94, 11, 16, 0.12); slab(26, 112, 11, 10);
-    slab(114, 74, 14, 13); slab(122, 94, 11, 16, -0.12); slab(124, 112, 11, 10);
-    claws(26, 119, 1); claws(124, 119, 1);
-    glow([[32, 70, 40, 78], [26, 90, 31, 100], [118, 70, 110, 78], [124, 90, 119, 100]]);
     // head, low under the shell's rim, with a cap of moss
     Art.rr(c, 55, 36, 40, 34, 13); c.fillStyle = ol; c.fill();
     Art.rr(c, 57.5, 38, 35, 29, 11); c.fillStyle = Art.grad(c, 57, 38, 92, 67, [[0, lt], [1, dk]]); c.fill();
@@ -1264,9 +1255,31 @@ const Art = {
     Art.tri(c, [66, 61], [70, 61], [68, 66.5], '#eceff1'); Art.tri(c, [84, 61], [80, 61], [82, 66.5], '#eceff1');      // fangs
     glow([[60, 58, 63, 62], [90, 58, 87, 62]]);
   },
+  // A great arm raised from his back, claws spread; the shoulder (the pivot) is at (16, 62).
+  genbuArmB(c) {
+    const { slab, glow, claws } = Art.genbuKit(c);
+    c.translate(16, 62);
+    slab(0, 0, 13, 15, 0.3); slab(10, -22, 11, 15, 0.15); slab(15, -37, 10, 8);
+    claws(15, -43, -1);
+    glow([[-4, -4, 4, 4], [8, -28, 13, -18]]);
+  },
+  // A clawed front arm hanging low; the shoulder is at (14, 14).
+  genbuArmF(c) {
+    const { slab, glow, claws } = Art.genbuKit(c);
+    c.translate(14, 14);
+    slab(4, 2, 14, 13); slab(12, 22, 11, 16, -0.12); slab(14, 40, 11, 10);
+    claws(14, 47, 1);
+    glow([[8, -2, 0, 6], [14, 18, 9, 28]]);
+  },
+  // A leg; the hip is at (18, 6).
+  genbuLeg(c) {
+    const { slab, glow, claws } = Art.genbuKit(c);
+    c.translate(18, 6);
+    slab(0, 14, 16, 17); claws(0, 28, 1);
+    glow([[3, 6, -3, 16]]);
+  },
   // Genbu pulled into his shell to roll: a great ball of stone plates split by lava, moss on top, claws peeking out.
   genbuBall(c) {
-    Art.shadow(c, 55, 104, 40);
     const ol = '#1d2124', dk = '#4c5357', lt = '#bcc3c7';
     Art.ell(c, 55, 54, 50, 48, ol); Art.ell(c, 55, 53, 47, 45, Art.grad(c, 10, 10, 100, 100, [[0, lt], [1, dk]]));
     c.strokeStyle = ol; c.lineWidth = 1.6; c.beginPath();
@@ -1774,7 +1787,10 @@ const Art = {
     const m = (k, w, h) => Art.make(scene, k, w, h, Art[k]);
     m('samurai', 36, 50); m('katana', 12, 36); m('demon', 32, 40); m('zombie', 32, 40); m('boss', 130, 126); m('giant', 110, 130); m('thunder', 130, 134);
     Art.make(scene, 'tenguBoss', 130, 120, Art.tengu); m('charm', 40, 44); m('glow', 64, 64);
-    m('rockOni', 32, 40); m('iwagame', 36, 40); m('iwagameBall', 32, 32); m('rockBoss', 130, 130); m('genbu', 150, 150); m('genbuBall', 110, 110); m('kokeBoss', 130, 140); m('rockGround', 64, 64); m('stonePath', 280, 128); m('cliff', 72, 80); m('boulder', 30, 24);
+    m('rockOni', 32, 40); m('iwagame', 36, 40); m('iwagameBall', 32, 32); m('rockBoss', 130, 130); m('genbu', 150, 150); m('genbuBall', 110, 110);
+    [['genbuArmB', 46, 80], ['genbuArmF', 42, 74], ['genbuLeg', 36, 46]].forEach(([k, w, h]) => {      // right side, and mirrored for the left
+      m(k, w, h); Art.make(scene, k + 'L', w, h, c => { c.translate(w, 0); c.scale(-1, 1); Art[k](c, w, h); });
+    }); m('kokeBoss', 130, 140); m('rockGround', 64, 64); m('stonePath', 280, 128); m('cliff', 72, 80); m('boulder', 30, 24);
     m('spike', 36, 28); m('wall', 132, 60); m('log', 132, 60); m('fence', 16, 36); m('civilian', 20, 28); m('cage', 96, 70); m('rock', 12, 12); m('slash', 48, 48); m('soul', 16, 16); m('dot', 8, 8); m('petal', 8, 6);
     m('archer', 36, 50); m('arrow', 8, 22); m('crate', 36, 32); m('box', 84, 34); m('recruit', 84, 48); m('mystery', 84, 34); m('barrel', 48, 46); m('doorHalf', 86, 40); m('chest', 84, 42); m('yard', 64, 64); m('divider', 10, 64); m('fort', W, 174); m('oni', 48, 54); m('warlord', 130, 150);
     m('grass', 64, 64); m('path', 280, 128); m('lantern', 24, 42); m('deadTree', 60, 58); m('rubble', 30, 24); m('crack', 60, 40); m('tree', 60, 58); m('menuBg', W, H);
@@ -2136,6 +2152,21 @@ TutorialScene.PAGES = [
       [e.g, e.t, e.z, st.g, st.t, st.z].forEach(o => c.add(o));
     } },
 ];
+
+// Bosses drawn in pieces: each limb is a separate picture that follows the body and moves on its own (`updateRigs`).
+// x, y: where the joint sits from the middle of the body picture; o: the joint inside the limb picture; hand: the claw tip from
+// the joint, for rocks held in a throwing hand. role: 'throw' (back arms), 'claw' (front arms), 'leg'. Listed for the
+// right side of the screen (side 1); the left side (-1) is made by mirroring.
+const RIGS = {
+  genbu: [
+    { key: 'genbuLeg', side: 1, role: 'leg', x: 20, y: 33, o: [18, 6], w: 36, h: 46, back: true },
+    { key: 'genbuArmB', side: 1, role: 'throw', x: 42, y: -29, o: [16, 62], w: 46, h: 80, back: true, hand: [15, -46] },
+    { key: 'genbuArmF', side: 1, role: 'claw', x: 35, y: -3, o: [14, 14], w: 42, h: 74 },
+  ],
+};
+Object.keys(RIGS).forEach(k => {                             // the left side mirrors the right
+  RIGS[k] = RIGS[k].flatMap(p => [p, Object.assign({}, p, { key: p.key + 'L', side: -1, x: -p.x, o: [p.w - p.o[0], p.o[1]], hand: p.hand && [-p.hand[0], p.hand[1]] })]);
+});
 
 class GameScene extends BaseScene {
   constructor() { super('Game'); }
@@ -2587,6 +2618,7 @@ class GameScene extends BaseScene {
     this.updateCombat(dt);
     this.updateUlt(dt);
     this.updateHazards(wdt);
+    this.updateRigs(wdt);
     if (this.L.storm) this.updateStorm(wdt);
     this.drawBolts(wdt);
     this.updateHud(dt);
@@ -3128,6 +3160,11 @@ class GameScene extends BaseScene {
       else if (style === 'shellroll') {                      // his path: an orange lane from him to the bottom of the screen
         const R = B.roll;
         b.obj.setRotation(Math.sin(this.time.now * 0.06) * 0.12 * k).setTint(Phaser.Display.Color.GetColor(255, 255 - 90 * k, 255 - 190 * k));
+        if (k > 0.45 && b.obj.texture.key === B.key) {           // limbs drawn in (updateRigs), then he is all shell
+          b.obj.setTexture(B.key + 'Ball');
+          Sound.play('slam'); this.shake(120, 0.008);
+          this.burst.setParticleTint(0x8d8d8d); this.burst.explode(14, b.x, b.y + 40);
+        }
         this.danger.fillStyle(0xff6d00, 0.12 + 0.28 * k).fillRect(b.aimX - R.half, b.y + 30, R.half * 2, H);
         this.danger.lineStyle(2, 0xffcc80, 0.4 + 0.6 * k).strokeRect(b.aimX - R.half, b.y + 30, R.half * 2, H);
       } else if (style === 'barrage') {                      // the back arms heave up a boulder
@@ -3217,24 +3254,117 @@ class GameScene extends BaseScene {
     b.aimX = style ? clamp(this.armyX, 100, 300) : b.x;
     b.air = style === 'fly';                                 // in the air he cannot be hit
     b.zones = this.zonesFor(style);
-    if (style === 'shellroll') b.obj.setTexture(B.key + 'Ball');
     Sound.play(style ? 'warnPower' : 'warn');
   }
 
   // Genbu's Shell Roll: down through the army along the marked lane and back up.
   bossRoll(b) {
     const B = b.prof, R = B.roll, k = clamp(1 - b.t / R.ms, 0, 1), down = Math.sin(k * Math.PI) * R.depth;
-    b.obj.y += down; b.obj.setRotation(k * 22).setDepth(b.obj.y + 40);
+    const sc = b.obj.displayWidth / 110, hop = Math.abs(Math.sin(k * Math.PI * 7)) * 9 * sc * Math.sin(k * Math.PI);
+    const ground = b.obj.y + down + 44 * sc;
+    this.danger.fillStyle(0x000000, 0.32).fillEllipse(b.x, ground, 84 * sc - hop, 18 * sc);
+    b.obj.y += down - hop; b.obj.setRotation(1.7 * down / (47 * sc)).setDepth(b.obj.y + 40);   // turns as far as it has rolled, back the other way
+    if (hop < 1.5 * sc && !b.landed) { b.landed = true; this.shake(70, 0.006); this.burst.setParticleTint(0x9e9e9e); this.burst.explode(5, b.x, ground); }
+    else if (hop > 3 * sc) b.landed = false;
     this.danger.fillStyle(0xff6d00, 0.1).fillRect(b.x - R.half, b.y + 30, R.half * 2, down);
-    if (Math.random() < 0.6) { this.burst.setParticleTint(0x8d8d8d); this.burst.explode(2, b.x + (Math.random() - 0.5) * 50, b.obj.y + 40); }
+    if (Math.random() < 0.6) { this.burst.setParticleTint(0x8d8d8d); this.burst.explode(2, b.x + (Math.random() - 0.5) * 50, ground - 4); }
+    if (Math.random() < 0.12) {                              // chips of stone thrown off to the sides
+      const rk = this.img(b.x + (Math.random() - 0.5) * 40, ground - 6, 'rock').setDepth(ground).setScale(S * (0.7 + Math.random() * 0.6));
+      this.tweens.add({ targets: rk, x: rk.x + (Math.random() < 0.5 ? -1 : 1) * (40 + Math.random() * 50), y: rk.y - 20 - Math.random() * 20, rotation: 6, alpha: 0, duration: 450, ease: 'Cubic.out', onComplete: () => rk.destroy() });
+    }
     if (!b.rollHit && b.y + down >= this.formY - 30) {
       b.rollHit = true; this.shake(320, 0.025); Sound.play('slam');
       if (Math.abs(this.armyX - b.x) < R.half) this.lose(Math.max(B.cleave, Math.ceil(this.count * B.cleaveShare)) * B.powerMult);
       else { Sound.play('dodge'); this.float(this.armyX, this.formY - 46, 'DODGED', '#80d8ff', 18); }
     }
     if (b.t > 0) return;
-    b.obj.setTexture(B.key).setRotation(0);
+    b.obj.setTexture(B.key).setRotation(0);                  // he unfolds again (updateRigs)
+    this.burst.setParticleTint(0x9e9e9e); this.burst.explode(16, b.x, b.y + 40);
     b.swings++; b.state = 'recover'; b.t = B.recoverMs;
+  }
+
+  // Limbs of bosses drawn in pieces (RIGS): every frame each piece is put back on the body (its place, size, turn, tint and
+  // fade follow the body) and turned for what he is doing: legs step while he walks, front claws rear up and swipe on a plain
+  // swing, back arms reach back with a rock and hurl it in the barrage, all limbs draw into the shell before a roll and come
+  // back out after, and both claws go up while he powers up.
+  updateRigs(wdt) {
+    (this.bosses || []).forEach(b => {
+      if (!RIGS[b.kind] || b.rigDone) return;
+      const o = b.obj;
+      if (!b.rig) b.rig = { parts: RIGS[b.kind].map(d => ({ d, img: this.add.image(0, 0, d.key).setOrigin(d.o[0] / d.w, d.o[1] / d.h),
+        rock: d.hand ? this.img(0, 0, 'boulder').setVisible(false) : null })), walk: 0, phase: 0, out: 1, hands: {}, sw: b.swings, swipe: null };
+      const g = b.rig;
+      if (!o.active) { g.parts.forEach(p => { p.img.destroy(); if (p.rock) p.rock.destroy(); }); b.rigDone = true; return; }
+      const ms = wdt * 1000, now = this.time.now, st = b.state, fighting = this.fight && this.boss === b;
+      const ease = f => f * f * (3 - 2 * f);
+      // walking: a heavy step while he follows the army, a slow plod while he waits up the road
+      const moved = Math.abs(b.x - (g.px === undefined ? b.x : g.px)); g.px = b.x;
+      const want = !fighting ? 0.5 : st === 'chase' ? Math.min(1, 0.45 + moved / Math.max(wdt, 0.001) / 40) : 0;
+      g.walk += (want - g.walk) * Math.min(1, ms / 150);
+      g.phase += ms * 0.008 * (0.4 + g.walk);
+      const sw = Math.sin(g.phase);
+      // limbs out (1) or drawn into the shell (0)
+      let out = o.texture.key === b.kind ? 1 : 0;
+      if (st === 'wind' && b.style === 'shellroll') out = Math.min(out, clamp(1 - (1 - b.t / b.windFull) / 0.45, 0, 1));
+      g.out = out < g.out ? out : Math.min(out, g.out + ms / 380);
+      if (g.out > 0.98) o.y -= Math.abs(sw) * 2.4 * g.walk;   // the body rises and falls with each step
+      // a plain swing has just landed: that claw follows through across his body
+      const plain = st === 'wind' && !b.style;
+      if (b.swings !== g.sw) { if (g.wasPlain) g.swipe = { side: g.side, t: 0 }; g.sw = b.swings; }
+      if (plain) g.side = b.swings % 2 ? -1 : 1;
+      g.wasPlain = plain;
+      if (g.swipe && (g.swipe.t += ms) > 420) g.swipe = null;
+      // the barrage clock: the wind-up counts up to 0, then rocks leave one after another
+      const A = b.prof.barrage;
+      const bt = st === 'barrage' ? b.bt : st === 'wind' && b.style === 'barrage' ? -b.t : null;
+      const nRocks = b.rocks ? b.rocks.length : A ? (b.phase2 ? A.n2 : A.n) : 0;
+      const pu = st === 'powerup' ? clamp(1 - b.t / b.prof.powerUpMs, 0, 1) : 0;
+      const sc = R * o.scaleX, scy = R * o.scaleY, cos = Math.cos(o.rotation), sin = Math.sin(o.rotation);
+      const grow = 0.35 + 0.65 * g.out;
+      g.parts.forEach(p => {
+        const d = p.d, s = d.side;
+        let a = 0, sx = 1, sy = 1, dy = 0, hold = false;
+        if (d.role === 'leg') {
+          a = s * sw * 0.32 * g.walk;
+          dy = -Math.max(0, s * sw) * 5 * g.walk;
+        } else if (d.role === 'claw') {
+          a = Math.sin(now * 0.004 + s) * 0.06 - s * sw * 0.12 * g.walk;
+          if (plain) { const k = ease(clamp(1 - b.t / b.windFull, 0, 1)); a = -s * (g.side === s ? 1.55 : 0.3) * k; }
+          if (g.swipe && g.swipe.side === s && !(plain && g.side === s)) {
+            const f = g.swipe.t / 420;
+            a = s * (f < 0.22 ? -1.55 + 2.35 * ease(f / 0.22) : 0.8 * (1 - ease((f - 0.22) / 0.78)));
+          }
+          if (st === 'barrage' || (st === 'wind' && b.style === 'barrage')) a = -s * 0.25;
+          if (pu) a = -s * (1.35 + Math.sin(now * 0.05) * 0.12) * ease(Math.min(1, pu * 3));
+        } else if (d.role === 'throw') {
+          a = Math.sin(now * 0.003 + s * 2) * 0.07 + sw * 0.05 * g.walk;
+          if (bt !== null) {
+            let next = null, last = null;
+            for (let i = 0; i < nRocks; i++) {
+              if ((i % 2 ? 1 : -1) !== s) continue;
+              const at = i * A.gap;
+              if (at > bt) { if (next === null) next = at - bt; } else last = bt - at;
+            }
+            if (next !== null && next <= 480) {
+              hold = true;
+              if (next > 90) { const f = ease((480 - next) / 390); a = s * 0.95 * f; sy = 1 - 0.18 * f; }      // reaching back with the rock
+              else { const f = 1 - next / 90; a = s * (0.95 - 1.7 * f); sy = 0.82 + 0.4 * f; }               // the throw
+            } else if (last !== null && last < 420) { const f = ease(last / 420); a = -s * 0.75 * (1 - f); sy = 1.22 - 0.22 * f; }
+          }
+          if (pu) a = s * Math.sin(now * 0.04) * 0.15;
+        }
+        const ox = d.x * grow, oy = (d.y + dy) * grow, k = g.out;
+        const px = o.x + (ox * cos - oy * sin) * sc, py = o.y + (ox * sin + oy * cos) * scy, rot = o.rotation + a * k;
+        p.img.setPosition(px, py).setRotation(rot).setScale(o.scaleX * sx * k, o.scaleY * sy * k)
+          .setDepth(o.depth + (d.back ? -0.5 : 0.5)).setVisible(o.visible && k > 0.03).setAlpha(o.alpha);
+        if (o.isTinted) p.img.setTint(o.tintTopLeft); else p.img.clearTint();
+        if (d.hand) {
+          const c2 = Math.cos(rot), s2 = Math.sin(rot), hx = d.hand[0] * sx * k, hy = d.hand[1] * sy * k;
+          const hand = g.hands[s] = { x: px + (hx * c2 - hy * s2) * sc, y: py + (hx * s2 + hy * c2) * scy };
+          p.rock.setVisible(hold && p.img.visible).setPosition(hand.x, hand.y).setDepth(o.depth + 0.6).setScale(o.scaleX * 2);
+        }
+      });
+    });
   }
 
   // Genbu's Boulder Barrage: rocks thrown up one after another, each falling on a shadow aimed where the army is when it is thrown.
@@ -3251,7 +3381,8 @@ class GameScene extends BaseScene {
       if (r.done || b.bt < r.at) return;
       if (r.x === undefined) {                                // thrown: up from one of the arms on his back, off the top of the screen
         r.x = clamp(this.armyX + (Math.random() - 0.5) * 30, 90, 310); r.y = this.formY + 6;
-        const up = this.img(b.x + (i % 2 ? 46 : -46), b.obj.y - 80, 'boulder').setDepth(2900).setScale(S * 2);
+        const hand = b.rig && b.rig.hands[i % 2 ? 1 : -1];
+        const up = this.img(hand ? hand.x : b.x + (i % 2 ? 46 : -46), hand ? hand.y : b.obj.y - 80, 'boulder').setDepth(2900).setScale(S * 2);
         this.tweens.add({ targets: up, y: -60, rotation: 4, duration: 340, ease: 'Quad.out', onComplete: () => up.destroy() });
         Sound.play('swing');
       }

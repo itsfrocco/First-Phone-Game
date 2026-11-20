@@ -18,9 +18,9 @@ Only open or merge a pull request yourself if they ask for it in that message.
 Always resend the game link with a fresh cache-busting number on the end, one higher than
 the last one used, so their phone downloads the new copy:
 
-    https://itsfrocco.github.io/First-Phone-Game/samurai-runner.html?v=39
+    https://itsfrocco.github.io/First-Phone-Game/samurai-runner.html?v=40
 
-Last number sent: `?v=38`. Update this line each time a new link is sent.
+Last number sent: `?v=39`. Update this line each time a new link is sent.
 
 Before sending the link, check that the "pages build and deployment" run for the merge commit has
 finished (GitHub MCP `actions_list`); a link opened earlier caches the old game for about ten minutes.
@@ -216,7 +216,14 @@ thrown, drawn above the soldiers (`rockG`) or they hide it; Shell Roll (`bossRol
 through the army and back. Phase 2 at half health ("THE MOUNTAIN BURNS", `lava: true`: embers instead of lightning in `powerUp` and
 `updateLightning`): faster, and each rock leaves a lava pool for 1.8s (`hazards` with `lava`, `every`, `share`). The owner was promised
 Iwagame trickling in, but during a fight the samurai always strike the boss, so helpers chip away unopposed and made him unwinnable;
-he fights alone (the field clears when the fight starts). The bot dodges the barrage and roll. As tuned: 6 loses (once won), 7 wins,
+he fights alone (the field clears when the fight starts). The bot dodges the barrage and roll.
+Genbu moves (owner: the boss was lacking, wanted rolling, arms moving and throwing; graphics overhaul starts here, in parts, owner to
+approve each): he is drawn in pieces (`RIGS`, `updateRigs`; body `Art.genbu`, limbs `genbuArmB`, `genbuArmF`, `genbuLeg`, mirrored `...L`).
+Legs step and the body bobs while he walks; a front claw rears up on each plain swing and follows through across his body; in the
+barrage each back arm reaches back with a rock in its claw and hurls it (the thrown rock starts at the hand); before a roll his limbs
+draw into the shell, then he becomes the ball, which spins with the distance rolled, hops, throws off stone chips and keeps its shadow
+on the ground; after it he unfolds. Gameplay and timings unchanged. Planned next (part 2): Iwagame walk and a real tuck-and-roll, rock
+oni walk and attack wind-up, Koke Oni club swing. Then saga 1 enemies and bosses, if the owner likes it. As tuned: 6 loses (once won), 7 wins,
 the bot that never dodges loses at 7. The sagas screen now says "level n of 3" and "levels cleared · saga boss coming soon" for saga 2.
 Range is an extra, optional card: spending coins on it helps about as much as the same coins on speed and
 damage (level 3: speed/damage 2 loses, adding Range 5 wins). Range grows 1m (9px) a level and has its own cheaper
