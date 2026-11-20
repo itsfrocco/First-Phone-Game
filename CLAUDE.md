@@ -276,7 +276,8 @@ bevelled rock), `moss`, `lavaCrack`, `tile` (seamless tiles), `stride` (walking 
   `list_events` (kinds `user`) on that session: user-sent images are base64 blocks outside tool results.
   The game never loads these files. Saved so far: Saga 1's common demon (purple), goblin (small green,
   horned), fat demon (boss), Takemikazuchi (saga boss); Saga 2's common rock oni (skinny grey), Rock Oni mini boss (big grey
-  with club, stage 5's boss), Iwagame, Koke Oni and Genbu.
+  with club, stage 5's boss), Iwagame, Koke Oni and Genbu. Also `menu-sagas-screen.jpg`, an AI picture the owner sent as inspiration
+  for a redesigned Sagas screen (names in it are not real; plan read back, waiting for the owner's go).
 
 ## Plan: App Store release with in-app purchases
 
