@@ -248,8 +248,15 @@ bevelled rock), `moss`, `lavaCrack`, `tile` (seamless tiles), `stride` (walking 
 - Batch 2 (done): zombie, demon, rock oni and Iwagame redrawn with four walking frames each (`WALKERS` sets their step speed;
   `place` in `updateScroll` swaps frames, not while an Iwagame is rolling). The Iwagame ball has no shadow of its own (it spins);
   `shellRoll` draws one, and a dust trail.
-- Next: batch 3, every boss with more detail and moving parts (Koke Oni's club swing; Genbu's detailed redraw), then batch 4
-  (gates, logs, walls, cage, coins, stronghold, buttons and menus).
+- Batch 3 (done): every boss redrawn in detail and drawn in pieces like Genbu (`RIGS` now has an entry per boss: `strike` side,
+  `foot` for dust, parts with roles `leg`, `arm`, `wing`, `throw`; limbs are drawn for the right of the screen and mirrored with
+  key + 'L'; a part with `side: -1` only exists mirrored). Stone bosses use `Art.slab` (bevelled, flecked stone blocks), `club`,
+  `hide`, `cracks`, `surface`, `hatch`. The weapon arm rears up over the head on a wind-up and swings down across the body on
+  the strike (Koke Oni's and the Rock Oni's clubs, the giant's spiked club, the fat demon's cleaver, the tengu's staff,
+  Takemikazuchi's lightning blade); both arms go up for power attacks and follow through after; legs step; the tengu's wings
+  beat slowly, hard in the air. `key + 'Full'` is each boss put together (`Art.whole`), used by the tutorial pages.
+- Next: batch 4 (gates, logs, walls, cage, coins, stronghold, buttons and menus); the Genbu ball and the stronghold's oni and
+  warlord are still in the old style.
 
 ## Working with the owner
 
